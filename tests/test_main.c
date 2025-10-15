@@ -9,6 +9,7 @@ void register_tree_tests(TestRegistry *registry);
 void register_timeline_tests(TestRegistry *registry);
 void register_date_tests(TestRegistry *registry);
 void register_persistence_tests(TestRegistry *registry);
+void register_persistence_auto_save_tests(TestRegistry *registry);
 void register_json_parser_tests(TestRegistry *registry);
 
 int main(void)
@@ -24,6 +25,7 @@ int main(void)
     register_timeline_tests(&registry);
     register_date_tests(&registry);
     register_persistence_tests(&registry);
+    register_persistence_auto_save_tests(&registry);
     register_json_parser_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
