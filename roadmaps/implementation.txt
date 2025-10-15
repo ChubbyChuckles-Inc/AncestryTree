@@ -1,0 +1,929 @@
+================================================================================
+                    ANCESTRY TREE 3D VISUALIZATION APP
+                      IMPLEMENTATION ROADMAP v1.0
+================================================================================
+
+Project Overview:
+- Pure C99 implementation
+- Dependencies: raylib (3D graphics), Nuklear (UI)
+- Cross-platform: Windows, Linux, macOS
+- CI/CD: GitHub Actions with automated builds and releases
+- Comprehensive test coverage
+
+================================================================================
+PHASE 1: PROJECT SETUP & INFRASTRUCTURE
+================================================================================
+
+1.1 Repository Structure
+    [x] Create directory structure:
+            [x] src/ - Source code files
+            [x] include/ - Header files
+            [x] tests/ - Test suite
+            [x] assets/ - Images, fonts, textures
+            [x] assets/textures/ - 3D textures
+            [x] assets/fonts/ - UI fonts
+            [x] assets/icons/ - UI icons
+            [x] build/ - Build artifacts (gitignored)
+            [x] docs/ - Documentation
+            [x] roadmaps/ - Project planning documents
+            [x] scripts/ - Build and utility scripts
+            [x] .github/workflows/ - CI/CD configuration
+
+1.2 Build System Setup
+  [x] Create Makefile for cross-platform builds
+      [x] Add Windows (MinGW/MSVC) targets
+      [x] Add Linux (GCC) targets
+      [x] Add macOS (Clang) targets
+      [x] Add debug/release configurations
+      [x] Add clean targets
+  [x] Create CMakeLists.txt as alternative build system
+      [x] Configure for C99 standard
+      [x] Add raylib dependency detection
+      [ ] Add Nuklear integration
+      [x] Set up platform-specific compiler flags
+      [x] Configure output directories
+
+1.3 Dependency Management
+  [ ] Document raylib installation instructions
+      [ ] Windows setup guide
+      [ ] Linux setup guide
+      [ ] macOS setup guide
+  [ ] Integrate Nuklear (header-only library)
+      [ ] Add nuklear.h to include/external/
+      [ ] Create Nuklear implementation file
+      [ ] Set up Nuklear raylib backend
+  [ ] Create dependency check script
+      [ ] Verify raylib installation
+      [ ] Verify compiler availability
+      [ ] Report missing dependencies
+
+1.4 Version Control & Documentation
+  [x] Create comprehensive README.md
+      [x] Project description and features
+      [x] Build instructions for all platforms
+      [ ] Usage guide
+      [ ] Screenshots/GIFs (placeholder)
+      [x] Contributing guidelines
+      [x] License information
+  [x] Create .gitignore
+      [x] Ignore build artifacts
+      [x] Ignore OS-specific files
+      [x] Ignore IDE configurations
+      [x] Keep assets tracked
+  [x] Create LICENSE file (MIT/GPL/etc)
+  [x] Create CONTRIBUTING.md
+  [x] Create CODE_OF_CONDUCT.md
+  [x] Create CHANGELOG.md
+
+================================================================================
+PHASE 2: CORE DATA STRUCTURES & MEMORY MANAGEMENT
+================================================================================
+
+2.1 Person Data Structure
+  [ ] Define Person struct in include/person.h
+      [ ] Unique ID (UUID or integer)
+      [ ] Name (first, middle, last)
+      [ ] Birth date and location
+      [ ] Death date and location (nullable)
+      [ ] Is alive flag
+      [ ] Pointers to parents (father, mother)
+      [ ] Dynamic array of children pointers
+      [ ] Dynamic array of spouses/partners
+      [ ] Marriage dates and locations
+      [ ] Profile image path
+      [ ] Array of certificate image paths
+      [ ] Timeline entries array
+      [ ] Custom metadata (key-value pairs)
+
+2.2 Timeline Entry Structure
+  [ ] Define TimelineEntry struct
+      [ ] Date/year
+      [ ] Event type (birth, marriage, death, custom)
+      [ ] Description
+      [ ] Associated images/documents
+      [ ] Location
+
+2.3 Tree Data Structure
+  [ ] Define FamilyTree struct in include/tree.h
+      [ ] Root person(s) - handle multiple roots
+      [ ] Array/hash map of all persons
+      [ ] Person count
+      [ ] Tree metadata (name, creation date)
+      [ ] Search/query functionality
+
+2.4 Memory Management
+  [ ] Implement person_create() function
+  [ ] Implement person_destroy() function
+      [ ] Free all dynamic arrays
+      [ ] Free image paths
+      [ ] Free timeline entries
+  [ ] Implement tree_create() function
+  [ ] Implement tree_destroy() function
+      [ ] Recursively destroy all persons
+      [ ] Free all internal structures
+    [x] Implement safe realloc wrappers
+  [ ] Add memory leak detection for debug builds
+
+2.5 Data Validation
+  [ ] Implement person_validate() function
+      [ ] Check for null required fields
+      [ ] Validate date formats
+      [ ] Validate relationships (no cycles)
+  [ ] Implement tree_validate() function
+      [ ] Verify all parent-child links
+      [ ] Check for orphaned references
+      [ ] Validate tree integrity
+
+================================================================================
+PHASE 3: DATA PERSISTENCE & SERIALIZATION
+================================================================================
+
+3.1 File Format Design
+  [ ] Design JSON-based save format
+      [ ] Schema for Person objects
+      [ ] Schema for relationships
+      [ ] Schema for tree metadata
+      [ ] Version field for future compatibility
+  [ ] Create example/template tree file
+
+3.2 JSON Parsing (Custom or library-based)
+  [ ] Implement lightweight JSON parser (or integrate library)
+      [ ] Parse person objects
+      [ ] Parse arrays and nested objects
+      [ ] Handle escaped strings
+      [ ] Error reporting with line numbers
+  [ ] Implement JSON writer
+      [ ] Pretty-print formatting
+      [ ] Proper escaping
+      [ ] UTF-8 support
+
+3.3 Save/Load Functionality
+  [ ] Implement tree_save() function in src/persistence.c
+      [ ] Serialize entire tree to JSON
+      [ ] Write to file with error checking
+      [ ] Create backup before overwriting
+  [ ] Implement tree_load() function
+      [ ] Parse JSON from file
+      [ ] Reconstruct Person objects
+      [ ] Rebuild relationships
+      [ ] Handle missing/corrupted data gracefully
+  [ ] Implement auto-save functionality
+      [ ] Save periodically (configurable interval)
+      [ ] Save on program exit
+      [ ] Save before risky operations
+
+3.4 Asset Management
+  [ ] Implement asset_copy() function
+      [ ] Copy images to assets directory
+      [ ] Generate unique filenames
+      [ ] Maintain relative paths in tree data
+  [ ] Implement asset_cleanup() function
+      [ ] Remove unreferenced assets
+      [ ] Verify asset integrity
+  [ ] Implement asset_export() function
+      [ ] Package tree with all assets
+      [ ] Create portable archive
+
+================================================================================
+PHASE 4: 3D GRAPHICS CORE (RAYLIB)
+================================================================================
+
+4.1 Window & Context Setup
+  [ ] Implement window_init() in src/graphics.c
+      [ ] Create window with raylib
+      [ ] Set window title and icon
+      [ ] Configure target FPS (60)
+      [ ] Set up anti-aliasing
+  [ ] Implement window_shutdown() function
+  [ ] Handle window resize events
+  [ ] Implement fullscreen toggle
+
+4.2 Camera System
+  [ ] Implement camera_init() function
+      [ ] Set up 3D camera with perspective
+      [ ] Position at default viewpoint
+      [ ] Configure FOV and near/far planes
+  [ ] Implement camera_update() function
+      [ ] Orbital rotation with mouse drag
+      [ ] Zoom with mouse wheel
+      [ ] Pan with middle mouse or keyboard
+      [ ] Smooth interpolation
+  [ ] Implement camera_focus() function
+      [ ] Smoothly move to target position
+      [ ] Animate over time (easing functions)
+  [ ] Implement camera_reset() function
+
+4.3 3D Rendering Pipeline
+  [ ] Implement render_init() function
+      [ ] Load shaders for sphere glow effect
+      [ ] Set up lighting (ambient, directional)
+      [ ] Configure render textures if needed
+  [ ] Implement render_scene() function
+      [ ] Clear screen with background color
+      [ ] Begin 3D mode
+      [ ] Render all scene objects
+      [ ] End 3D mode
+      [ ] Render 2D UI overlay
+  [ ] Implement render_cleanup() function
+
+4.4 Sphere Rendering
+  [ ] Implement sphere_render() function
+      [ ] Draw sphere at 3D position
+      [ ] Apply color based on alive status
+      [ ] Apply glow shader for alive persons
+      [ ] Handle selected/hover states
+  [ ] Create glow shader (GLSL)
+      [ ] Vertex shader for sphere
+      [ ] Fragment shader with bloom effect
+      [ ] Adjustable glow intensity
+  [ ] Implement sphere batching for performance
+      [ ] Group spheres by render state
+      [ ] Minimize state changes
+
+4.5 3D Name Panels
+  [ ] Implement panel_render() function
+      [ ] Create 3D quad facing camera (billboard)
+      [ ] Render person name as texture
+      [ ] Display profile image if available
+      [ ] Position in front of sphere
+  [ ] Implement text_to_texture() function
+      [ ] Render text to render texture
+      [ ] Cache textures for performance
+      [ ] Support multiple font sizes
+  [ ] Implement image_load_resize() function
+      [ ] Load profile images
+      [ ] Resize to standard dimensions
+      [ ] Generate mipmaps
+
+4.6 Tree Layout Algorithm
+  [ ] Implement layout_calculate() in src/layout.c
+      [ ] Choose layout algorithm (hierarchical, radial, force-directed)
+      [ ] Calculate 3D positions for each person
+      [ ] Ensure non-overlapping spheres
+      [ ] Space generations vertically
+      [ ] Spread siblings horizontally
+  [ ] Implement hierarchical layout
+      [ ] Root at center
+      [ ] Children below parents
+      [ ] Spouses side-by-side
+  [ ] Implement force-directed layout (optional)
+      [ ] Physics-based positioning
+      [ ] Spring forces for relationships
+      [ ] Repulsion between nodes
+  [ ] Implement layout_animate() function
+      [ ] Smooth transition between layouts
+      [ ] Animate sphere positions
+
+4.7 Connection Lines
+  [ ] Implement connections_render() function
+      [ ] Draw lines between parent and child spheres
+      [ ] Draw lines between spouses
+      [ ] Color code relationships (parent-child, marriage)
+      [ ] Adjust line thickness based on distance
+  [ ] Implement line anti-aliasing
+  [ ] Add optional connection styles (curves, beziers)
+
+4.8 Interaction System
+  [ ] Implement ray_cast() function
+      [ ] Cast ray from mouse into 3D scene
+      [ ] Check intersection with spheres
+      [ ] Return closest intersected person
+  [ ] Implement sphere_select() function
+      [ ] Handle mouse click on sphere
+      [ ] Trigger expansion animation
+      [ ] Update application state
+  [ ] Implement sphere_hover() function
+      [ ] Detect mouse hover
+      [ ] Show highlight effect
+      [ ] Display tooltip (optional)
+
+================================================================================
+PHASE 5: SPHERE EXPANSION & DETAIL VIEW
+================================================================================
+
+5.1 Expansion Animation
+  [ ] Implement expansion_start() in src/expansion.c
+      [ ] Store initial sphere position and size
+      [ ] Calculate target position (camera center)
+      [ ] Calculate target size (full screen)
+      [ ] Set animation duration
+  [ ] Implement expansion_update() function
+      [ ] Interpolate position over time (easing)
+      [ ] Interpolate scale over time
+      [ ] Update camera to follow
+      [ ] Fade out other spheres
+  [ ] Implement expansion_complete() function
+      [ ] Switch to detail view mode
+      [ ] Show detail UI panels
+  [ ] Implement expansion_reverse() function
+      [ ] Animate sphere back to tree
+      [ ] Return camera to tree view
+      [ ] Fade in other spheres
+
+5.2 Detail View Rendering
+  [ ] Implement detail_view_init() function
+      [ ] Create layout for detail panels
+      [ ] Load high-res images
+      [ ] Prepare timeline visualization
+  [ ] Implement detail_view_render() function
+      [ ] Render expanded sphere (immersive)
+      [ ] Render person name and dates (large text)
+      [ ] Render profile image gallery
+      [ ] Render certificates grid
+      [ ] Render timeline
+      [ ] Render back button
+  [ ] Implement detail_view_cleanup() function
+
+5.3 Image Gallery
+  [ ] Implement gallery_init() function
+      [ ] Load all images for person
+      [ ] Create thumbnails
+      [ ] Set up scrollable grid
+  [ ] Implement gallery_render() function
+      [ ] Display images in grid layout
+      [ ] Handle image selection
+      [ ] Support zoom on selected image
+  [ ] Implement image_viewer() function
+      [ ] Full screen image display
+      [ ] Zoom and pan controls
+      [ ] Next/previous navigation
+
+5.4 Certificate Display
+  [ ] Implement certificate_render() function
+      [ ] Display birth certificate
+      [ ] Display marriage certificate(s)
+      [ ] Display death certificate
+      [ ] Support image and PDF formats
+  [ ] Implement certificate_zoom() function
+      [ ] High resolution viewing
+      [ ] Annotation support (future)
+
+5.5 Timeline Visualization
+  [ ] Implement timeline_init() function
+      [ ] Load all timeline entries
+      [ ] Calculate layout positions
+      [ ] Generate timeline texture
+  [ ] Implement timeline_render() function
+      [ ] Draw horizontal timeline
+      [ ] Plot events at correct positions
+      [ ] Draw event markers with dates
+      [ ] Draw event descriptions
+      [ ] Support scrolling for long timelines
+  [ ] Implement timeline_event_hover() function
+      [ ] Show detailed popup on hover
+      [ ] Display associated images
+
+================================================================================
+PHASE 6: USER INTERFACE (NUKLEAR)
+================================================================================
+
+6.1 Nuklear Integration
+  [ ] Implement ui_init() in src/ui.c
+      [ ] Initialize Nuklear context
+      [ ] Set up raylib backend
+      [ ] Load UI fonts
+      [ ] Configure default styling
+  [ ] Implement ui_begin_frame() function
+  [ ] Implement ui_end_frame() function
+  [ ] Implement ui_cleanup() function
+
+6.2 Main Menu Bar
+  [ ] Implement menu_bar_render() function
+      [ ] File menu (New, Open, Save, Save As, Exit)
+      [ ] Edit menu (Undo, Redo)
+      [ ] View menu (Reset Camera, Layout Options)
+      [ ] Help menu (About, Documentation)
+  [ ] Implement menu actions
+      [ ] File operations (save/load dialogs)
+      [ ] View toggles
+      [ ] Show about dialog
+
+6.3 Add Person Panel
+  [ ] Implement add_person_panel_render() function
+      [ ] Floating/docked panel
+      [ ] Name input fields (first, middle, last)
+      [ ] Date pickers (birth, death)
+      [ ] Location input fields
+      [ ] Is alive checkbox
+      [ ] Parent selection dropdowns
+      [ ] Spouse selection dropdown
+      [ ] Image upload button
+      [ ] Certificate upload buttons
+      [ ] Timeline entry editor
+      [ ] Save button
+      [ ] Cancel button
+  [ ] Implement add_person_validate() function
+      [ ] Check required fields
+      [ ] Validate dates
+      [ ] Show error messages
+  [ ] Implement add_person_save() function
+      [ ] Create new Person object
+      [ ] Add to family tree
+      [ ] Update layout
+      [ ] Copy assets to project
+      [ ] Save tree
+
+6.4 Edit Person Panel
+  [ ] Implement edit_person_panel_render() function
+      [ ] Similar to add panel but pre-filled
+      [ ] Delete person button (with confirmation)
+      [ ] Relationship editing
+  [ ] Implement edit_person_save() function
+      [ ] Update existing Person object
+      [ ] Validate relationships
+      [ ] Update tree layout if needed
+      [ ] Save tree
+
+6.5 File Browser Dialog
+  [ ] Implement file_dialog_open() function
+      [ ] Native file dialog on Windows
+      [ ] Native file dialog on macOS
+      [ ] Custom Nuklear file browser on Linux
+      [ ] Support file type filtering
+  [ ] Implement file_dialog_save() function
+      [ ] Save file dialog
+      [ ] Default filename suggestion
+
+6.6 Search/Filter Panel
+  [ ] Implement search_panel_render() function
+      [ ] Text input for name search
+      [ ] Date range filters
+      [ ] Alive/deceased filter
+      [ ] Search button
+      [ ] Results list
+  [ ] Implement search_execute() function
+      [ ] Search tree by criteria
+      [ ] Highlight matching spheres
+      [ ] Allow selection from results
+
+6.7 Settings Panel
+  [ ] Implement settings_panel_render() function
+      [ ] Graphics quality options
+      [ ] Camera sensitivity sliders
+      [ ] Auto-save interval
+      [ ] Default layout algorithm
+      [ ] Color scheme selection
+      [ ] Language selection (future)
+  [ ] Implement settings_save() function
+      [ ] Save to config file
+      [ ] Apply settings immediately
+
+6.8 Help/About Dialog
+  [ ] Implement about_dialog_render() function
+      [ ] App name and version
+      [ ] Credits
+      [ ] License information
+      [ ] Links to documentation
+  [ ] Implement help_dialog_render() function
+      [ ] Quick start guide
+      [ ] Keyboard shortcuts
+      [ ] Troubleshooting tips
+
+================================================================================
+PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
+================================================================================
+
+7.1 Application State
+  [ ] Define AppState struct in include/app.h
+      [ ] Current FamilyTree pointer
+      [ ] Camera state
+      [ ] Selected person pointer
+      [ ] UI state (active panels, dialog flags)
+      [ ] Interaction mode (tree view, detail view, edit mode)
+      [ ] Settings/configuration
+      [ ] Undo/redo stacks
+  [ ] Implement app_state_init() function
+  [ ] Implement app_state_cleanup() function
+
+7.2 Main Loop
+  [ ] Implement main() in src/main.c
+      [ ] Parse command line arguments
+      [ ] Initialize all subsystems
+      [ ] Load tree from file or create new
+      [ ] Enter main loop
+      [ ] Handle events
+      [ ] Update application state
+      [ ] Render frame
+      [ ] Handle cleanup on exit
+  [ ] Implement proper error handling throughout
+
+7.3 Event Handling
+  [ ] Implement event_process() function
+      [ ] Mouse events (move, click, wheel)
+      [ ] Keyboard events (shortcuts)
+      [ ] Window events (resize, focus)
+      [ ] Route events to appropriate handlers
+  [ ] Implement keyboard shortcuts
+      [ ] Ctrl+N: New tree
+      [ ] Ctrl+O: Open tree
+      [ ] Ctrl+S: Save tree
+      [ ] Ctrl+Z: Undo
+      [ ] Ctrl+Y: Redo
+      [ ] Space: Reset camera
+      [ ] Escape: Exit detail view or close dialogs
+
+7.4 Undo/Redo System
+  [ ] Define Command interface/pattern
+      [ ] Execute function pointer
+      [ ] Undo function pointer
+      [ ] Command-specific data
+  [ ] Implement command_add_person()
+  [ ] Implement command_edit_person()
+  [ ] Implement command_delete_person()
+  [ ] Implement undo_push() function
+  [ ] Implement undo_execute() function
+  [ ] Implement redo_execute() function
+  [ ] Clear redo stack on new action
+
+7.5 Error Handling & Logging
+  [ ] Implement logging system in src/log.c
+      [ ] Log levels (DEBUG, INFO, WARN, ERROR, FATAL)
+      [ ] Console output
+      [ ] File output (optional)
+      [ ] Timestamps
+  [ ] Add error handling macros
+      [ ] CHECK_NULL
+      [ ] CHECK_ALLOC
+      [ ] TRY/CATCH simulation (setjmp/longjmp)
+  [ ] Implement error_dialog() function
+      [ ] Display error messages to user
+      [ ] Log errors to file
+
+================================================================================
+PHASE 8: TESTING FRAMEWORK & TEST SUITE
+================================================================================
+
+8.1 Testing Framework
+  [x] Create minimal test framework in tests/test_framework.h
+      [x] ASSERT_TRUE macro
+      [x] ASSERT_FALSE macro
+      [x] ASSERT_EQ macro
+      [x] ASSERT_NE macro
+      [x] ASSERT_NULL macro
+      [x] ASSERT_NOT_NULL macro
+      [x] TEST() macro for test definition
+      [x] RUN_TEST() macro
+      [x] Test result reporting
+  [x] Implement test_main.c
+      [x] Test runner
+      [x] Summary report (passed/failed/total)
+      [x] Return exit code
+
+8.2 Data Structure Tests
+  [ ] Create tests/test_person.c
+      [ ] Test person_create()
+      [ ] Test person_destroy()
+      [ ] Test person_add_child()
+      [ ] Test person_add_spouse()
+      [ ] Test person_add_timeline_entry()
+      [ ] Test person_validate()
+  [ ] Create tests/test_tree.c
+      [ ] Test tree_create()
+      [ ] Test tree_destroy()
+      [ ] Test tree_add_person()
+      [ ] Test tree_remove_person()
+      [ ] Test tree_find_person()
+      [ ] Test tree_validate()
+
+8.3 Persistence Tests
+  [ ] Create tests/test_persistence.c
+      [ ] Test tree_save() with valid data
+      [ ] Test tree_load() with valid file
+      [ ] Test tree_load() with corrupted file
+      [ ] Test tree_load() with missing assets
+      [ ] Test JSON parsing edge cases
+      [ ] Test round-trip save/load
+
+8.4 Layout Algorithm Tests
+  [ ] Create tests/test_layout.c
+      [ ] Test layout with single person
+      [ ] Test layout with small family
+      [ ] Test layout with large family
+      [ ] Test layout with multiple generations
+      [ ] Test layout with complex relationships
+      [ ] Test non-overlapping constraint
+
+8.5 Utility Function Tests
+  [ ] Create tests/test_utils.c
+      [ ] Test string manipulation functions
+      [ ] Test date parsing functions
+      [ ] Test file path functions
+      [ ] Test memory management wrappers
+
+8.6 Integration Tests
+  [ ] Create tests/test_integration.c
+      [ ] Test full workflow: create tree, add persons, save, load
+      [ ] Test expansion animation workflow
+      [ ] Test UI interaction workflow
+      [ ] Test undo/redo workflow
+
+8.7 Memory Leak Tests
+  [ ] Integrate Valgrind for Linux
+  [ ] Integrate Dr. Memory for Windows
+  [ ] Create memory test suite
+      [ ] Run all tests under memory checker
+      [ ] Verify no leaks
+      [ ] Verify no invalid accesses
+
+================================================================================
+PHASE 9: CI/CD & AUTOMATION (GITHUB ACTIONS)
+================================================================================
+
+9.1 Build Workflow
+  [ ] Create .github/workflows/build.yml
+      [ ] Trigger on push and pull request
+      [ ] Matrix strategy for platforms (Windows, Linux, macOS)
+      [ ] Matrix strategy for configurations (Debug, Release)
+      [ ] Checkout code
+      [ ] Install dependencies (raylib)
+      [ ] Build project with Make or CMake
+      [ ] Upload build artifacts
+
+9.2 Test Workflow
+  [ ] Create .github/workflows/test.yml
+      [ ] Run after build workflow
+      [ ] Run test suite on all platforms
+      [ ] Generate coverage reports (gcov/lcov)
+      [ ] Upload coverage to Codecov/Coveralls
+      [ ] Fail workflow if tests fail
+
+9.3 Release Workflow
+  [ ] Create .github/workflows/release.yml
+      [ ] Trigger on tag push (v*.*.*)
+      [ ] Build release binaries for all platforms
+      [ ] Package with assets
+      [ ] Create GitHub release
+      [ ] Upload platform-specific archives
+      [ ] Generate changelog from commits
+
+9.4 Code Quality Checks
+  [ ] Create .github/workflows/quality.yml
+      [ ] Run static analyzer (clang-tidy, cppcheck)
+      [ ] Check code formatting (clang-format)
+      [ ] Check for common mistakes
+      [ ] Enforce C99 compliance
+
+9.5 Documentation Workflow
+  [ ] Create .github/workflows/docs.yml
+      [ ] Generate API documentation (Doxygen)
+      [ ] Publish to GitHub Pages
+      [ ] Update on push to main
+
+================================================================================
+PHASE 10: OPTIMIZATION & POLISH
+================================================================================
+
+10.1 Performance Optimization
+  [ ] Profile application with gprof or similar
+      [ ] Identify bottlenecks
+      [ ] Optimize hot paths
+  [ ] Optimize rendering
+      [ ] Implement frustum culling
+      [ ] Level of detail (LOD) for distant spheres
+      [ ] Texture atlasing
+      [ ] Instanced rendering for spheres
+  [ ] Optimize layout algorithm
+      [ ] Cache calculations
+      [ ] Incremental updates
+  [ ] Optimize memory usage
+      [ ] Object pooling for frequently allocated structures
+      [ ] Compress textures
+
+10.2 Visual Polish
+  [ ] Improve shaders
+      [ ] Better glow effect
+      [ ] Rim lighting on spheres
+      [ ] Shadows (optional)
+  [ ] Add particle effects
+      [ ] Birth/death visual indicators
+      [ ] Selection particles
+  [ ] Improve UI aesthetics
+      [ ] Custom Nuklear theme
+      [ ] Icons for buttons
+      [ ] Animations for panel transitions
+  [ ] Add ambient effects
+      [ ] Background skybox or gradient
+      [ ] Fog for depth perception
+
+10.3 Accessibility
+  [ ] Implement keyboard-only navigation
+      [ ] Tab through UI elements
+      [ ] Arrow keys for camera
+      [ ] Enter to select
+  [ ] Add screen reader support (basic)
+  [ ] Implement high contrast mode
+  [ ] Add configurable font sizes
+
+10.4 User Experience
+  [ ] Add tutorial/onboarding
+      [ ] First-time user guide
+      [ ] Interactive tooltips
+  [ ] Add sample family tree
+      [ ] Pre-populated example
+      [ ] Load on first run
+  [ ] Improve error messages
+      [ ] Clear, actionable messages
+      [ ] Suggestions for fixes
+  [ ] Add progress indicators
+      [ ] Loading bar for large trees
+      [ ] Save progress indicator
+
+10.5 Documentation
+  [ ] Complete API documentation (Doxygen comments)
+  [ ] Create user manual
+      [ ] Installation guide
+      [ ] Usage guide with screenshots
+      [ ] Troubleshooting section
+  [ ] Create developer guide
+      [ ] Architecture overview
+      [ ] Building from source
+      [ ] Contributing guide
+      [ ] Code style guide
+
+================================================================================
+PHASE 11: ADVANCED FEATURES (FUTURE)
+================================================================================
+
+11.1 Import/Export
+  [ ] Implement GEDCOM import
+      [ ] Parse GEDCOM format
+      [ ] Map to internal data structures
+  [ ] Implement GEDCOM export
+  [ ] Implement image export
+      [ ] Export tree as PNG/SVG
+      [ ] High resolution rendering
+  [ ] Implement PDF report generation
+      [ ] Family tree diagram
+      [ ] Person details pages
+
+11.2 Search & Analytics
+  [ ] Advanced search features
+      [ ] Boolean queries
+      [ ] Regular expressions
+      [ ] Saved searches
+  [ ] Tree statistics
+      [ ] Number of generations
+      [ ] Average lifespan
+      [ ] Geographic distribution
+  [ ] Relationship calculator
+      [ ] Calculate relationship between any two persons
+      [ ] Display relationship path
+
+11.3 Collaboration
+  [ ] Multi-user support
+      [ ] Concurrent editing
+      [ ] Conflict resolution
+  [ ] Cloud sync (optional)
+      [ ] Sync with cloud storage
+      [ ] Version history
+  [ ] Comments and notes
+      [ ] Attach notes to persons
+      [ ] Discussion threads
+
+11.4 Media Management
+  [ ] Photo restoration tools
+      [ ] Basic filters
+      [ ] Cropping
+      [ ] Red-eye removal
+  [ ] Audio/video support
+      [ ] Attach audio recordings
+      [ ] Attach video clips
+      [ ] Playback in detail view
+  [ ] OCR for certificates
+      [ ] Extract text from images
+      [ ] Search within documents
+
+11.5 Localization
+  [ ] Internationalization framework
+      [ ] String externalization
+      [ ] Translation files
+  [ ] Add language packs
+      [ ] English (default)
+      [ ] Spanish
+      [ ] French
+      [ ] German
+      [ ] Other languages as contributed
+
+================================================================================
+PHASE 12: FINAL TESTING & RELEASE
+================================================================================
+
+12.1 Beta Testing
+  [ ] Recruit beta testers
+  [ ] Create beta release builds
+  [ ] Collect feedback
+      [ ] Bug reports
+      [ ] Feature requests
+      [ ] Usability issues
+  [ ] Triage and prioritize issues
+  [ ] Fix critical bugs
+
+12.2 Security Audit
+  [ ] Review file handling security
+      [ ] Validate all file paths
+      [ ] Prevent directory traversal
+  [ ] Review memory safety
+      [ ] Check all buffer operations
+      [ ] Verify null checks
+  [ ] Review input validation
+      [ ] Sanitize all user inputs
+      [ ] Prevent injection attacks
+
+12.3 Compatibility Testing
+  [ ] Test on Windows 10/11
+  [ ] Test on Ubuntu LTS
+  [ ] Test on Fedora
+  [ ] Test on macOS (Intel and Apple Silicon)
+  [ ] Test with different screen resolutions
+  [ ] Test with different DPI settings
+
+12.4 Performance Testing
+  [ ] Test with small trees (<50 persons)
+  [ ] Test with medium trees (50-500 persons)
+  [ ] Test with large trees (500-5000 persons)
+  [ ] Measure frame rate
+  [ ] Measure memory usage
+  [ ] Measure load/save times
+
+12.5 Release Preparation
+  [ ] Finalize version number (1.0.0)
+  [ ] Update CHANGELOG.md
+  [ ] Update README.md with final screenshots
+  [ ] Create release notes
+  [ ] Tag release in git
+  [ ] Build final release binaries
+  [ ] Create installers (optional)
+      [ ] Windows MSI installer
+      [ ] macOS DMG
+      [ ] Linux AppImage or deb/rpm packages
+  [ ] Publish release on GitHub
+  [ ] Announce release
+      [ ] Social media
+      [ ] Relevant forums/communities
+      [ ] Product Hunt (optional)
+
+================================================================================
+MAINTENANCE PLAN
+================================================================================
+
+Post-Release:
+  [ ] Monitor issue tracker
+  [ ] Respond to bug reports
+  [ ] Release patches as needed
+  [ ] Plan next feature release
+  [ ] Community engagement
+      [ ] Accept pull requests
+      [ ] Review contributions
+      [ ] Update documentation
+
+Long-term:
+  [ ] Regular dependency updates
+  [ ] Security patches
+  [ ] Feature enhancements based on feedback
+  [ ] Performance improvements
+  [ ] Platform updates (new OS versions)
+
+================================================================================
+NOTES & BEST PRACTICES
+================================================================================
+
+Code Quality:
+- Follow C99 standard strictly
+- Use consistent naming conventions (snake_case for functions/variables)
+- Comment all public APIs with purpose, parameters, and return values
+- Keep functions small and focused (< 50 lines when possible)
+- Minimize global state
+- Use const correctness
+- Check all return values and handle errors gracefully
+
+Git Workflow:
+- Use feature branches for new features
+- Write clear commit messages (present tense, imperative mood)
+- Keep commits atomic and focused
+- Use PR reviews for quality control
+- Tag releases with semantic versioning
+
+Testing:
+- Write tests before fixing bugs (TDD when possible)
+- Aim for >80% code coverage
+- Test edge cases and error conditions
+- Run tests before every commit
+- Never commit broken tests
+
+Performance:
+- Profile before optimizing
+- Optimize only hot paths
+- Maintain readability over micro-optimizations
+- Document performance-critical sections
+
+Documentation:
+- Keep README up to date
+- Document all public APIs
+- Provide code examples
+- Maintain CHANGELOG for all releases
+
+================================================================================
+END OF IMPLEMENTATION ROADMAP
+================================================================================
+Last updated: October 15, 2025
+Version: 1.0

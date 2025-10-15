@@ -1,0 +1,15 @@
+Based on the implementation plan provided in the TODO list at "roadmaps/implementation.txt", implement as many unfinished tasks as possible in a single, cohesive update to the codebase. Focus on maintaining the project's standards: C99 compliance, modular structure with small files (<500 LOC where feasible), no global variables, clean code principles, and futuristic 3D holographic UI using Nuklear overlaid on raylib's 3D rendering. Prioritize tasks in logical order.
+
+For each feature or task implemented:
+- Add rigorous validation: Include unit tests in tests/ (expand the minimal test framework if needed), manual checks in comments, and runtime assertions/error handling to prevent regressions.
+- Test for regressions: After implementation, verify that previously completed features (marked [x] in the TODO) still work as expected—e.g., re-run existing tests, check 3D rendering stability, UI responsiveness, and cross-platform compilation.
+- Update the TODO list: Mark newly completed tasks as [x] and provide the full updated TODO list at the end of your response.
+
+Only modify or add files as necessary; do not overwrite unrelated code. Generate complete, compilable code snippets for new/updated files. If a task requires assets (e.g., fonts, models), assume placeholders or generate procedural equivalents in code.
+
+Output format:
+- List of implemented tasks with brief descriptions.
+- Validation results (e.g., "Tests passed: 5/5, no regressions detected").
+- Updated TODO list with new [x] marks.
+- Any challenges encountered and resolutions.
+- Comprehensive commit message

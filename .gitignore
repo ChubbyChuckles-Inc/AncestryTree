@@ -36,6 +36,56 @@
 *.x86_64
 *.hex
 
+# Build artifacts
+/build/
+**/build/
+*.obj
+*.ilk
+*.pdb
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+*.out
+*.tmp
+
+# CMake cache
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+Makefile
+makefile
+*.ninja
+.ninja_deps
+.ninja_log
+
+# IDE metadata
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln
+*.VC.db
+*.VC.opendb
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs and coverage
+*.log
+coverage/
+*.gcda
+*.gcno
+*.lcov
+
+# Generated assets
+assets/generated/
+
 # Debug files
 *.dSYM/
 *.su
