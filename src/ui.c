@@ -123,6 +123,44 @@ static void nk_raylib_query_font(nk_handle handle, float height, struct nk_user_
     glyph->uv[1] = nk_vec2(0.0f, 0.0f);
 }
 
+static void ui_apply_default_style(struct nk_context *ctx)
+{
+    if (!ctx)
+    {
+        return;
+    }
+    struct nk_color table[NK_COLOR_COUNT];
+    table[NK_COLOR_TEXT] = nk_rgba(236, 240, 241, 255);
+    table[NK_COLOR_WINDOW] = nk_rgba(12, 16, 24, 230);
+    table[NK_COLOR_HEADER] = nk_rgba(34, 44, 68, 255);
+    table[NK_COLOR_BORDER] = nk_rgba(76, 86, 106, 200);
+    table[NK_COLOR_BUTTON] = nk_rgba(45, 55, 80, 255);
+    table[NK_COLOR_BUTTON_HOVER] = nk_rgba(66, 82, 110, 255);
+    table[NK_COLOR_BUTTON_ACTIVE] = nk_rgba(90, 110, 150, 255);
+    table[NK_COLOR_TOGGLE] = nk_rgba(45, 55, 80, 255);
+    table[NK_COLOR_TOGGLE_HOVER] = nk_rgba(66, 82, 110, 255);
+    table[NK_COLOR_TOGGLE_CURSOR] = nk_rgba(236, 240, 241, 255);
+    table[NK_COLOR_SELECT] = nk_rgba(45, 55, 80, 255);
+    table[NK_COLOR_SELECT_ACTIVE] = nk_rgba(90, 110, 150, 255);
+    table[NK_COLOR_SLIDER] = nk_rgba(45, 55, 80, 255);
+    table[NK_COLOR_SLIDER_CURSOR] = nk_rgba(236, 240, 241, 255);
+    table[NK_COLOR_SLIDER_CURSOR_HOVER] = nk_rgba(255, 255, 255, 255);
+    table[NK_COLOR_SLIDER_CURSOR_ACTIVE] = nk_rgba(255, 255, 255, 255);
+    table[NK_COLOR_PROPERTY] = nk_rgba(34, 44, 68, 255);
+    table[NK_COLOR_EDIT] = nk_rgba(45, 55, 80, 255);
+    table[NK_COLOR_EDIT_CURSOR] = nk_rgba(236, 240, 241, 255);
+    table[NK_COLOR_COMBO] = nk_rgba(34, 44, 68, 255);
+    table[NK_COLOR_CHART] = nk_rgba(45, 55, 80, 255);
+    table[NK_COLOR_CHART_COLOR] = nk_rgba(0, 190, 255, 255);
+    table[NK_COLOR_CHART_COLOR_HIGHLIGHT] = nk_rgba(0, 200, 255, 255);
+    table[NK_COLOR_SCROLLBAR] = nk_rgba(34, 44, 68, 255);
+    table[NK_COLOR_SCROLLBAR_CURSOR] = nk_rgba(66, 82, 110, 255);
+    table[NK_COLOR_SCROLLBAR_CURSOR_HOVER] = nk_rgba(90, 110, 150, 255);
+    table[NK_COLOR_SCROLLBAR_CURSOR_ACTIVE] = nk_rgba(90, 110, 150, 255);
+    table[NK_COLOR_TAB_HEADER] = nk_rgba(34, 44, 68, 255);
+    nk_style_from_table(ctx, table);
+}
+
 static void ui_clipboard_copy(nk_handle usr, const char *text, int len)
 {
     (void)usr;
@@ -339,6 +377,8 @@ bool ui_init(UIContext *ui, int width, int height)
         free(internal);
         return false;
     }
+    nk_style_set_font(&internal->ctx, &internal->font);
+    ui_apply_default_style(&internal->ctx);
     internal->ctx.clip.copy = ui_clipboard_copy;
     internal->ctx.clip.paste = ui_clipboard_paste;
 
@@ -362,7 +402,7 @@ void ui_resize(UIContext *ui, int width, int height)
     ui->height = height;
 }
 
-void ui_shutdown(UIContext *ui)
+void ui_cleanup(UIContext *ui)
 {
     if (!ui)
     {
@@ -378,6 +418,11 @@ void ui_shutdown(UIContext *ui)
 #endif
     ui->impl = NULL;
     ui->available = false;
+}
+
+void ui_shutdown(UIContext *ui)
+{
+    ui_cleanup(ui);
 }
 
 bool ui_begin_frame(UIContext *ui, float delta_seconds)
@@ -482,7 +527,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
 #endif
 }
 
-void ui_render(UIContext *ui)
+void ui_end_frame(UIContext *ui)
 {
     if (!ui || !ui->available)
     {

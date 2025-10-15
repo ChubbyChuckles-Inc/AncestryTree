@@ -67,7 +67,7 @@ tests/             # C99 unit and integration tests
    ./build/bin/ancestrytree
    ```
 
-   The current stub prints diagnostic logging to the console and will evolve into the holographic 3D viewport once rendering tasks in the roadmap are complete.
+   A raylib window opens with a prototype 3D layout rendered from `assets/example_tree.json`. Hold the right mouse button to orbit, middle mouse or WASD/arrow keys to pan, and use the scroll wheel to zoom. The Nuklear HUD (top-left) exposes camera shortcuts and an auto-orbit toggle.
 
 > **Manual validation**: After major dependency upgrades, re-run the checklist script, rebuild, launch the app, and interact with the sample data to ensure rendering and UI responsiveness remain stable.
 
@@ -76,7 +76,7 @@ tests/             # C99 unit and integration tests
 Until the GUI is fully realised, you can experiment with persistence features and the command-line stub:
 
 1. Run the test suite (`ctest`) to confirm persistence save/load pipelines remain intact.
-2. Execute `build/bin/ancestrytree` to start the prototype. The logger reports initialization status and highlights TODO features (camera, UI, rendering).
+2. Execute `build/bin/ancestrytree` to start the prototype. The logger reports initialization status and the window renders the sample family tree with orbit/pan/zoom controls.
 3. Modify `assets/example_tree.json` and use the persistence API (see `tests/test_persistence.c`) to load and inspect data, ensuring UTF-8 and schema validation succeed.
 4. When the rendering core and Nuklear overlay land, this section will expand with runtime controls for orbiting the camera, selecting spheres, and opening detail panels.
 

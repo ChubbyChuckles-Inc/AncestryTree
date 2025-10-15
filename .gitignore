@@ -39,6 +39,7 @@
 # Build artifacts
 /build/
 **/build/
+build_windows/
 *.obj
 *.ilk
 *.pdb
@@ -85,6 +86,10 @@ coverage/
 
 # Generated assets
 assets/generated/
+
+# Local dependencies downloaded by setup scripts
+dependencies/
+include/external/nuklear.h
 
 # Debug files
 *.dSYM/

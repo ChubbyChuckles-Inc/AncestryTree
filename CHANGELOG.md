@@ -24,3 +24,4 @@ All notable changes to this project will be documented in this file. The format 
 - Hierarchical layout module computing 3D node positions with unit tests ensuring generation spacing and finiteness.
 - Window management abstraction providing raylib-backed initialization, resize detection, and fullscreen toggling with fallback stubs for missing backends.
 - Orbital camera controller with configurable bounds, pan/zoom handling, and comprehensive math-focused unit tests.
+- Interactive prototype runtime combining raylib rendering, camera controls, and a Nuklear HUD (auto orbit, camera focus) powered by the new application loop and asset path utilities with accompanying unit tests.
