@@ -102,17 +102,18 @@ static void nk_raylib_query_font(nk_handle handle, float height, struct nk_user_
     (void)next_codepoint;
     Font *font = (Font *)handle.ptr;
     char buffer[8];
-    int length = 0;
-    if (font)
-    {
-        length = CodepointToUTF8((int)codepoint, buffer);
-    }
-    if (length <= 0)
+    int byte_count = 0;
+    const char *utf8 = CodepointToUTF8((int)codepoint, &byte_count);
+    if (!utf8 || byte_count <= 0 || byte_count >= (int)sizeof(buffer))
     {
         buffer[0] = (char)codepoint;
-        length = 1;
+        byte_count = 1;
     }
-    buffer[length] = '\0';
+    else
+    {
+        memcpy(buffer, utf8, (size_t)byte_count);
+    }
+    buffer[byte_count] = '\0';
     Vector2 size = font ? MeasureTextEx(*font, buffer, height, 0.0f) : (Vector2){height, height};
     glyph->width = size.x;
     glyph->height = height;
@@ -331,8 +332,6 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->font.width = nk_raylib_text_width;
     internal->font.query = nk_raylib_query_font;
     internal->font.texture = nk_handle_ptr(NULL);
-    internal->font.fallback = '?';
-    internal->font.default_glyph = NULL;
     internal->auto_orbit = false;
 
     if (!nk_init_default(&internal->ctx, &internal->font))
@@ -405,6 +404,8 @@ bool ui_begin_frame(UIContext *ui, float delta_seconds)
 #endif
 }
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+
 static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, const LayoutResult *layout,
                                CameraController *camera, float fps)
 {
@@ -456,6 +457,8 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
     }
     nk_end(ctx);
 }
+
+#endif /* ANCESTRYTREE_HAVE_RAYLIB && ANCESTRYTREE_HAVE_NUKLEAR */
 
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
                      float fps)

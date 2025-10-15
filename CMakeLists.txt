@@ -52,7 +52,21 @@ add_executable(ancestrytree src/main.c)
 
 target_link_libraries(ancestrytree PRIVATE ancestrytree_lib)
 
+find_path(NUKLEAR_INCLUDE_DIR nuklear.h
+    HINTS
+        ${PROJECT_INCLUDE_DIR}/external
+        $ENV{NUKLEAR_INCLUDE}
+)
+
+if(NUKLEAR_INCLUDE_DIR)
+    target_compile_definitions(ancestrytree_lib PUBLIC ANCESTRYTREE_HAVE_NUKLEAR=1)
+    target_include_directories(ancestrytree_lib PUBLIC ${NUKLEAR_INCLUDE_DIR})
+else()
+    message(WARNING "nuklear.h not found. Place the header under include/external or set NUKLEAR_INCLUDE.")
+endif()
+
 if(raylib_FOUND)
+    target_link_libraries(ancestrytree_lib PUBLIC raylib::raylib)
     target_link_libraries(ancestrytree PRIVATE raylib::raylib)
     target_compile_definitions(ancestrytree_lib PUBLIC ANCESTRYTREE_HAVE_RAYLIB=1)
 endif()
@@ -78,6 +92,10 @@ if(ANCESTRYTREE_BUILD_TESTS)
     if(raylib_FOUND)
         target_link_libraries(ancestrytree_tests PRIVATE raylib::raylib)
         target_compile_definitions(ancestrytree_tests PRIVATE ANCESTRYTREE_HAVE_RAYLIB=1)
+    endif()
+    if(NUKLEAR_INCLUDE_DIR)
+        target_compile_definitions(ancestrytree_tests PRIVATE ANCESTRYTREE_HAVE_NUKLEAR=1)
+        target_include_directories(ancestrytree_tests PRIVATE ${NUKLEAR_INCLUDE_DIR})
     endif()
     if(WIN32)
         target_link_libraries(ancestrytree_tests PRIVATE opengl32 gdi32 winmm)

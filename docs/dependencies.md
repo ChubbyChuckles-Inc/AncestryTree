@@ -8,6 +8,16 @@ This document describes how to install the toolchain and third-party libraries r
 
 ## Windows (MSVC or MinGW)
 
+### Quick start
+
+If you are on Windows and prefer an automated setup, run the PowerShell helper from the repository root:
+
+```powershell
+pwsh -File scripts/setup_dependencies.ps1 -PersistEnvironment
+```
+
+The script downloads the selected raylib toolchain (MSVC by default), places `nuklear.h` inside `include/external/`, configures CMake into `build_windows`, and optionally launches the freshly built executable. Use `-SkipBuild`, `-SkipRun`, or `-Toolchain mingw` to tailor the process. The manual steps below remain available if you want full control over the installation.
+
 1. **Install a compiler**
 
    - **MSVC**: Install the "Desktop development with C++" workload in Visual Studio 2022 or newer.

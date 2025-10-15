@@ -27,7 +27,15 @@ tests/             # C99 unit and integration tests
 1. **Prepare Dependencies**
 
    - Follow the platform-specific setup instructions in [`docs/dependencies.md`](docs/dependencies.md).
-   - Place `nuklear.h` in `include/external/` (the dependency guide explains where to download it).
+   - On Windows you can automate the download of raylib and Nuklear with:
+
+     ```powershell
+     pwsh -File scripts/setup_dependencies.ps1 -PersistEnvironment
+     ```
+
+     The script fetches prebuilt raylib binaries, installs `nuklear.h`, configures CMake (defaulting to Ninja), and launches a debug build unless you pass `-SkipBuild` or `-SkipRun`.
+
+   - Place `nuklear.h` in `include/external/` (the dependency guide explains where to download it). The setup script performs this automatically.
    - Run the automated checklist:
 
      ```powershell

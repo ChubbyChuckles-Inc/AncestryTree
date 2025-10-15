@@ -3,12 +3,14 @@
 
 #include <stdbool.h>
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+#include <raylib.h>
+#endif
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-
-    struct Camera3D;
 
     typedef struct CameraControllerConfig
     {
