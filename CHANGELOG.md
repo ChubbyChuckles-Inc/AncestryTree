@@ -19,3 +19,4 @@ All notable changes to this project will be documented in this file. The format 
 - Persistence layer safeguards including UTF-8 enforcement and automatic `.bak` backup creation before overwrites.
 - Round-trip persistence tests exercising save/load compatibility against `assets/example_tree.json`.
 - Configurable persistence auto-save manager with periodic saves, explicit flush hooks, and dedicated regression tests.
+- Cross-platform dependency setup guide plus automated checklist script for compilers, raylib, and Nuklear.

@@ -24,35 +24,55 @@ tests/             # C99 unit and integration tests
 
 ## Getting Started
 
-1. **Install Dependencies**
+1. **Prepare Dependencies**
 
-   - Install a C99-compliant toolchain (MSVC, clang, or gcc).
-   - Install [raylib 5.x](https://github.com/raysan5/raylib/releases) for your platform.
-   - Download the latest `nuklear.h` from the official repository and place it in `include/external/`.
-   - On Windows, ensure `raylib.lib` is reachable by the linker. On Linux/macOS, ensure `pkg-config` can locate raylib.
+   - Follow the platform-specific setup instructions in [`docs/dependencies.md`](docs/dependencies.md).
+   - Place `nuklear.h` in `include/external/` (the dependency guide explains where to download it).
+   - Run the automated checklist:
 
-2. **Configure Environment Variables** _(optional but recommended)_
+     ```powershell
+     python scripts/check_dependencies.py
+     ```
 
-   - `RAYLIB_HOME`: Path to the root of your raylib installation.
-   - `NUKLEAR_INCLUDE`: Path to `nuklear.h` if it differs from the default location.
+     The script validates compiler availability, raylib discovery, and the presence of Nuklear. Address any warnings before continuing.
 
-3. **Build**
+2. **Build**
 
    ```powershell
    # Using Make (MSYS2/MinGW or GNU make on macOS/Linux)
    make
 
-   # Using CMake
-   cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+   # Using CMake + Ninja
+   cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
    cmake --build build
    ```
 
-4. **Run Tests**
+3. **Run Tests**
 
    ```powershell
-   # After building, run the test binary
-   ./build/tests/ancestrytree_tests
+   ctest --output-on-failure --test-dir build
    ```
+
+4. **Launch the Prototype**
+
+   ```powershell
+   ./build/bin/ancestrytree
+   ```
+
+   The current stub prints diagnostic logging to the console and will evolve into the holographic 3D viewport once rendering tasks in the roadmap are complete.
+
+> **Manual validation**: After major dependency upgrades, re-run the checklist script, rebuild, launch the app, and interact with the sample data to ensure rendering and UI responsiveness remain stable.
+
+## Usage Guide
+
+Until the GUI is fully realised, you can experiment with persistence features and the command-line stub:
+
+1. Run the test suite (`ctest`) to confirm persistence save/load pipelines remain intact.
+2. Execute `build/bin/ancestrytree` to start the prototype. The logger reports initialization status and highlights TODO features (camera, UI, rendering).
+3. Modify `assets/example_tree.json` and use the persistence API (see `tests/test_persistence.c`) to load and inspect data, ensuring UTF-8 and schema validation succeed.
+4. When the rendering core and Nuklear overlay land, this section will expand with runtime controls for orbiting the camera, selecting spheres, and opening detail panels.
+
+The roadmap in [`roadmaps/implementation.txt`](roadmaps/implementation.txt) lists the next milestones—including 3D rendering, holographic UI, and real-time interactions.
 
 ## Development Guidelines
 
