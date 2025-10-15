@@ -570,20 +570,20 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
       [x] Return exit code
 
 8.2 Data Structure Tests
-  [ ] Create tests/test_person.c
-      [ ] Test person_create()
-      [ ] Test person_destroy()
-      [ ] Test person_add_child()
-      [ ] Test person_add_spouse()
-      [ ] Test person_add_timeline_entry()
-      [ ] Test person_validate()
-  [ ] Create tests/test_tree.c
-      [ ] Test tree_create()
-      [ ] Test tree_destroy()
-      [ ] Test tree_add_person()
-      [ ] Test tree_remove_person()
-      [ ] Test tree_find_person()
-      [ ] Test tree_validate()
+  [x] Create tests/test_person.c
+      [x] Test person_create()
+      [x] Test person_destroy()
+      [x] Test person_add_child()
+      [x] Test person_add_spouse()
+      [x] Test person_add_timeline_entry()
+      [x] Test person_validate()
+  [x] Create tests/test_tree.c
+      [x] Test tree_create()
+      [x] Test tree_destroy()
+      [x] Test tree_add_person()
+      [x] Test tree_remove_person()
+      [x] Test tree_find_person()
+      [x] Test tree_validate()
 
 8.3 Persistence Tests
   [ ] Create tests/test_persistence.c
@@ -604,11 +604,10 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
       [ ] Test non-overlapping constraint
 
 8.5 Utility Function Tests
-  [ ] Create tests/test_utils.c
-      [ ] Test string manipulation functions
-      [ ] Test date parsing functions
-      [ ] Test file path functions
-      [ ] Test memory management wrappers
+    [x] Test string manipulation functions (tests/test_string.c)
+    [x] Test date parsing functions (tests/test_date.c)
+    [ ] Test file path functions
+    [x] Test memory management wrappers (tests/test_memory.c)
 
 8.6 Integration Tests
   [ ] Create tests/test_integration.c

@@ -168,5 +168,3 @@ void register_person_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_person_validation_rules);
     REGISTER_TEST(registry, test_person_rejects_invalid_dates);
 }
-```
-}
