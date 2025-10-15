@@ -7,20 +7,36 @@
 #include <stdlib.h>
 #include <string.h>
 
-static char *create_temp_path(void)
+#define TEMP_PATH_BUFFER_SIZE 128
+
+static void temp_file_path(char *buffer, size_t buffer_size, const char *suffix)
 {
     static unsigned counter = 0U;
     ++counter;
-    char buffer[64];
-    (void)snprintf(buffer, sizeof(buffer), "tree_save_test_%u.json", counter);
-    size_t length = strlen(buffer);
-    char *path = malloc(length + 1U);
-    if (!path)
+    (void)snprintf(buffer, buffer_size, "tree_save_test_%u_%s", counter, suffix);
+}
+
+static const char *resolve_asset_path(const char *relative)
+{
+    static char resolved[260];
+    const char *prefixes[] = {"", "../", "../../"};
+    for (size_t index = 0U; index < sizeof(prefixes) / sizeof(prefixes[0]); ++index)
     {
-        return NULL;
+        const char *prefix = prefixes[index];
+        const char *candidate = relative;
+        if (prefix[0] != '\0')
+        {
+            (void)snprintf(resolved, sizeof(resolved), "%s%s", prefix, relative);
+            candidate = resolved;
+        }
+        FILE *stream = fopen(candidate, "rb");
+        if (stream != NULL)
+        {
+            fclose(stream);
+            return candidate;
+        }
     }
-    memcpy(path, buffer, length + 1U);
-    return path;
+    return NULL;
 }
 
 static FamilyTree *build_sample_tree(void)
@@ -47,8 +63,8 @@ TEST(test_persistence_writes_expected_fields)
 {
     FamilyTree *tree = build_sample_tree();
     char buffer[256];
-    char *path = create_temp_path();
-    ASSERT_NOT_NULL(path);
+    char path[TEMP_PATH_BUFFER_SIZE];
+    temp_file_path(path, sizeof(path), "save.json");
 
     ASSERT_TRUE(persistence_tree_save(tree, path, buffer, sizeof(buffer)));
 
@@ -67,10 +83,10 @@ TEST(test_persistence_writes_expected_fields)
     ASSERT_NOT_NULL(strstr(content, "\"children\": [2]"));
     ASSERT_NOT_NULL(strstr(content, "\"root_ids\": [1]"));
     ASSERT_NOT_NULL(strstr(content, "\"birth_date\": \"1815-12-10\""));
+    ASSERT_NOT_NULL(strstr(content, "\"version\": \"1.0\""));
 
     free(content);
     remove(path);
-    free(path);
     family_tree_destroy(tree);
 }
 
@@ -82,8 +98,37 @@ TEST(test_persistence_handles_invalid_path)
     family_tree_destroy(tree);
 }
 
+TEST(test_persistence_roundtrip_load_save)
+{
+    char buffer[256];
+    const char *sample_path = resolve_asset_path("assets/example_tree.json");
+    ASSERT_NOT_NULL(sample_path);
+    FamilyTree *tree = persistence_tree_load(sample_path, buffer, sizeof(buffer));
+    ASSERT_NOT_NULL(tree);
+
+    char temp_path[TEMP_PATH_BUFFER_SIZE];
+    temp_file_path(temp_path, sizeof(temp_path), "roundtrip.json");
+    ASSERT_TRUE(persistence_tree_save(tree, temp_path, buffer, sizeof(buffer)));
+
+    FamilyTree *loaded = persistence_tree_load(temp_path, buffer, sizeof(buffer));
+    ASSERT_NOT_NULL(loaded);
+
+    ASSERT_EQ(loaded->person_count, tree->person_count);
+    Person *first_original = family_tree_find_person(tree, 1U);
+    Person *first_loaded = family_tree_find_person(loaded, 1U);
+    ASSERT_NOT_NULL(first_original);
+    ASSERT_NOT_NULL(first_loaded);
+    ASSERT_STREQ(first_original->name.first, first_loaded->name.first);
+    ASSERT_STREQ(first_original->name.last, first_loaded->name.last);
+
+    remove(temp_path);
+    family_tree_destroy(loaded);
+    family_tree_destroy(tree);
+}
+
 void register_persistence_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_persistence_writes_expected_fields);
     REGISTER_TEST(registry, test_persistence_handles_invalid_path);
+    REGISTER_TEST(registry, test_persistence_roundtrip_load_save);
 }

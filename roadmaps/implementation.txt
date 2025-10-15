@@ -147,26 +147,26 @@ PHASE 3: DATA PERSISTENCE & SERIALIZATION
     [x] Create example/template tree file
 
 3.2 JSON Parsing (Custom or library-based)
-  [ ] Implement lightweight JSON parser (or integrate library)
-      [ ] Parse person objects
-      [ ] Parse arrays and nested objects
-      [ ] Handle escaped strings
-      [ ] Error reporting with line numbers
-  [ ] Implement JSON writer
+  [x] Implement lightweight JSON parser (or integrate library)
+      [x] Parse person objects
+      [x] Parse arrays and nested objects
+      [x] Handle escaped strings
+      [x] Error reporting with line numbers
+  [x] Implement JSON writer
       [x] Pretty-print formatting
       [x] Proper escaping
-      [ ] UTF-8 support
+      [x] UTF-8 support
 
 3.3 Save/Load Functionality
-    [ ] Implement tree_save() function in src/persistence.c
+    [x] Implement tree_save() function in src/persistence.c
             [x] Serialize entire tree to JSON
             [x] Write to file with error checking
-            [ ] Create backup before overwriting
-  [ ] Implement tree_load() function
-      [ ] Parse JSON from file
-      [ ] Reconstruct Person objects
-      [ ] Rebuild relationships
-      [ ] Handle missing/corrupted data gracefully
+            [x] Create backup before overwriting
+  [x] Implement tree_load() function
+      [x] Parse JSON from file
+      [x] Reconstruct Person objects
+      [x] Rebuild relationships
+      [x] Handle missing/corrupted data gracefully
   [ ] Implement auto-save functionality
       [ ] Save periodically (configurable interval)
       [ ] Save on program exit

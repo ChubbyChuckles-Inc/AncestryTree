@@ -2,6 +2,7 @@
 #define PERSISTENCE_H
 
 #include "tree.h"
+#include "persistence_schema.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -12,6 +13,7 @@ extern "C"
 #endif
 
     bool persistence_tree_save(const FamilyTree *tree, const char *path, char *error_buffer, size_t error_buffer_size);
+    FamilyTree *persistence_tree_load(const char *path, char *error_buffer, size_t error_buffer_size);
 
 #ifdef __cplusplus
 }

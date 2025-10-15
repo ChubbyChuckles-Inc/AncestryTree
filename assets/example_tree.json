@@ -1,5 +1,6 @@
 {
   "metadata": {
+    "version": "1.0",
     "name": "Example Holographic Tree",
     "creation_date": "2025-10-15",
     "root_ids": [1]

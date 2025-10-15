@@ -14,3 +14,7 @@ All notable changes to this project will be documented in this file. The format 
 - JSON save support via `persistence_tree_save`, emitting metadata, people, and relationships with pretty formatting and escaping.
 - Persistence unit tests covering full tree export, root detection, and error handling for invalid inputs.
 - Example JSON tree asset demonstrating the current save format.
+- Custom lightweight JSON parser with Unicode escape handling, structural validation, and dedicated unit tests.
+- Tree load pipeline rebuilding persons, links, and assets from JSON with schema version checks and validation.
+- Persistence layer safeguards including UTF-8 enforcement and automatic `.bak` backup creation before overwrites.
+- Round-trip persistence tests exercising save/load compatibility against `assets/example_tree.json`.
