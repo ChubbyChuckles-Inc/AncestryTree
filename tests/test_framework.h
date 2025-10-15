@@ -1,6 +1,7 @@
 #ifndef TEST_FRAMEWORK_H
 #define TEST_FRAMEWORK_H
 
+#include <math.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -127,6 +128,19 @@ void test_framework_record_failure(const char *expression, const char *file, int
         if (!_equal)                                                                           \
         {                                                                                      \
             test_framework_record_failure(#actual " == " #expected, __FILE__, __LINE__, NULL); \
+            return;                                                                            \
+        }                                                                                      \
+    } while (0)
+
+#define ASSERT_FLOAT_NEAR(actual, expected, tolerance)                                         \
+    do                                                                                         \
+    {                                                                                          \
+        float _actual_value = (float)(actual);                                                 \
+        float _expected_value = (float)(expected);                                             \
+        float _difference = fabsf(_actual_value - _expected_value);                            \
+        if (_difference > (float)(tolerance))                                                  \
+        {                                                                                      \
+            test_framework_record_failure(#actual " ~= " #expected, __FILE__, __LINE__, NULL); \
             return;                                                                            \
         }                                                                                      \
     } while (0)

@@ -13,6 +13,7 @@ void register_persistence_auto_save_tests(TestRegistry *registry);
 void register_json_parser_tests(TestRegistry *registry);
 void register_layout_tests(TestRegistry *registry);
 void register_graphics_tests(TestRegistry *registry);
+void register_camera_controller_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -31,6 +32,7 @@ int main(void)
     register_json_parser_tests(&registry);
     register_layout_tests(&registry);
     register_graphics_tests(&registry);
+    register_camera_controller_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

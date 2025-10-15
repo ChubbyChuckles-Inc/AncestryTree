@@ -199,19 +199,19 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
     [x] Implement fullscreen toggle
 
 4.2 Camera System
-  [ ] Implement camera_init() function
-      [ ] Set up 3D camera with perspective
-      [ ] Position at default viewpoint
-      [ ] Configure FOV and near/far planes
-  [ ] Implement camera_update() function
-      [ ] Orbital rotation with mouse drag
-      [ ] Zoom with mouse wheel
-      [ ] Pan with middle mouse or keyboard
+  [x] Implement camera_init() function
+      [x] Set up 3D camera with perspective
+      [x] Position at default viewpoint
+      [x] Configure FOV and near/far planes
+  [x] Implement camera_update() function
+      [x] Orbital rotation with mouse drag
+      [x] Zoom with mouse wheel
+      [x] Pan with middle mouse or keyboard
       [ ] Smooth interpolation
-  [ ] Implement camera_focus() function
-      [ ] Smoothly move to target position
+  [x] Implement camera_focus() function
+      [x] Smoothly move to target position
       [ ] Animate over time (easing functions)
-  [ ] Implement camera_reset() function
+  [x] Implement camera_reset() function
 
 4.3 3D Rendering Pipeline
   [ ] Implement render_init() function

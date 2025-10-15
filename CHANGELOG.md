@@ -22,3 +22,4 @@ All notable changes to this project will be documented in this file. The format 
 - Cross-platform dependency setup guide plus automated checklist script for compilers, raylib, and Nuklear.
 - Hierarchical layout module computing 3D node positions with unit tests ensuring generation spacing and finiteness.
 - Window management abstraction providing raylib-backed initialization, resize detection, and fullscreen toggling with fallback stubs for missing backends.
+- Orbital camera controller with configurable bounds, pan/zoom handling, and comprehensive math-focused unit tests.
