@@ -21,3 +21,4 @@ All notable changes to this project will be documented in this file. The format 
 - Configurable persistence auto-save manager with periodic saves, explicit flush hooks, and dedicated regression tests.
 - Cross-platform dependency setup guide plus automated checklist script for compilers, raylib, and Nuklear.
 - Hierarchical layout module computing 3D node positions with unit tests ensuring generation spacing and finiteness.
+- Window management abstraction providing raylib-backed initialization, resize detection, and fullscreen toggling with fallback stubs for missing backends.

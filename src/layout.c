@@ -31,28 +31,6 @@ void layout_result_destroy(LayoutResult *result)
     result->count = 0U;
 }
 
-static size_t family_tree_count_roots(const FamilyTree *tree)
-{
-    if (!tree || !tree->persons)
-    {
-        return 0U;
-    }
-    size_t roots = 0U;
-    for (size_t index = 0U; index < tree->person_count; ++index)
-    {
-        const Person *person = tree->persons[index];
-        if (!person)
-        {
-            continue;
-        }
-        if (!person->parents[PERSON_PARENT_FATHER] && !person->parents[PERSON_PARENT_MOTHER])
-        {
-            ++roots;
-        }
-    }
-    return roots;
-}
-
 static bool layout_allocate_nodes(LayoutResult *result, size_t count)
 {
     if (!result)
@@ -68,8 +46,8 @@ static bool layout_allocate_nodes(LayoutResult *result, size_t count)
     return true;
 }
 
-static size_t layout_collect_generation(const FamilyTree *tree, Person **buffer, size_t capacity,
-                                        const Person *const *previous_generation, size_t previous_count)
+static size_t layout_collect_generation(Person **buffer, size_t capacity, const Person *const *previous_generation,
+                                        size_t previous_count)
 {
     size_t count = 0U;
     for (size_t index = 0U; index < previous_count; ++index)
@@ -204,7 +182,7 @@ LayoutResult layout_calculate(const FamilyTree *tree)
         node_index += root_count;
         level -= LAYOUT_VERTICAL_SPACING;
 
-        size_t next_count = layout_collect_generation(tree, next_generation, tree->person_count,
+        size_t next_count = layout_collect_generation(next_generation, tree->person_count,
                                                       (const Person *const *)current_generation, root_count);
         memset(current_generation, 0, sizeof(Person *) * tree->person_count);
         memcpy(current_generation, next_generation, sizeof(Person *) * next_count);

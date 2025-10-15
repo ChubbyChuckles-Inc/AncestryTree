@@ -189,14 +189,14 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
 ================================================================================
 
 4.1 Window & Context Setup
-  [ ] Implement window_init() in src/graphics.c
-      [ ] Create window with raylib
-      [ ] Set window title and icon
-      [ ] Configure target FPS (60)
-      [ ] Set up anti-aliasing
-  [ ] Implement window_shutdown() function
-  [ ] Handle window resize events
-  [ ] Implement fullscreen toggle
+    [x] Implement window_init() in src/graphics.c
+            [x] Create window with raylib
+            [x] Set window title and icon
+            [x] Configure target FPS (60)
+            [x] Set up anti-aliasing
+    [x] Implement window_shutdown() function
+    [x] Handle window resize events
+    [x] Implement fullscreen toggle
 
 4.2 Camera System
   [ ] Implement camera_init() function
