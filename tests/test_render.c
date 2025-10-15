@@ -139,10 +139,38 @@ TEST(test_render_collect_spouse_segments_ignores_duplicates)
     person_destroy(one);
 }
 
+TEST(test_render_resize_updates_dimensions_when_raylib_missing)
+{
+    RenderState state;
+    render_state_init(&state);
+    RenderConfig config = render_config_default();
+    char error_buffer[64];
+    ASSERT_TRUE(render_init(&state, &config, error_buffer, sizeof(error_buffer)));
+    ASSERT_TRUE(render_resize(&state, 640, 360, error_buffer, sizeof(error_buffer)));
+    ASSERT_EQ(state.render_width, 640);
+    ASSERT_EQ(state.render_height, 360);
+    ASSERT_FALSE(render_has_render_target(&state));
+    render_cleanup(&state);
+}
+
+TEST(test_render_resize_rejects_zero_dimension)
+{
+    RenderState state;
+    render_state_init(&state);
+    RenderConfig config = render_config_default();
+    char error_buffer[64];
+    ASSERT_TRUE(render_init(&state, &config, error_buffer, sizeof(error_buffer)));
+    ASSERT_FALSE(render_resize(&state, 0, 480, error_buffer, sizeof(error_buffer)));
+    ASSERT_FALSE(render_has_render_target(&state));
+    render_cleanup(&state);
+}
+
 void register_render_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_render_config_default_is_valid);
     REGISTER_TEST(registry, test_render_find_person_position_returns_expected_coordinates);
     REGISTER_TEST(registry, test_render_collect_parent_child_segments_collects_all_children);
     REGISTER_TEST(registry, test_render_collect_spouse_segments_ignores_duplicates);
+    REGISTER_TEST(registry, test_render_resize_updates_dimensions_when_raylib_missing);
+    REGISTER_TEST(registry, test_render_resize_rejects_zero_dimension);
 }

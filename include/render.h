@@ -42,12 +42,16 @@ typedef struct RenderState
 {
     bool initialized;
     RenderConfig config;
+    int render_width;
+    int render_height;
+    bool render_target_ready;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     struct Shader glow_shader;
     int glow_intensity_loc;
     bool glow_shader_ready;
     float ambient_strength;
     float light_direction[3];
+    RenderTexture2D scene_target;
 #endif
 } RenderState;
 
@@ -57,6 +61,8 @@ bool render_config_validate(const RenderConfig *config);
 
 bool render_init(RenderState *state, const RenderConfig *config, char *error_buffer, size_t error_buffer_size);
 void render_cleanup(RenderState *state);
+bool render_resize(RenderState *state, int width, int height, char *error_buffer, size_t error_buffer_size);
+bool render_has_render_target(const RenderState *state);
 
 bool render_scene(RenderState *state, const struct LayoutResult *layout, const struct CameraController *camera,
                   const struct Person *selected_person, const struct Person *hovered_person);

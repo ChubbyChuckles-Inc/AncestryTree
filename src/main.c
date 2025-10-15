@@ -280,6 +280,16 @@ static int app_run(AtLogger *logger)
     char render_error[256];
     bool render_ready = render_init(&render_state, NULL, render_error, sizeof(render_error));
     AT_LOG_WARN_IF(logger, !render_ready, "Render pipeline fallback: %s", render_error);
+    bool render_target_warned = false;
+    if (render_ready)
+    {
+        if (!render_resize(&render_state, graphics_state.width, graphics_state.height, render_error,
+                           sizeof(render_error)))
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Render target unavailable: %s", render_error);
+            render_target_warned = true;
+        }
+    }
 
     InteractionState interaction_state;
     interaction_state_init(&interaction_state);
@@ -297,6 +307,23 @@ static int app_run(AtLogger *logger)
         if (graphics_window_handle_resize(&graphics_state))
         {
             ui_resize(&ui, graphics_state.width, graphics_state.height);
+            if (render_ready)
+            {
+                if (!render_resize(&render_state, graphics_state.width, graphics_state.height, render_error,
+                                   sizeof(render_error)))
+                {
+                    if (!render_target_warned)
+                    {
+                        AT_LOG(logger, AT_LOG_WARN, "Render target resize failed: %s", render_error);
+                        render_target_warned = true;
+                    }
+                }
+                else if (render_target_warned)
+                {
+                    AT_LOG(logger, AT_LOG_INFO, "Render target restored after resize.");
+                    render_target_warned = false;
+                }
+            }
         }
 
         CameraControllerInput controller_input;

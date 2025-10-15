@@ -53,12 +53,16 @@ void render_state_init(RenderState *state)
     }
     memset(state, 0, sizeof(*state));
     render_set_default_config(&state->config);
+    state->render_width = 0;
+    state->render_height = 0;
+    state->render_target_ready = false;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     state->glow_shader_ready = false;
     state->ambient_strength = 0.2f;
     state->light_direction[0] = -0.3f;
     state->light_direction[1] = -1.0f;
     state->light_direction[2] = -0.2f;
+    state->scene_target.id = 0;
 #endif
 }
 
@@ -106,6 +110,37 @@ static bool render_set_error(char *buffer, size_t buffer_size, const char *messa
 }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+static const char *render_glow_vertex_shader(void)
+{
+#if defined(GRAPHICS_API_OPENGL_33)
+    return "#version 330\n"
+           "in vec3 vertexPosition;\n"
+           "in vec2 vertexTexCoord;\n"
+           "in vec4 vertexColor;\n"
+           "out vec2 fragTexCoord;\n"
+           "out vec4 fragColor;\n"
+           "uniform mat4 mvp;\n"
+           "void main(){\n"
+           "    fragTexCoord = vertexTexCoord;\n"
+           "    fragColor = vertexColor;\n"
+           "    gl_Position = mvp * vec4(vertexPosition, 1.0);\n"
+           "}";
+#else
+    return "#version 100\n"
+           "attribute vec3 vertexPosition;\n"
+           "attribute vec2 vertexTexCoord;\n"
+           "attribute vec4 vertexColor;\n"
+           "varying vec2 fragTexCoord;\n"
+           "varying vec4 fragColor;\n"
+           "uniform mat4 mvp;\n"
+           "void main(){\n"
+           "    fragTexCoord = vertexTexCoord;\n"
+           "    fragColor = vertexColor;\n"
+           "    gl_Position = mvp * vec4(vertexPosition, 1.0);\n"
+           "}";
+#endif
+}
+
 static const char *render_glow_fragment_shader(void)
 {
 #if defined(GRAPHICS_API_OPENGL_33)
@@ -195,6 +230,46 @@ static void render_apply_lighting(const RenderState *state)
 {
     (void)state;
     // Placeholder for future custom lighting. raylib uses fixed function lights by default.
+}
+
+static void render_draw_holographic_overlay(const RenderState *state)
+{
+    (void)state;
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    int screen_width = GetScreenWidth();
+    int screen_height = GetScreenHeight();
+    const Color tint = {12, 20, 38, 72};
+    DrawRectangle(0, 0, screen_width, screen_height, tint);
+
+    const Color horizontal = {0, 220, 255, 36};
+    const Color vertical = {0, 160, 255, 22};
+    for (int y = 24; y < screen_height; y += 40)
+    {
+        DrawLine(0, y, screen_width, y, horizontal);
+    }
+    for (int x = 0; x < screen_width; x += 64)
+    {
+        DrawLine(x, 0, x, screen_height, vertical);
+    }
+#endif
+}
+
+static void render_release_render_target(RenderState *state)
+{
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (!state)
+    {
+        return;
+    }
+    if (state->render_target_ready)
+    {
+        UnloadRenderTexture(state->scene_target);
+        state->scene_target.id = 0;
+        state->render_target_ready = false;
+    }
+#else
+    (void)state;
+#endif
 }
 
 static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool is_alive, bool is_selected,
@@ -295,12 +370,15 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
     }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    const char *vertex_source = render_glow_vertex_shader();
     const char *fragment_source = render_glow_fragment_shader();
-    state->glow_shader = LoadShaderFromMemory(NULL, fragment_source);
+    state->glow_shader = LoadShaderFromMemory(vertex_source, fragment_source);
     if (state->glow_shader.id != 0)
     {
+        state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(state->glow_shader, "mvp");
         state->glow_intensity_loc = GetShaderLocation(state->glow_shader, "glowIntensity");
-        state->glow_shader_ready = state->glow_intensity_loc >= 0;
+        state->glow_shader_ready = state->glow_intensity_loc >= 0 &&
+                                   state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] >= 0;
     }
     else
     {
@@ -325,12 +403,57 @@ void render_cleanup(RenderState *state)
         return;
     }
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    render_release_render_target(state);
     if (state->glow_shader_ready)
     {
         UnloadShader(state->glow_shader);
     }
 #endif
     render_state_init(state);
+}
+
+bool render_resize(RenderState *state, int width, int height, char *error_buffer, size_t error_buffer_size)
+{
+    if (!state)
+    {
+        return render_set_error(error_buffer, error_buffer_size, "render state pointer is NULL");
+    }
+    if (width <= 0 || height <= 0)
+    {
+        return render_set_error(error_buffer, error_buffer_size, "render target dimensions must be positive");
+    }
+
+    state->render_width = width;
+    state->render_height = height;
+
+#if !defined(ANCESTRYTREE_HAVE_RAYLIB)
+    state->render_target_ready = false;
+    (void)error_buffer;
+    (void)error_buffer_size;
+    return true;
+#else
+    if (!state->initialized)
+    {
+        state->render_target_ready = false;
+        return render_set_error(error_buffer, error_buffer_size, "render state not initialized");
+    }
+
+    render_release_render_target(state);
+    state->scene_target = LoadRenderTexture(width, height);
+    state->render_target_ready = state->scene_target.id != 0;
+    if (!state->render_target_ready)
+    {
+        return render_set_error(error_buffer, error_buffer_size, "failed to create render target");
+    }
+
+    SetTextureFilter(state->scene_target.texture, TEXTURE_FILTER_BILINEAR);
+    return true;
+#endif
+}
+
+bool render_has_render_target(const RenderState *state)
+{
+    return (state && state->render_target_ready);
 }
 
 bool render_find_person_position(const LayoutResult *layout, const Person *person, float out_position[3])
@@ -504,6 +627,14 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         return false;
     }
 
+    bool using_render_target = state->render_target_ready && state->render_width > 0 && state->render_height > 0;
+    if (using_render_target)
+    {
+        BeginTextureMode(state->scene_target);
+        const Color transparent = {0, 0, 0, 0};
+        ClearBackground(transparent);
+    }
+
     BeginMode3D(*camera_data);
     render_apply_lighting(state);
     DrawGrid(24, 1.0f);
@@ -524,6 +655,17 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
     }
 
     EndMode3D();
+
+    if (using_render_target)
+    {
+        EndTextureMode();
+        Rectangle source = {0.0f, 0.0f, (float)state->scene_target.texture.width,
+                            (float)-state->scene_target.texture.height};
+        Rectangle destination = {0.0f, 0.0f, (float)GetScreenWidth(), (float)GetScreenHeight()};
+        DrawTexturePro(state->scene_target.texture, source, destination, (Vector2){0.0f, 0.0f}, 0.0f, WHITE);
+    }
+
+    render_draw_holographic_overlay(state);
     return true;
 #endif
 }
@@ -532,6 +674,6 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
  * Manual validation checklist:
  * 1. Launch the application and confirm spheres render with glow around living persons.
  * 2. Observe parent/child and spouse connections to ensure lines link correct pairs.
- * 3. Toggle selection debugging (highlight_person parameter) and verify outlines render.
- * 4. Resize the window and ensure renders persist without artifacts.
+ * 3. Resize the window repeatedly and confirm the render target regenerates without artifacts.
+ * 4. Verify the holographic screen overlay animates above the 3D content and below the UI widgets.
  */

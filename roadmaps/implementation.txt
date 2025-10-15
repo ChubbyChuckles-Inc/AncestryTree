@@ -217,13 +217,13 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
   [x] Implement render_init() function
       [x] Load shaders for sphere glow effect
       [x] Set up lighting (ambient, directional)
-      [ ] Configure render textures if needed
+      [x] Configure render textures if needed
   [x] Implement render_scene() function
       [x] Clear screen with background color
       [x] Begin 3D mode
       [x] Render all scene objects
       [x] End 3D mode
-      [ ] Render 2D UI overlay
+      [x] Render 2D UI overlay
   [x] Implement render_cleanup() function
 
 4.4 Sphere Rendering
@@ -233,7 +233,7 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [x] Apply glow shader for alive persons
       [x] Handle selected/hover states
   [ ] Create glow shader (GLSL)
-      [ ] Vertex shader for sphere
+      [x] Vertex shader for sphere
       [x] Fragment shader with bloom effect
       [x] Adjustable glow intensity
   [ ] Implement sphere batching for performance
@@ -388,15 +388,15 @@ PHASE 6: USER INTERFACE (NUKLEAR)
   [x] Implement ui_cleanup() function
 
 6.2 Main Menu Bar
-  [ ] Implement menu_bar_render() function
-      [ ] File menu (New, Open, Save, Save As, Exit)
+  [x] Implement menu_bar_render() function
+      [x] File menu (New, Open, Save, Save As, Exit)
       [ ] Edit menu (Undo, Redo)
-      [ ] View menu (Reset Camera, Layout Options)
-      [ ] Help menu (About, Documentation)
+      [x] View menu (Reset Camera, Layout Options)
+      [x] Help menu (About, Documentation)
   [ ] Implement menu actions
       [ ] File operations (save/load dialogs)
-      [ ] View toggles
-      [ ] Show about dialog
+      [x] View toggles
+      [x] Show about dialog
 
 6.3 Add Person Panel
   [ ] Implement add_person_panel_render() function

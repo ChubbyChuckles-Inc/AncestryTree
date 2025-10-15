@@ -38,9 +38,16 @@ typedef struct UIInternal
     float font_size;
     bool scissor_active;
     bool auto_orbit;
+    bool show_about_window;
+    bool show_exit_prompt;
+    char status_message[128];
+    float status_timer;
+#else
+    int unused;
 #endif
 } UIInternal;
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
 static UIInternal *ui_internal_cast(UIContext *ui)
 {
     if (!ui)
@@ -58,6 +65,7 @@ static const UIInternal *ui_internal_const_cast(const UIContext *ui)
     }
     return (const UIInternal *)ui->impl;
 }
+#endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
 
@@ -306,11 +314,264 @@ static void ui_internal_render(UIInternal *internal)
     nk_clear(ctx);
 }
 
+static void ui_internal_set_status(UIInternal *internal, const char *message)
+{
+    if (!internal || !message)
+    {
+        return;
+    }
+    (void)snprintf(internal->status_message, sizeof(internal->status_message), "%s", message);
+    internal->status_timer = 4.0f;
+}
+
+static void ui_internal_tick(UIInternal *internal, float delta_seconds)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (internal->status_timer > 0.0f)
+    {
+        internal->status_timer -= delta_seconds;
+        if (internal->status_timer <= 0.0f)
+        {
+            internal->status_timer = 0.0f;
+            internal->status_message[0] = '\0';
+        }
+    }
+}
+
+static bool ui_compute_layout_center(const LayoutResult *layout, float out_center[3])
+{
+    if (!layout || !out_center || layout->count == 0U)
+    {
+        return false;
+    }
+    out_center[0] = 0.0f;
+    out_center[1] = 0.0f;
+    out_center[2] = 0.0f;
+    for (size_t index = 0U; index < layout->count; ++index)
+    {
+        out_center[0] += layout->nodes[index].position[0];
+        out_center[1] += layout->nodes[index].position[1];
+        out_center[2] += layout->nodes[index].position[2];
+    }
+    float count = (float)layout->count;
+    out_center[0] /= count;
+    out_center[1] /= count;
+    out_center[2] /= count;
+    return true;
+}
+
+static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
+{
+    if (!internal || !ui || !internal->show_about_window)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    float width = fminf(360.0f, (float)ui->width * 0.6f);
+    float height = 240.0f;
+    float x = ((float)ui->width - width) * 0.5f;
+    struct nk_rect bounds = nk_rect(x, 64.0f, width, height);
+    if (nk_begin(ctx, "About##AncestryTree", bounds,
+                 NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
+    {
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, "AncestryTree Prototype", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Futuristic holographic ancestry explorer.", NK_TEXT_LEFT);
+        nk_label(ctx, "Current focus: rendering pipeline + UI overlays.", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label(ctx, "Raylib + Nuklear integration in progress.", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 28.0f, 2);
+        if (nk_button_label(ctx, "Close"))
+        {
+            internal->show_about_window = false;
+        }
+        if (nk_button_label(ctx, "Project Page"))
+        {
+            ui_internal_set_status(internal, "Documentation pending public release.");
+        }
+    }
+    else
+    {
+        internal->show_about_window = false;
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, "About##AncestryTree"))
+    {
+        internal->show_about_window = false;
+    }
+}
+
+static void ui_draw_exit_prompt(UIInternal *internal, const UIContext *ui)
+{
+    if (!internal || !ui || !internal->show_exit_prompt)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    float width = 320.0f;
+    float height = 150.0f;
+    float x = ((float)ui->width - width) * 0.5f;
+    float y = ((float)ui->height - height) * 0.5f;
+    struct nk_rect bounds = nk_rect(x, y, width, height);
+    if (nk_begin(ctx, "Exit##Prompt", bounds,
+                 NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
+    {
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, "Are you sure you want to exit?", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 28.0f, 2);
+        if (nk_button_label(ctx, "Cancel"))
+        {
+            internal->show_exit_prompt = false;
+        }
+        if (nk_button_label(ctx, "Exit"))
+        {
+            internal->show_exit_prompt = false;
+            CloseWindow();
+        }
+    }
+    else
+    {
+        internal->show_exit_prompt = false;
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, "Exit##Prompt"))
+    {
+        internal->show_exit_prompt = false;
+    }
+}
+
+static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
+                             CameraController *camera)
+{
+    if (!internal || !ui)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    struct nk_rect bar_rect = nk_rect(0.0f, 0.0f, (float)ui->width, 30.0f);
+    if (nk_begin(ctx, "MenuBar", bar_rect, NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND))
+    {
+        nk_menubar_begin(ctx);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 6);
+
+        nk_layout_row_push(ctx, 60.0f);
+        if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT, nk_vec2(200.0f, 220.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_menu_item_label(ctx, "New Tree", NK_TEXT_LEFT))
+            {
+                ui_internal_set_status(internal, "New tree workflow pending implementation.");
+            }
+            if (nk_menu_item_label(ctx, "Open...", NK_TEXT_LEFT))
+            {
+                ui_internal_set_status(internal, "File import UI not yet available.");
+            }
+            if (nk_menu_item_label(ctx, "Save", NK_TEXT_LEFT))
+            {
+                ui_internal_set_status(internal, "Auto-save handles persistence for now.");
+            }
+            if (nk_menu_item_label(ctx, "Save As...", NK_TEXT_LEFT))
+            {
+                ui_internal_set_status(internal, "Custom save destinations coming soon.");
+            }
+            if (nk_menu_item_label(ctx, "Exit", NK_TEXT_LEFT))
+            {
+                internal->show_exit_prompt = true;
+            }
+            nk_menu_end(ctx);
+        }
+
+        nk_layout_row_push(ctx, 60.0f);
+        if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT, nk_vec2(160.0f, 180.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            nk_label(ctx, "Undo/Redo pipeline planned.", NK_TEXT_LEFT);
+            nk_menu_end(ctx);
+        }
+
+        nk_layout_row_push(ctx, 70.0f);
+        if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT, nk_vec2(220.0f, 200.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_menu_item_label(ctx, "Reset Camera", NK_TEXT_LEFT))
+            {
+                camera_controller_reset(camera);
+                ui_internal_set_status(internal, "Camera reset to default orbit.");
+            }
+            if (nk_menu_item_label(ctx, "Focus Roots", NK_TEXT_LEFT))
+            {
+                float center[3];
+                if (ui_compute_layout_center(layout, center))
+                {
+                    camera_controller_focus(camera, center, 14.0f);
+                    ui_internal_set_status(internal, "Camera centered on root generation.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Layout center unavailable.");
+                }
+            }
+            if (nk_menu_item_label(ctx, internal->auto_orbit ? "Disable Auto Orbit" : "Enable Auto Orbit",
+                                   NK_TEXT_LEFT))
+            {
+                internal->auto_orbit = !internal->auto_orbit;
+                ui_internal_set_status(internal, internal->auto_orbit ? "Auto orbit enabled." : "Auto orbit disabled.");
+            }
+            if (nk_menu_item_label(ctx, "Layout Options", NK_TEXT_LEFT))
+            {
+                ui_internal_set_status(internal, "Layout options UI under development.");
+            }
+            nk_menu_end(ctx);
+        }
+
+        nk_layout_row_push(ctx, 70.0f);
+        if (nk_menu_begin_label(ctx, "Help", NK_TEXT_LEFT, nk_vec2(180.0f, 160.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_menu_item_label(ctx, "About", NK_TEXT_LEFT))
+            {
+                internal->show_about_window = true;
+            }
+            if (nk_menu_item_label(ctx, "Documentation", NK_TEXT_LEFT))
+            {
+                ui_internal_set_status(internal, "Documentation menu loads roadmap in future milestone.");
+            }
+            nk_menu_end(ctx);
+        }
+
+        nk_layout_row_end(ctx);
+
+        nk_menubar_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        if (tree && tree->name)
+        {
+            char label[128];
+            (void)snprintf(label, sizeof(label), "Tree: %s", tree->name);
+            nk_label(ctx, label, NK_TEXT_RIGHT);
+        }
+        else
+        {
+            nk_label(ctx, "Tree: (unnamed)", NK_TEXT_RIGHT);
+        }
+    }
+    nk_end(ctx);
+}
+
 static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_seconds)
 {
+    if (!internal)
+    {
+        return;
+    }
+    ui_internal_tick(internal, delta_seconds);
     struct nk_context *ctx = &internal->ctx;
     nk_input_begin(ctx);
-    (void)delta_seconds;
+    (void)ui;
     Vector2 mouse = GetMousePosition();
     nk_input_motion(ctx, (int)mouse.x, (int)mouse.y);
     nk_input_button(ctx, NK_BUTTON_LEFT, (int)mouse.x, (int)mouse.y, IsMouseButtonDown(MOUSE_BUTTON_LEFT));
@@ -340,7 +601,6 @@ static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_se
     }
 
     nk_input_end(ctx);
-    (void)ui;
 }
 
 #endif /* ANCESTRYTREE_HAVE_RAYLIB && ANCESTRYTREE_HAVE_NUKLEAR */
@@ -454,7 +714,6 @@ bool ui_begin_frame(UIContext *ui, float delta_seconds)
 static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, const LayoutResult *layout,
                                CameraController *camera, float fps)
 {
-    (void)layout;
     struct nk_context *ctx = &internal->ctx;
     if (nk_begin(ctx, "HUD", nk_rect(18.0f, 20.0f, 320.0f, 220.0f),
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE))
@@ -465,26 +724,29 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
         unsigned int person_count = tree ? (unsigned int)tree->person_count : 0U;
         nk_labelf(ctx, NK_TEXT_LEFT, "Persons: %u", person_count);
 
+        if (internal->status_timer > 0.0f && internal->status_message[0] != '\0')
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            nk_labelf(ctx, NK_TEXT_LEFT, "Status: %s", internal->status_message);
+        }
+
         nk_layout_row_dynamic(ctx, 24.0f, 2);
         if (nk_button_label(ctx, "Reset Camera"))
         {
             camera_controller_reset(camera);
+            ui_internal_set_status(internal, "Camera reset to default orbit.");
         }
         if (nk_button_label(ctx, "Focus Roots"))
         {
-            if (layout && layout->count > 0)
+            float center[3];
+            if (ui_compute_layout_center(layout, center))
             {
-                float center[3] = {0.0f, 0.0f, 0.0f};
-                for (size_t index = 0U; index < layout->count; ++index)
-                {
-                    center[0] += layout->nodes[index].position[0];
-                    center[1] += layout->nodes[index].position[1];
-                    center[2] += layout->nodes[index].position[2];
-                }
-                center[0] /= (float)layout->count;
-                center[1] /= (float)layout->count;
-                center[2] /= (float)layout->count;
                 camera_controller_focus(camera, center, 14.0f);
+                ui_internal_set_status(internal, "Camera centered on root generation.");
+            }
+            else
+            {
+                ui_internal_set_status(internal, "Layout center unavailable.");
             }
         }
 
@@ -498,7 +760,12 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_bool orbit = internal->auto_orbit ? nk_true : nk_false;
         orbit = nk_check_label(ctx, "Auto orbit when idle", orbit);
-        internal->auto_orbit = orbit == nk_true;
+        bool new_auto_orbit = (orbit == nk_true);
+        if (internal->auto_orbit != new_auto_orbit)
+        {
+            internal->auto_orbit = new_auto_orbit;
+            ui_internal_set_status(internal, new_auto_orbit ? "Auto orbit enabled." : "Auto orbit disabled.");
+        }
     }
     nk_end(ctx);
 }
@@ -518,7 +785,10 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         return;
     }
+    ui_draw_menu_bar(internal, ui, tree, layout, camera);
     ui_draw_tree_panel(internal, tree, layout, camera, fps);
+    ui_draw_about_window(internal, ui);
+    ui_draw_exit_prompt(internal, ui);
 #else
     (void)tree;
     (void)layout;
@@ -562,7 +832,9 @@ bool ui_auto_orbit_enabled(const UIContext *ui)
 }
 
 /* Manual validation checklist (requires raylib + Nuklear):
- * 1. Launch the application and confirm the HUD window appears with stats and controls.
- * 2. Press the "Reset Camera" and "Focus Roots" buttons to ensure the camera recenters correctly.
- * 3. Toggle the auto orbit option and observe the tree rotating when idle.
+ * 1. Launch the application and confirm the menu bar renders with File/View/Help entries.
+ * 2. Trigger "Reset Camera" and "Focus Roots" from both the menu and HUD buttons; verify camera motion.
+ * 3. Toggle auto orbit via the checkbox or menu and observe status banner updates.
+ * 4. Open the About dialog from Help and close it via the button and window close control.
+ * 5. Select File->Exit and confirm the confirmation dialog responds and closes the application when accepted.
  */
