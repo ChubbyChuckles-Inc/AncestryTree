@@ -5,6 +5,7 @@
 #include "path_utils.h"
 #include "persistence.h"
 #include "person.h"
+#include "render.h"
 #include "tree.h"
 #include "ui.h"
 
@@ -174,7 +175,7 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
     }
 }
 
-static void app_render_scene(const LayoutResult *layout, const CameraController *camera)
+static void app_render_scene_basic(const LayoutResult *layout, const CameraController *camera)
 {
     const Camera3D *raylib_camera = camera_controller_get_camera(camera);
     if (!raylib_camera)
@@ -259,6 +260,12 @@ static int app_run(AtLogger *logger)
         camera_controller_focus(&camera_controller, layout_center, camera_controller.config.default_radius);
     }
 
+    RenderState render_state;
+    render_state_init(&render_state);
+    char render_error[256];
+    bool render_ready = render_init(&render_state, NULL, render_error, sizeof(render_error));
+    AT_LOG_WARN_IF(logger, !render_ready, "Render pipeline fallback: %s", render_error);
+
     UIContext ui;
     bool ui_ready = ui_init(&ui, graphics_state.width, graphics_state.height);
     AT_LOG_WARN_IF(logger, !ui_ready, "UI overlay unavailable; Nuklear or raylib might be missing.");
@@ -282,7 +289,11 @@ static int app_run(AtLogger *logger)
         BeginDrawing();
         ClearBackground((Color){8, 10, 18, 255});
 
-        app_render_scene(&layout, &camera_controller);
+        bool rendered = render_scene(&render_state, &layout, &camera_controller, NULL);
+        if (!rendered)
+        {
+            app_render_scene_basic(&layout, &camera_controller);
+        }
 
         if (ui_frame_started)
         {
@@ -295,6 +306,7 @@ static int app_run(AtLogger *logger)
 
     EnableCursor();
     ui_cleanup(&ui);
+    render_cleanup(&render_state);
     layout_result_destroy(&layout);
     family_tree_destroy(tree);
     graphics_window_shutdown(&graphics_state);
