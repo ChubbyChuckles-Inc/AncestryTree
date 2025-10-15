@@ -435,19 +435,27 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
     const float orbit_sensitivity = 0.15f;
     const float pan_sensitivity = 0.5f;
     const float pan_keyboard_sensitivity = 1.0f;
+    static bool cursor_locked = false;
 
     camera_controller_input_clear(input);
 
     Vector2 mouse_delta = GetMouseDelta();
-    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+    bool orbiting = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+    if (orbiting && !cursor_locked)
+    {
+        DisableCursor();
+        cursor_locked = true;
+    }
+    else if (!orbiting && cursor_locked)
+    {
+        EnableCursor();
+        cursor_locked = false;
+    }
+
+    if (orbiting)
     {
         input->yaw_delta -= mouse_delta.x * orbit_sensitivity;
         input->pitch_delta -= mouse_delta.y * orbit_sensitivity;
-        DisableCursor();
-    }
-    else
-    {
-        EnableCursor();
     }
 
     if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
