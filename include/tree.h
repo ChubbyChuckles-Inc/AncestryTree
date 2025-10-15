@@ -23,6 +23,7 @@ bool family_tree_set_creation_date(FamilyTree *tree, const char *creation_date_i
 bool family_tree_add_person(FamilyTree *tree, Person *person);
 Person *family_tree_find_person(const FamilyTree *tree, uint32_t id);
 bool family_tree_remove_person(FamilyTree *tree, uint32_t id);
+size_t family_tree_get_roots(const FamilyTree *tree, Person **out_roots, size_t capacity);
 bool family_tree_validate(const FamilyTree *tree, char *error_buffer, size_t error_buffer_size);
 
 #endif /* TREE_H */

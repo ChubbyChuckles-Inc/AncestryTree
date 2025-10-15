@@ -34,6 +34,15 @@ typedef enum PersonParentSlot
     PERSON_PARENT_MOTHER = 1
 } PersonParentSlot;
 
+struct Person;
+
+typedef struct PersonSpouseRecord
+{
+    struct Person *partner;
+    char *marriage_date;
+    char *marriage_location;
+} PersonSpouseRecord;
+
 typedef struct Person
 {
     uint32_t id;
@@ -44,7 +53,7 @@ typedef struct Person
     struct Person **children;
     size_t children_count;
     size_t children_capacity;
-    struct Person **spouses;
+    PersonSpouseRecord *spouses;
     size_t spouses_count;
     size_t spouses_capacity;
     char *profile_image_path;
@@ -72,6 +81,7 @@ bool person_add_spouse(Person *person, Person *spouse);
 bool person_add_certificate(Person *person, const char *path);
 bool person_add_timeline_entry(Person *person, const TimelineEntry *entry);
 bool person_metadata_set(Person *person, const char *key, const char *value);
+bool person_set_marriage(Person *person, Person *spouse, const char *date, const char *location);
 
 bool person_validate(const Person *person, char *error_buffer, size_t error_buffer_size);
 

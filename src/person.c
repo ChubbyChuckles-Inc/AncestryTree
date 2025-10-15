@@ -1,11 +1,14 @@
 #include "person.h"
 
+#include "at_date.h"
 #include "at_memory.h"
 #include "at_string.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define PERSON_VALIDATION_MAX_DEPTH 1024U
 
 static bool ensure_children_capacity(Person *person)
 {
@@ -39,12 +42,18 @@ static bool ensure_spouse_capacity(Person *person)
         return true;
     }
     size_t new_capacity = (person->spouses_capacity == 0U) ? 2U : person->spouses_capacity * 2U;
-    Person **new_spouses = at_secure_realloc(person->spouses, new_capacity, sizeof(Person *));
-    if (!new_spouses)
+    PersonSpouseRecord *records = at_secure_realloc(person->spouses, new_capacity, sizeof(PersonSpouseRecord));
+    if (!records)
     {
         return false;
     }
-    person->spouses = new_spouses;
+    for (size_t index = person->spouses_capacity; index < new_capacity; ++index)
+    {
+        records[index].partner = NULL;
+        records[index].marriage_date = NULL;
+        records[index].marriage_location = NULL;
+    }
+    person->spouses = records;
     person->spouses_capacity = new_capacity;
     return true;
 }
@@ -192,6 +201,23 @@ static void person_clear_metadata(Person *person)
     person->metadata_capacity = 0U;
 }
 
+static void person_clear_spouses(Person *person)
+{
+    if (!person)
+    {
+        return;
+    }
+    for (size_t index = 0; index < person->spouses_count; ++index)
+    {
+        free(person->spouses[index].marriage_date);
+        free(person->spouses[index].marriage_location);
+    }
+    free(person->spouses);
+    person->spouses = NULL;
+    person->spouses_count = 0U;
+    person->spouses_capacity = 0U;
+}
+
 Person *person_create(uint32_t id)
 {
     Person *person = calloc(1U, sizeof(Person));
@@ -217,7 +243,7 @@ void person_destroy(Person *person)
     person_clear_dates(person);
     free(person->profile_image_path);
     free(person->children);
-    free(person->spouses);
+    person_clear_spouses(person);
     person_clear_certificates(person);
     person_clear_timeline(person);
     person_clear_metadata(person);
@@ -289,14 +315,29 @@ bool person_set_birth(Person *person, const char *date, const char *location)
     {
         return false;
     }
-    if (!person_assign_string(&person->dates.birth_date, date))
+    if (!at_date_is_valid_iso8601(date))
     {
         return false;
     }
-    if (!person_assign_string(&person->dates.birth_location, location))
+    char *date_copy = at_string_dup(date);
+    if (!date_copy)
     {
         return false;
     }
+    char *location_copy = NULL;
+    if (location && location[0] != '\0')
+    {
+        location_copy = at_string_dup(location);
+        if (!location_copy)
+        {
+            free(date_copy);
+            return false;
+        }
+    }
+    free(person->dates.birth_date);
+    free(person->dates.birth_location);
+    person->dates.birth_date = date_copy;
+    person->dates.birth_location = location_copy;
     return true;
 }
 
@@ -315,14 +356,29 @@ bool person_set_death(Person *person, const char *date, const char *location)
         person->dates.death_location = NULL;
         return true;
     }
-    if (!person_assign_string(&person->dates.death_date, date))
+    if (!at_date_is_valid_iso8601(date))
     {
         return false;
     }
-    if (!person_assign_string(&person->dates.death_location, location))
+    char *date_copy = at_string_dup(date);
+    if (!date_copy)
     {
         return false;
     }
+    char *location_copy = NULL;
+    if (location && location[0] != '\0')
+    {
+        location_copy = at_string_dup(location);
+        if (!location_copy)
+        {
+            free(date_copy);
+            return false;
+        }
+    }
+    free(person->dates.death_date);
+    free(person->dates.death_location);
+    person->dates.death_date = date_copy;
+    person->dates.death_location = location_copy;
     person->is_alive = false;
     return true;
 }
@@ -389,29 +445,89 @@ bool person_add_child(Person *parent, Person *child)
     return true;
 }
 
+static bool person_find_spouse_index(const Person *person, const Person *spouse, size_t *out_index)
+{
+    if (!person || !spouse)
+    {
+        return false;
+    }
+    for (size_t index = 0; index < person->spouses_count; ++index)
+    {
+        if (person->spouses[index].partner == spouse)
+        {
+            if (out_index)
+            {
+                *out_index = index;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool person_relationship_cycle_detect(const Person *root, const Person *current, const Person **path,
+                                             size_t depth)
+{
+    if (!current)
+    {
+        return false;
+    }
+    if (depth >= PERSON_VALIDATION_MAX_DEPTH)
+    {
+        return true;
+    }
+    for (size_t index = 0; index < current->children_count; ++index)
+    {
+        const Person *child = current->children[index];
+        if (!child)
+        {
+            continue;
+        }
+        if (child == root)
+        {
+            return true;
+        }
+        for (size_t path_index = 0; path_index < depth; ++path_index)
+        {
+            if (path[path_index] == child)
+            {
+                return true;
+            }
+        }
+        path[depth] = child;
+        if (person_relationship_cycle_detect(root, child, path, depth + 1U))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool person_add_spouse_internal(Person *person, Person *spouse, bool reciprocal)
 {
     if (!person || !spouse || person == spouse)
     {
         return false;
     }
-    for (size_t index = 0; index < person->spouses_count; ++index)
+    if (person_find_spouse_index(person, spouse, NULL))
     {
-        if (person->spouses[index] == spouse)
-        {
-            return true;
-        }
+        return true;
     }
     if (!ensure_spouse_capacity(person))
     {
         return false;
     }
-    person->spouses[person->spouses_count++] = spouse;
+    PersonSpouseRecord *record = &person->spouses[person->spouses_count];
+    record->partner = spouse;
+    record->marriage_date = NULL;
+    record->marriage_location = NULL;
+    person->spouses_count++;
     if (reciprocal)
     {
         if (!person_add_spouse_internal(spouse, person, false))
         {
             person->spouses_count--;
+            record->partner = NULL;
             return false;
         }
     }
@@ -421,6 +537,68 @@ static bool person_add_spouse_internal(Person *person, Person *spouse, bool reci
 bool person_add_spouse(Person *person, Person *spouse)
 {
     return person_add_spouse_internal(person, spouse, true);
+}
+
+static bool person_set_marriage_internal(Person *person, Person *spouse, const char *date, const char *location,
+                                         bool reciprocal)
+{
+    if (!person || !spouse)
+    {
+        return false;
+    }
+
+    if (date && date[0] != '\0' && !at_date_is_valid_iso8601(date))
+    {
+        return false;
+    }
+
+    size_t index = 0U;
+    if (!person_find_spouse_index(person, spouse, &index))
+    {
+        return false;
+    }
+
+    char *date_copy = NULL;
+    char *location_copy = NULL;
+
+    if (date && date[0] != '\0')
+    {
+        date_copy = at_string_dup(date);
+        if (!date_copy)
+        {
+            return false;
+        }
+    }
+    if (location && location[0] != '\0')
+    {
+        location_copy = at_string_dup(location);
+        if (!location_copy)
+        {
+            free(date_copy);
+            return false;
+        }
+    }
+
+    if (reciprocal)
+    {
+        if (!person_set_marriage_internal(spouse, person, date, location, false))
+        {
+            free(date_copy);
+            free(location_copy);
+            return false;
+        }
+    }
+
+    free(person->spouses[index].marriage_date);
+    free(person->spouses[index].marriage_location);
+    person->spouses[index].marriage_date = date_copy;
+    person->spouses[index].marriage_location = location_copy;
+    return true;
+}
+
+bool person_set_marriage(Person *person, Person *spouse, const char *date, const char *location)
+{
+    return person_set_marriage_internal(person, spouse, date, location, true);
 }
 
 bool person_add_certificate(Person *person, const char *path)
@@ -561,6 +739,45 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
             if (error_buffer && error_buffer_size > 0U)
             {
                 (void)snprintf(error_buffer, error_buffer_size, "Person %u has empty certificate path", person->id);
+            }
+            return false;
+        }
+    }
+    const Person *path[PERSON_VALIDATION_MAX_DEPTH];
+    if (person_relationship_cycle_detect(person, person, path, 0U))
+    {
+        if (error_buffer && error_buffer_size > 0U)
+        {
+            (void)snprintf(error_buffer, error_buffer_size, "Person %u participates in a relationship cycle",
+                           person->id);
+        }
+        return false;
+    }
+    for (size_t index = 0; index < person->spouses_count; ++index)
+    {
+        const PersonSpouseRecord *record = &person->spouses[index];
+        if (!record->partner)
+        {
+            if (error_buffer && error_buffer_size > 0U)
+            {
+                (void)snprintf(error_buffer, error_buffer_size, "Person %u spouse entry lacks partner", person->id);
+            }
+            return false;
+        }
+        if (record->partner == person)
+        {
+            if (error_buffer && error_buffer_size > 0U)
+            {
+                (void)snprintf(error_buffer, error_buffer_size, "Person %u cannot be their own spouse", person->id);
+            }
+            return false;
+        }
+        if (record->marriage_date && record->marriage_date[0] != '\0' &&
+            !at_date_is_valid_iso8601(record->marriage_date))
+        {
+            if (error_buffer && error_buffer_size > 0U)
+            {
+                (void)snprintf(error_buffer, error_buffer_size, "Person %u has invalid marriage date", person->id);
             }
             return false;
         }

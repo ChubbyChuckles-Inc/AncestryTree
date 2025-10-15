@@ -97,6 +97,54 @@ static bool family_tree_contains_person(const FamilyTree *tree, const Person *pe
     return false;
 }
 
+static int family_tree_index_of(const FamilyTree *tree, const Person *person)
+{
+    for (size_t index = 0; index < tree->person_count; ++index)
+    {
+        if (tree->persons[index] == person)
+        {
+            return (int)index;
+        }
+    }
+    return -1;
+}
+
+static bool family_tree_detect_cycle_from(const FamilyTree *tree, size_t index, unsigned char *states,
+                                          size_t *cycle_index)
+{
+    if (states[index] == 1U)
+    {
+        if (cycle_index)
+        {
+            *cycle_index = index;
+        }
+        return true;
+    }
+    if (states[index] == 2U)
+    {
+        return false;
+    }
+
+    states[index] = 1U;
+    const Person *person = tree->persons[index];
+    for (size_t child_idx = 0; child_idx < person->children_count; ++child_idx)
+    {
+        const Person *child = person->children[child_idx];
+        int child_index = family_tree_index_of(tree, child);
+        if (child_index < 0)
+        {
+            continue;
+        }
+        if (family_tree_detect_cycle_from(tree, (size_t)child_index, states, cycle_index))
+        {
+            return true;
+        }
+    }
+
+    states[index] = 2U;
+    return false;
+}
+
 bool family_tree_add_person(FamilyTree *tree, Person *person)
 {
     if (!tree || !person)
@@ -160,6 +208,38 @@ bool family_tree_remove_person(FamilyTree *tree, uint32_t id)
     return false;
 }
 
+size_t family_tree_get_roots(const FamilyTree *tree, Person **out_roots, size_t capacity)
+{
+    if (!tree)
+    {
+        return 0U;
+    }
+    size_t count = 0U;
+    for (size_t index = 0; index < tree->person_count; ++index)
+    {
+        Person *candidate = tree->persons[index];
+        bool has_parent = false;
+        for (size_t parent_index = 0; parent_index < 2U; ++parent_index)
+        {
+            Person *parent = candidate->parents[parent_index];
+            if (parent && family_tree_contains_person(tree, parent))
+            {
+                has_parent = true;
+                break;
+            }
+        }
+        if (!has_parent)
+        {
+            if (out_roots && count < capacity)
+            {
+                out_roots[count] = candidate;
+            }
+            count++;
+        }
+    }
+    return count;
+}
+
 static bool family_tree_validate_relationships(const FamilyTree *tree, const Person *person,
                                                char *error_buffer, size_t error_buffer_size)
 {
@@ -196,7 +276,16 @@ static bool family_tree_validate_relationships(const FamilyTree *tree, const Per
     }
     for (size_t index = 0; index < person->spouses_count; ++index)
     {
-        const Person *spouse = person->spouses[index];
+        const Person *spouse = person->spouses[index].partner;
+        if (!spouse)
+        {
+            if (error_buffer && error_buffer_size > 0U)
+            {
+                (void)snprintf(error_buffer, error_buffer_size, "Person %u has spouse entry without partner",
+                               person->id);
+            }
+            return false;
+        }
         if (!family_tree_contains_person(tree, spouse))
         {
             if (error_buffer && error_buffer_size > 0U)
@@ -209,7 +298,7 @@ static bool family_tree_validate_relationships(const FamilyTree *tree, const Per
         bool reciprocal = false;
         for (size_t spouse_index = 0; spouse_index < spouse->spouses_count; ++spouse_index)
         {
-            if (spouse->spouses[spouse_index] == person)
+            if (spouse->spouses[spouse_index].partner == person)
             {
                 reciprocal = true;
                 break;
@@ -261,6 +350,33 @@ bool family_tree_validate(const FamilyTree *tree, char *error_buffer, size_t err
         {
             return false;
         }
+    }
+    if (tree->person_count > 0U)
+    {
+        unsigned char *states = calloc(tree->person_count, sizeof(unsigned char));
+        if (!states)
+        {
+            if (error_buffer && error_buffer_size > 0U)
+            {
+                (void)snprintf(error_buffer, error_buffer_size, "Insufficient memory for tree validation");
+            }
+            return false;
+        }
+        size_t cycle_index = 0U;
+        for (size_t index = 0; index < tree->person_count; ++index)
+        {
+            if (family_tree_detect_cycle_from(tree, index, states, &cycle_index))
+            {
+                if (error_buffer && error_buffer_size > 0U)
+                {
+                    (void)snprintf(error_buffer, error_buffer_size, "Cycle detected involving person %u",
+                                   tree->persons[cycle_index]->id);
+                }
+                free(states);
+                return false;
+            }
+        }
+        free(states);
     }
     return true;
 }

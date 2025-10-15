@@ -1,5 +1,6 @@
 #include "timeline.h"
 
+#include "at_date.h"
 #include "at_memory.h"
 #include "at_string.h"
 
@@ -84,6 +85,10 @@ void timeline_entry_reset(TimelineEntry *entry)
 
 bool timeline_entry_set_date(TimelineEntry *entry, const char *value)
 {
+    if (value && !at_date_is_valid_year_or_date(value))
+    {
+        return false;
+    }
     return timeline_replace_string(entry ? &entry->date : NULL, value);
 }
 
@@ -165,6 +170,14 @@ bool timeline_entry_validate(const TimelineEntry *entry, char *error_buffer, siz
         if (error_buffer && error_buffer_size > 0U)
         {
             (void)snprintf(error_buffer, error_buffer_size, "Timeline entry missing date");
+        }
+        return false;
+    }
+    if (!at_date_is_valid_year_or_date(entry->date))
+    {
+        if (error_buffer && error_buffer_size > 0U)
+        {
+            (void)snprintf(error_buffer, error_buffer_size, "Timeline entry has invalid date");
         }
         return false;
     }

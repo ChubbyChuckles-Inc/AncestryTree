@@ -89,7 +89,7 @@ PHASE 2: CORE DATA STRUCTURES & MEMORY MANAGEMENT
             [x] Pointers to parents (father, mother)
             [x] Dynamic array of children pointers
             [x] Dynamic array of spouses/partners
-            [ ] Marriage dates and locations
+            [x] Marriage dates and locations
             [x] Profile image path
             [x] Array of certificate image paths
             [x] Timeline entries array
@@ -105,7 +105,7 @@ PHASE 2: CORE DATA STRUCTURES & MEMORY MANAGEMENT
 
 2.3 Tree Data Structure
     [x] Define FamilyTree struct in include/tree.h
-            [ ] Root person(s) - handle multiple roots
+            [x] Root person(s) - handle multiple roots
             [x] Array/hash map of all persons
             [x] Person count
             [x] Tree metadata (name, creation date)
@@ -125,14 +125,14 @@ PHASE 2: CORE DATA STRUCTURES & MEMORY MANAGEMENT
   [ ] Add memory leak detection for debug builds
 
 2.5 Data Validation
-  [ ] Implement person_validate() function
+  [x] Implement person_validate() function
       [x] Check for null required fields
-      [ ] Validate date formats
-      [ ] Validate relationships (no cycles)
+      [x] Validate date formats
+      [x] Validate relationships (no cycles)
   [x] Implement tree_validate() function
       [x] Verify all parent-child links
       [x] Check for orphaned references
-      [ ] Validate tree integrity
+      [x] Validate tree integrity
 
 ================================================================================
 PHASE 3: DATA PERSISTENCE & SERIALIZATION
