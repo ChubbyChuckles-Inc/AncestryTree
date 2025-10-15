@@ -80,58 +80,58 @@ PHASE 2: CORE DATA STRUCTURES & MEMORY MANAGEMENT
 ================================================================================
 
 2.1 Person Data Structure
-  [ ] Define Person struct in include/person.h
-      [ ] Unique ID (UUID or integer)
-      [ ] Name (first, middle, last)
-      [ ] Birth date and location
-      [ ] Death date and location (nullable)
-      [ ] Is alive flag
-      [ ] Pointers to parents (father, mother)
-      [ ] Dynamic array of children pointers
-      [ ] Dynamic array of spouses/partners
-      [ ] Marriage dates and locations
-      [ ] Profile image path
-      [ ] Array of certificate image paths
-      [ ] Timeline entries array
-      [ ] Custom metadata (key-value pairs)
+    [x] Define Person struct in include/person.h
+            [x] Unique ID (UUID or integer)
+            [x] Name (first, middle, last)
+            [x] Birth date and location
+            [x] Death date and location (nullable)
+            [x] Is alive flag
+            [x] Pointers to parents (father, mother)
+            [x] Dynamic array of children pointers
+            [x] Dynamic array of spouses/partners
+            [ ] Marriage dates and locations
+            [x] Profile image path
+            [x] Array of certificate image paths
+            [x] Timeline entries array
+            [x] Custom metadata (key-value pairs)
 
 2.2 Timeline Entry Structure
-  [ ] Define TimelineEntry struct
-      [ ] Date/year
-      [ ] Event type (birth, marriage, death, custom)
-      [ ] Description
-      [ ] Associated images/documents
-      [ ] Location
+    [x] Define TimelineEntry struct
+            [x] Date/year
+            [x] Event type (birth, marriage, death, custom)
+            [x] Description
+            [x] Associated images/documents
+            [x] Location
 
 2.3 Tree Data Structure
-  [ ] Define FamilyTree struct in include/tree.h
-      [ ] Root person(s) - handle multiple roots
-      [ ] Array/hash map of all persons
-      [ ] Person count
-      [ ] Tree metadata (name, creation date)
-      [ ] Search/query functionality
+    [x] Define FamilyTree struct in include/tree.h
+            [ ] Root person(s) - handle multiple roots
+            [x] Array/hash map of all persons
+            [x] Person count
+            [x] Tree metadata (name, creation date)
+            [x] Search/query functionality
 
 2.4 Memory Management
-  [ ] Implement person_create() function
-  [ ] Implement person_destroy() function
-      [ ] Free all dynamic arrays
-      [ ] Free image paths
-      [ ] Free timeline entries
-  [ ] Implement tree_create() function
-  [ ] Implement tree_destroy() function
-      [ ] Recursively destroy all persons
-      [ ] Free all internal structures
+  [x] Implement person_create() function
+  [x] Implement person_destroy() function
+      [x] Free all dynamic arrays
+      [x] Free image paths
+      [x] Free timeline entries
+  [x] Implement tree_create() function
+  [x] Implement tree_destroy() function
+      [x] Recursively destroy all persons
+      [x] Free all internal structures
     [x] Implement safe realloc wrappers
   [ ] Add memory leak detection for debug builds
 
 2.5 Data Validation
   [ ] Implement person_validate() function
-      [ ] Check for null required fields
+      [x] Check for null required fields
       [ ] Validate date formats
       [ ] Validate relationships (no cycles)
-  [ ] Implement tree_validate() function
-      [ ] Verify all parent-child links
-      [ ] Check for orphaned references
+  [x] Implement tree_validate() function
+      [x] Verify all parent-child links
+      [x] Check for orphaned references
       [ ] Validate tree integrity
 
 ================================================================================

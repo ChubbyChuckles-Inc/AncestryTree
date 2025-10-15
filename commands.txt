@@ -10,6 +10,5 @@ Only modify or add files as necessary; do not overwrite unrelated code. Generate
 Output format:
 - List of implemented tasks with brief descriptions.
 - Validation results (e.g., "Tests passed: 5/5, no regressions detected").
-- Updated TODO list with new [x] marks.
-- Any challenges encountered and resolutions.
 - Comprehensive commit message
+- Add changes to CHANGELOG.md

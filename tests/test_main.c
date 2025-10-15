@@ -4,6 +4,8 @@
 
 void register_string_tests(TestRegistry *registry);
 void register_memory_tests(TestRegistry *registry);
+void register_person_tests(TestRegistry *registry);
+void register_tree_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -13,6 +15,8 @@ int main(void)
 
     register_string_tests(&registry);
     register_memory_tests(&registry);
+    register_person_tests(&registry);
+    register_tree_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

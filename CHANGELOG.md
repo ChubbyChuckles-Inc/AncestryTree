@@ -7,3 +7,4 @@ All notable changes to this project will be documented in this file. The format 
 ### Added
 
 - Initial repository scaffolding and documentation.
+- Core unit tests for person and family tree modules covering relationships, metadata, and validation.
