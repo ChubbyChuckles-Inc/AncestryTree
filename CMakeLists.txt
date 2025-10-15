@@ -45,6 +45,21 @@ if(NOT raylib_FOUND)
 endif()
 
 if(NOT raylib_FOUND)
+    set(RAYLIB_BUNDLED_PATH ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/raylib)
+    if(EXISTS ${RAYLIB_BUNDLED_PATH})
+        find_library(RAYLIB_LIB raylib HINTS ${RAYLIB_BUNDLED_PATH}/lib ${RAYLIB_BUNDLED_PATH}/lib64)
+        find_path(RAYLIB_INCLUDE raylib.h HINTS ${RAYLIB_BUNDLED_PATH}/include)
+        if(RAYLIB_LIB AND RAYLIB_INCLUDE)
+            add_library(raylib::raylib UNKNOWN IMPORTED)
+            set_target_properties(raylib::raylib PROPERTIES
+                IMPORTED_LOCATION ${RAYLIB_LIB}
+                INTERFACE_INCLUDE_DIRECTORIES ${RAYLIB_INCLUDE})
+            set(raylib_FOUND ON)
+        endif()
+    endif()
+endif()
+
+if(NOT raylib_FOUND)
     message(WARNING "raylib was not located. Configure RAYLIB_HOME or install raylib to satisfy linkage.")
 endif()
 
@@ -61,6 +76,8 @@ find_path(NUKLEAR_INCLUDE_DIR nuklear.h
 if(NUKLEAR_INCLUDE_DIR)
     target_compile_definitions(ancestrytree_lib PUBLIC ANCESTRYTREE_HAVE_NUKLEAR=1)
     target_include_directories(ancestrytree_lib PUBLIC ${NUKLEAR_INCLUDE_DIR})
+    target_compile_definitions(ancestrytree PRIVATE ANCESTRYTREE_HAVE_NUKLEAR=1)
+    target_include_directories(ancestrytree PRIVATE ${NUKLEAR_INCLUDE_DIR})
 else()
     message(WARNING "nuklear.h not found. Place the header under include/external or set NUKLEAR_INCLUDE.")
 endif()
@@ -69,6 +86,7 @@ if(raylib_FOUND)
     target_link_libraries(ancestrytree_lib PUBLIC raylib::raylib)
     target_link_libraries(ancestrytree PRIVATE raylib::raylib)
     target_compile_definitions(ancestrytree_lib PUBLIC ANCESTRYTREE_HAVE_RAYLIB=1)
+    target_compile_definitions(ancestrytree PRIVATE ANCESTRYTREE_HAVE_RAYLIB=1)
 endif()
 
 if(WIN32)

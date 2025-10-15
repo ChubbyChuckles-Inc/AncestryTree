@@ -43,6 +43,9 @@ static void render_set_default_config(RenderConfig *config)
     config->selected_outline_color = render_color_make(255, 255, 255, 255);
     config->connection_color_parent_child = render_color_make(64, 200, 255, 200);
     config->connection_color_spouse = render_color_make(255, 180, 120, 200);
+    config->show_connections = true;
+    config->show_grid = true;
+    config->show_overlay = true;
 }
 
 void render_state_init(RenderState *state)
@@ -637,9 +640,15 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
 
     BeginMode3D(*camera_data);
     render_apply_lighting(state);
-    DrawGrid(24, 1.0f);
+    if (state->config.show_grid)
+    {
+        DrawGrid(24, 1.0f);
+    }
 
-    (void)render_connections_render(state, layout);
+    if (state->config.show_connections)
+    {
+        (void)render_connections_render(state, layout);
+    }
 
     for (size_t index = 0; index < layout->count; ++index)
     {
@@ -665,7 +674,10 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         DrawTexturePro(state->scene_target.texture, source, destination, (Vector2){0.0f, 0.0f}, 0.0f, WHITE);
     }
 
-    render_draw_holographic_overlay(state);
+    if (state->config.show_overlay)
+    {
+        render_draw_holographic_overlay(state);
+    }
     return true;
 #endif
 }

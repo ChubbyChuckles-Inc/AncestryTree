@@ -14,10 +14,13 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 #include <raylib.h>
 #endif
+
+#define APP_DEFAULT_SAVE_PATH "assets/manual_save.json"
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 
@@ -86,6 +89,315 @@ static bool layout_compute_center(const LayoutResult *layout, float out_center[3
     out_center[1] /= count;
     out_center[2] /= count;
     return true;
+}
+
+typedef struct AppFileState
+{
+    char current_path[512];
+} AppFileState;
+
+static FamilyTree *app_create_placeholder_tree(void);
+
+static void app_file_state_clear(AppFileState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    state->current_path[0] = '\0';
+}
+
+static void app_file_state_set(AppFileState *state, const char *path)
+{
+    if (!state)
+    {
+        return;
+    }
+    if (!path || path[0] == '\0')
+    {
+        app_file_state_clear(state);
+        return;
+    }
+#if defined(_MSC_VER)
+    (void)strncpy_s(state->current_path, sizeof(state->current_path), path, _TRUNCATE);
+#else
+    (void)snprintf(state->current_path, sizeof(state->current_path), "%s", path);
+#endif
+}
+
+static void app_report_status(UIContext *ui, AtLogger *logger, const char *message)
+{
+    if (!message)
+    {
+        return;
+    }
+    (void)ui_notify_status(ui, message);
+    if (logger)
+    {
+        AT_LOG(logger, AT_LOG_INFO, "%s", message);
+    }
+}
+
+static void app_report_error(UIContext *ui, AtLogger *logger, const char *message)
+{
+    if (!message)
+    {
+        return;
+    }
+    (void)ui_notify_status(ui, message);
+    if (logger)
+    {
+        AT_LOG(logger, AT_LOG_ERROR, "%s", message);
+    }
+}
+
+static void app_focus_camera_on_layout(CameraController *camera, const LayoutResult *layout)
+{
+    if (!camera || !layout)
+    {
+        return;
+    }
+    float center[3];
+    if (layout_compute_center(layout, center))
+    {
+        float radius = camera->config.default_radius;
+        if (!(radius > 0.0f))
+        {
+            radius = 14.0f;
+        }
+        camera_controller_focus(camera, center, radius);
+    }
+}
+
+static bool app_generate_timestamped_path(char *buffer, size_t capacity)
+{
+    if (!buffer || capacity == 0U)
+    {
+        return false;
+    }
+    time_t now = time(NULL);
+    if (now == (time_t)-1)
+    {
+        return false;
+    }
+    struct tm time_info;
+#if defined(_WIN32)
+    if (localtime_s(&time_info, &now) != 0)
+    {
+        return false;
+    }
+#else
+    if (!localtime_r(&now, &time_info))
+    {
+        return false;
+    }
+#endif
+    return strftime(buffer, capacity, "assets/manual_save_%Y%m%d_%H%M%S.json", &time_info) != 0;
+}
+
+static bool app_save_tree_to_path(const FamilyTree *tree, const char *path, char *error_buffer,
+                                  size_t error_buffer_size)
+{
+    if (!tree || !path || path[0] == '\0')
+    {
+        return false;
+    }
+    return persistence_tree_save(tree, path, error_buffer, error_buffer_size);
+}
+
+static bool app_handle_save(FamilyTree *tree, AppFileState *files, char *error_buffer, size_t error_buffer_size)
+{
+    if (!tree || !files)
+    {
+        return false;
+    }
+    const char *target_path = files->current_path[0] != '\0' ? files->current_path : APP_DEFAULT_SAVE_PATH;
+    if (!app_save_tree_to_path(tree, target_path, error_buffer, error_buffer_size))
+    {
+        return false;
+    }
+    app_file_state_set(files, target_path);
+    return true;
+}
+
+static bool app_handle_save_as(FamilyTree *tree, AppFileState *files, char *error_buffer, size_t error_buffer_size,
+                               char *out_path, size_t out_path_capacity)
+{
+    if (!tree || !files || !out_path || out_path_capacity == 0U)
+    {
+        return false;
+    }
+    if (!app_generate_timestamped_path(out_path, out_path_capacity))
+    {
+        return false;
+    }
+    if (!app_save_tree_to_path(tree, out_path, error_buffer, error_buffer_size))
+    {
+        return false;
+    }
+    app_file_state_set(files, out_path);
+    return true;
+}
+
+static bool app_swap_tree(FamilyTree **tree, LayoutResult *layout, FamilyTree *replacement)
+{
+    if (!tree || !layout || !replacement)
+    {
+        return false;
+    }
+    layout_result_destroy(layout);
+    if (*tree)
+    {
+        family_tree_destroy(*tree);
+    }
+    *tree = replacement;
+    *layout = layout_calculate(*tree);
+    return true;
+}
+
+static void app_on_tree_changed(LayoutResult *layout, InteractionState *interaction_state, RenderState *render_state,
+                                CameraController *camera)
+{
+    if (!layout || !interaction_state || !render_state)
+    {
+        return;
+    }
+    interaction_clear_selection(interaction_state);
+    interaction_state_set_pick_radius(interaction_state, render_state->config.sphere_radius);
+    app_focus_camera_on_layout(camera, layout);
+}
+
+static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *file_state, FamilyTree **tree,
+                                 LayoutResult *layout, InteractionState *interaction_state,
+                                 RenderState *render_state, CameraController *camera, AtLogger *logger)
+{
+    if (!tree || !layout || !interaction_state || !render_state)
+    {
+        return;
+    }
+
+    char error_buffer[256];
+    error_buffer[0] = '\0';
+
+    switch (type)
+    {
+    case UI_EVENT_NEW_TREE:
+    {
+        FamilyTree *replacement = app_create_placeholder_tree();
+        if (!replacement)
+        {
+            app_report_error(ui, logger, "Failed to create new tree.");
+            return;
+        }
+        if (!app_swap_tree(tree, layout, replacement))
+        {
+            family_tree_destroy(replacement);
+            app_report_error(ui, logger, "Unable to swap in new tree data.");
+            return;
+        }
+        app_file_state_clear(file_state);
+        app_on_tree_changed(layout, interaction_state, render_state, camera);
+        app_report_status(ui, logger, "New placeholder tree created.");
+    }
+    break;
+    case UI_EVENT_OPEN_TREE:
+    {
+        char resolved_path[512];
+        if (!app_try_find_asset("assets/example_tree.json", resolved_path, sizeof(resolved_path)))
+        {
+            app_report_error(ui, logger, "Sample tree not found; ensure assets/example_tree.json exists.");
+            return;
+        }
+        FamilyTree *loaded = persistence_tree_load(resolved_path, error_buffer, sizeof(error_buffer));
+        if (!loaded)
+        {
+            char message[256];
+            (void)snprintf(message, sizeof(message), "Load failed: %s", error_buffer);
+            app_report_error(ui, logger, message);
+            return;
+        }
+        if (!app_swap_tree(tree, layout, loaded))
+        {
+            family_tree_destroy(loaded);
+            app_report_error(ui, logger, "Unable to replace current tree with loaded data.");
+            return;
+        }
+        app_file_state_set(file_state, resolved_path);
+        app_on_tree_changed(layout, interaction_state, render_state, camera);
+        app_report_status(ui, logger, "Sample tree loaded.");
+    }
+    break;
+    case UI_EVENT_SAVE_TREE:
+        if (!*tree)
+        {
+            app_report_error(ui, logger, "No tree available to save.");
+            return;
+        }
+        if (!app_handle_save(*tree, file_state, error_buffer, sizeof(error_buffer)))
+        {
+            char message[256];
+            (void)snprintf(message, sizeof(message), "Save failed: %s", error_buffer);
+            app_report_error(ui, logger, message);
+            return;
+        }
+        else
+        {
+            char message[256];
+            (void)snprintf(message, sizeof(message), "Saved tree to %s", file_state->current_path);
+            app_report_status(ui, logger, message);
+        }
+        break;
+    case UI_EVENT_SAVE_TREE_AS:
+        if (!*tree)
+        {
+            app_report_error(ui, logger, "No tree available to save.");
+            return;
+        }
+        else
+        {
+            char destination[512];
+            if (!app_handle_save_as(*tree, file_state, error_buffer, sizeof(error_buffer), destination,
+                                    sizeof(destination)))
+            {
+                char message[256];
+                (void)snprintf(message, sizeof(message), "Save As failed: %s", error_buffer);
+                app_report_error(ui, logger, message);
+                return;
+            }
+            char message[256];
+            (void)snprintf(message, sizeof(message), "Saved tree to %s", destination);
+            app_report_status(ui, logger, message);
+        }
+        break;
+    case UI_EVENT_REQUEST_EXIT:
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+        CloseWindow();
+#else
+        (void)camera;
+#endif
+        app_report_status(ui, logger, "Exit requested.");
+        break;
+    case UI_EVENT_NONE:
+    default:
+        break;
+    }
+}
+
+static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
+                                         LayoutResult *layout, InteractionState *interaction_state,
+                                         RenderState *render_state, CameraController *camera, AtLogger *logger)
+{
+    if (!ui)
+    {
+        return;
+    }
+    UIEvent events[UI_EVENT_QUEUE_CAPACITY];
+    size_t count = ui_poll_events(ui, events, UI_EVENT_QUEUE_CAPACITY);
+    for (size_t index = 0U; index < count; ++index)
+    {
+        app_process_ui_event(events[index].type, ui, file_state, tree, layout, interaction_state, render_state, camera,
+                             logger);
+    }
 }
 
 static FamilyTree *app_create_placeholder_tree(void)
@@ -177,7 +489,8 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
 }
 
 static void app_render_scene_basic(const LayoutResult *layout, const CameraController *camera,
-                                   const Person *selected_person, const Person *hovered_person)
+                                   const Person *selected_person, const Person *hovered_person,
+                                   const RenderConfig *config)
 {
     const Camera3D *raylib_camera = camera_controller_get_camera(camera);
     if (!raylib_camera)
@@ -186,7 +499,10 @@ static void app_render_scene_basic(const LayoutResult *layout, const CameraContr
     }
 
     BeginMode3D(*raylib_camera);
-    DrawGrid(24, 1.0f);
+    if (!config || config->show_grid)
+    {
+        DrawGrid(24, 1.0f);
+    }
 
     if (layout)
     {
@@ -243,6 +559,10 @@ static int app_run(AtLogger *logger)
 
     char tree_path[512];
     FamilyTree *tree = NULL;
+    AppFileState file_state;
+    app_file_state_clear(&file_state);
+    bool tree_loaded_from_asset = false;
+    bool placeholder_used = false;
     if (app_try_find_asset("assets/example_tree.json", tree_path, sizeof(tree_path)))
     {
         AT_LOG(logger, AT_LOG_INFO, "Loading sample tree from %s", tree_path);
@@ -250,6 +570,11 @@ static int app_run(AtLogger *logger)
         if (!tree)
         {
             AT_LOG(logger, AT_LOG_WARN, "Failed to load sample tree (%s). Using placeholder data.", error_buffer);
+        }
+        else
+        {
+            tree_loaded_from_asset = true;
+            app_file_state_set(&file_state, tree_path);
         }
     }
     else
@@ -266,14 +591,12 @@ static int app_run(AtLogger *logger)
             graphics_window_shutdown(&graphics_state);
             return 1;
         }
+        placeholder_used = true;
+        app_file_state_clear(&file_state);
     }
 
     LayoutResult layout = layout_calculate(tree);
-    float layout_center[3];
-    if (layout_compute_center(&layout, layout_center))
-    {
-        camera_controller_focus(&camera_controller, layout_center, camera_controller.config.default_radius);
-    }
+    app_focus_camera_on_layout(&camera_controller, &layout);
 
     RenderState render_state;
     render_state_init(&render_state);
@@ -298,6 +621,15 @@ static int app_run(AtLogger *logger)
     UIContext ui;
     bool ui_ready = ui_init(&ui, graphics_state.width, graphics_state.height);
     AT_LOG_WARN_IF(logger, !ui_ready, "UI overlay unavailable; Nuklear or raylib might be missing.");
+
+    if (tree_loaded_from_asset)
+    {
+        app_report_status(&ui, logger, "Sample tree loaded.");
+    }
+    else if (placeholder_used)
+    {
+        app_report_status(&ui, logger, "Placeholder tree initialised.");
+    }
 
     SetTargetFPS((int)config.target_fps);
 
@@ -356,16 +688,21 @@ static int app_run(AtLogger *logger)
         bool rendered = render_scene(&render_state, &layout, &camera_controller, selected_person, hovered_person);
         if (!rendered)
         {
-            app_render_scene_basic(&layout, &camera_controller, selected_person, hovered_person);
+            app_render_scene_basic(&layout, &camera_controller, selected_person, hovered_person,
+                                   &render_state.config);
         }
 
         if (ui_frame_started)
         {
-            ui_draw_overlay(&ui, tree, &layout, &camera_controller, (float)GetFPS());
+            ui_draw_overlay(&ui, tree, &layout, &camera_controller, (float)GetFPS(), selected_person, hovered_person,
+                            &render_state.config);
             ui_end_frame(&ui);
         }
 
         EndDrawing();
+
+        app_handle_pending_ui_events(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
+                                     &camera_controller, logger);
     }
 
     EnableCursor();

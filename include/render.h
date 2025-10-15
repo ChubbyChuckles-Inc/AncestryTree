@@ -30,6 +30,9 @@ typedef struct RenderConfig
     RenderColor selected_outline_color;
     RenderColor connection_color_parent_child;
     RenderColor connection_color_spouse;
+    bool show_connections;
+    bool show_grid;
+    bool show_overlay;
 } RenderConfig;
 
 typedef struct RenderConnectionSegment

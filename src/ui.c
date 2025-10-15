@@ -3,6 +3,7 @@
 #include "camera_controller.h"
 #include "graphics.h"
 #include "layout.h"
+#include "render.h"
 #include "tree.h"
 
 #include <math.h>
@@ -16,16 +17,7 @@
 #endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-#define NK_INCLUDE_FIXED_TYPES
-#define NK_INCLUDE_DEFAULT_ALLOCATOR
-#define NK_INCLUDE_STANDARD_IO
-#define NK_INCLUDE_STANDARD_VARARGS
-#define NK_INCLUDE_DEFAULT_FONT
-#define NK_INCLUDE_COMMAND_USERDATA
-#define NK_INCLUDE_FONT_BAKING
-#define NK_INCLUDE_STANDARD_BOOL
-#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
-#define NK_IMPLEMENTATION
+#include "ui_nuklear_config.h"
 #include "external/nuklear.h"
 #endif
 
@@ -46,6 +38,32 @@ typedef struct UIInternal
     int unused;
 #endif
 } UIInternal;
+
+static void ui_event_queue_reset(UIEventQueue *queue)
+{
+    if (!queue)
+    {
+        return;
+    }
+    queue->head = 0U;
+    queue->count = 0U;
+}
+
+static bool ui_event_queue_push(UIEventQueue *queue, UIEventType type)
+{
+    if (!queue || type == UI_EVENT_NONE)
+    {
+        return false;
+    }
+    if (queue->count >= UI_EVENT_QUEUE_CAPACITY)
+    {
+        return false;
+    }
+    size_t index = (queue->head + queue->count) % UI_EVENT_QUEUE_CAPACITY;
+    queue->events[index].type = type;
+    queue->count += 1U;
+    return true;
+}
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
 static UIInternal *ui_internal_cast(UIContext *ui)
@@ -316,8 +334,14 @@ static void ui_internal_render(UIInternal *internal)
 
 static void ui_internal_set_status(UIInternal *internal, const char *message)
 {
-    if (!internal || !message)
+    if (!internal)
     {
+        return;
+    }
+    if (!message || message[0] == '\0')
+    {
+        internal->status_message[0] = '\0';
+        internal->status_timer = 0.0f;
         return;
     }
     (void)snprintf(internal->status_message, sizeof(internal->status_message), "%s", message);
@@ -405,7 +429,7 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
     }
 }
 
-static void ui_draw_exit_prompt(UIInternal *internal, const UIContext *ui)
+static void ui_draw_exit_prompt(UIInternal *internal, UIContext *ui)
 {
     if (!internal || !ui || !internal->show_exit_prompt)
     {
@@ -430,7 +454,14 @@ static void ui_draw_exit_prompt(UIInternal *internal, const UIContext *ui)
         if (nk_button_label(ctx, "Exit"))
         {
             internal->show_exit_prompt = false;
-            CloseWindow();
+            if (ui_event_enqueue(ui, UI_EVENT_REQUEST_EXIT))
+            {
+                ui_internal_set_status(internal, "Exit requested.");
+            }
+            else
+            {
+                ui_internal_set_status(internal, "Event queue full; exit request failed.");
+            }
         }
     }
     else
@@ -445,7 +476,7 @@ static void ui_draw_exit_prompt(UIInternal *internal, const UIContext *ui)
 }
 
 static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
-                             CameraController *camera)
+                             CameraController *camera, RenderConfig *render_config)
 {
     if (!internal || !ui)
     {
@@ -464,19 +495,47 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (nk_menu_item_label(ctx, "New Tree", NK_TEXT_LEFT))
             {
-                ui_internal_set_status(internal, "New tree workflow pending implementation.");
+                if (ui_event_enqueue(ui, UI_EVENT_NEW_TREE))
+                {
+                    ui_internal_set_status(internal, "New tree request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; new tree aborted.");
+                }
             }
             if (nk_menu_item_label(ctx, "Open...", NK_TEXT_LEFT))
             {
-                ui_internal_set_status(internal, "File import UI not yet available.");
+                if (ui_event_enqueue(ui, UI_EVENT_OPEN_TREE))
+                {
+                    ui_internal_set_status(internal, "Open request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; open aborted.");
+                }
             }
             if (nk_menu_item_label(ctx, "Save", NK_TEXT_LEFT))
             {
-                ui_internal_set_status(internal, "Auto-save handles persistence for now.");
+                if (ui_event_enqueue(ui, UI_EVENT_SAVE_TREE))
+                {
+                    ui_internal_set_status(internal, "Save request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; save aborted.");
+                }
             }
             if (nk_menu_item_label(ctx, "Save As...", NK_TEXT_LEFT))
             {
-                ui_internal_set_status(internal, "Custom save destinations coming soon.");
+                if (ui_event_enqueue(ui, UI_EVENT_SAVE_TREE_AS))
+                {
+                    ui_internal_set_status(internal, "Save As request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; Save As aborted.");
+                }
             }
             if (nk_menu_item_label(ctx, "Exit", NK_TEXT_LEFT))
             {
@@ -513,6 +572,38 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 else
                 {
                     ui_internal_set_status(internal, "Layout center unavailable.");
+                }
+            }
+            if (render_config)
+            {
+                nk_layout_row_dynamic(ctx, 20.0f, 1);
+                nk_bool show_grid = render_config->show_grid ? nk_true : nk_false;
+                nk_checkbox_label(ctx, "Show grid", &show_grid);
+                bool new_grid = (show_grid == nk_true);
+                if (new_grid != render_config->show_grid)
+                {
+                    render_config->show_grid = new_grid;
+                    ui_internal_set_status(internal, new_grid ? "Grid lines enabled." : "Grid lines hidden.");
+                }
+
+                nk_bool show_connections = render_config->show_connections ? nk_true : nk_false;
+                nk_checkbox_label(ctx, "Show connections", &show_connections);
+                bool new_connections = (show_connections == nk_true);
+                if (new_connections != render_config->show_connections)
+                {
+                    render_config->show_connections = new_connections;
+                    ui_internal_set_status(internal,
+                                           new_connections ? "Relationship lines enabled." : "Relationship lines hidden.");
+                }
+
+                nk_bool show_overlay = render_config->show_overlay ? nk_true : nk_false;
+                nk_checkbox_label(ctx, "Show holographic overlay", &show_overlay);
+                bool new_overlay = (show_overlay == nk_true);
+                if (new_overlay != render_config->show_overlay)
+                {
+                    render_config->show_overlay = new_overlay;
+                    ui_internal_set_status(internal,
+                                           new_overlay ? "Overlay enabled." : "Overlay hidden.");
                 }
             }
             if (nk_menu_item_label(ctx, internal->auto_orbit ? "Disable Auto Orbit" : "Enable Auto Orbit",
@@ -611,6 +702,7 @@ bool ui_init(UIContext *ui, int width, int height)
     {
         return false;
     }
+    ui_event_queue_reset(&ui->event_queue);
     ui->available = false;
     ui->impl = NULL;
     ui->width = width;
@@ -668,6 +760,7 @@ void ui_cleanup(UIContext *ui)
     {
         return;
     }
+    ui_event_queue_reset(&ui->event_queue);
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
     UIInternal *internal = ui_internal_cast(ui);
     if (internal)
@@ -687,7 +780,6 @@ void ui_shutdown(UIContext *ui)
 
 bool ui_begin_frame(UIContext *ui, float delta_seconds)
 {
-    (void)delta_seconds;
     if (!ui)
     {
         return false;
@@ -711,8 +803,114 @@ bool ui_begin_frame(UIContext *ui, float delta_seconds)
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
 
+static void ui_compose_person_name(const Person *person, char *buffer, size_t capacity)
+{
+    if (!buffer || capacity == 0U)
+    {
+        return;
+    }
+    buffer[0] = '\0';
+    if (!person)
+    {
+        (void)snprintf(buffer, capacity, "(none)");
+        return;
+    }
+
+    size_t written = 0U;
+    const char *parts[3] = {person->name.first, person->name.middle, person->name.last};
+    for (size_t index = 0U; index < 3U; ++index)
+    {
+        const char *part = parts[index];
+        if (!part || part[0] == '\0')
+        {
+            continue;
+        }
+        if (written > 0U)
+        {
+            int result = snprintf(buffer + written, capacity - written, " %s", part);
+            if (result < 0)
+            {
+                buffer[written] = '\0';
+                break;
+            }
+            written += (size_t)result;
+        }
+        else
+        {
+            int result = snprintf(buffer, capacity, "%s", part);
+            if (result < 0)
+            {
+                buffer[0] = '\0';
+                break;
+            }
+            written = (size_t)result;
+        }
+        if (written >= capacity)
+        {
+            buffer[capacity - 1U] = '\0';
+            return;
+        }
+    }
+
+    if (written == 0U)
+    {
+        (void)snprintf(buffer, capacity, "Person %u", person->id);
+    }
+}
+
+static void ui_draw_hover_tooltip(UIInternal *internal, UIContext *ui, const Person *hovered)
+{
+    if (!internal || !ui || !hovered)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    Vector2 mouse = GetMousePosition();
+    float width = 260.0f;
+    float height = 120.0f;
+    float x = mouse.x + 18.0f;
+    float y = mouse.y + 18.0f;
+    if (x + width > (float)ui->width)
+    {
+        x = (float)ui->width - width - 10.0f;
+    }
+    if (y + height > (float)ui->height)
+    {
+        y = (float)ui->height - height - 10.0f;
+    }
+
+    struct nk_rect bounds = nk_rect(x, y, width, height);
+    if (nk_begin(ctx, "Tooltip##Person", bounds,
+                 NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND))
+    {
+        char name[128];
+        ui_compose_person_name(hovered, name, sizeof(name));
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, name, NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_labelf(ctx, NK_TEXT_LEFT, "ID: %u", hovered->id);
+        const char *birth_date = hovered->dates.birth_date ? hovered->dates.birth_date : "Unknown";
+        const char *birth_location = hovered->dates.birth_location ? hovered->dates.birth_location : "Unknown";
+        nk_labelf(ctx, NK_TEXT_LEFT, "Born: %s", birth_date);
+        nk_labelf(ctx, NK_TEXT_LEFT, "Birthplace: %s", birth_location);
+        if (hovered->is_alive)
+        {
+            nk_label(ctx, "Status: Alive", NK_TEXT_LEFT);
+        }
+        else
+        {
+            const char *death_date = hovered->dates.death_date ? hovered->dates.death_date : "Unknown";
+            const char *death_location = hovered->dates.death_location ? hovered->dates.death_location : "Unknown";
+            nk_labelf(ctx, NK_TEXT_LEFT, "Died: %s", death_date);
+            nk_labelf(ctx, NK_TEXT_LEFT, "Place of death: %s", death_location);
+        }
+    }
+    nk_end(ctx);
+}
+
 static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, const LayoutResult *layout,
-                               CameraController *camera, float fps)
+                               CameraController *camera, float fps, const Person *selected_person,
+                               const Person *hovered_person)
 {
     struct nk_context *ctx = &internal->ctx;
     if (nk_begin(ctx, "HUD", nk_rect(18.0f, 20.0f, 320.0f, 220.0f),
@@ -723,6 +921,13 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
         nk_labelf(ctx, NK_TEXT_LEFT, "FPS: %.1f", fps);
         unsigned int person_count = tree ? (unsigned int)tree->person_count : 0U;
         nk_labelf(ctx, NK_TEXT_LEFT, "Persons: %u", person_count);
+
+        char name_buffer[128];
+        ui_compose_person_name(selected_person, name_buffer, sizeof(name_buffer));
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_labelf(ctx, NK_TEXT_LEFT, "Selected: %s", selected_person ? name_buffer : "(none)");
+        ui_compose_person_name(hovered_person, name_buffer, sizeof(name_buffer));
+        nk_labelf(ctx, NK_TEXT_LEFT, "Hovered: %s", hovered_person ? name_buffer : "(none)");
 
         if (internal->status_timer > 0.0f && internal->status_message[0] != '\0')
         {
@@ -773,7 +978,8 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
 #endif /* ANCESTRYTREE_HAVE_RAYLIB && ANCESTRYTREE_HAVE_NUKLEAR */
 
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
-                     float fps)
+                     float fps, const Person *selected_person, const Person *hovered_person,
+                     RenderConfig *render_config)
 {
     if (!ui || !ui->available)
     {
@@ -785,15 +991,22 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         return;
     }
-    ui_draw_menu_bar(internal, ui, tree, layout, camera);
-    ui_draw_tree_panel(internal, tree, layout, camera, fps);
+    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config);
+    ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
     ui_draw_about_window(internal, ui);
     ui_draw_exit_prompt(internal, ui);
+    if (hovered_person)
+    {
+        ui_draw_hover_tooltip(internal, ui, hovered_person);
+    }
 #else
     (void)tree;
     (void)layout;
     (void)camera;
     (void)fps;
+    (void)selected_person;
+    (void)hovered_person;
+    (void)render_config;
 #endif
 }
 
@@ -827,6 +1040,60 @@ bool ui_auto_orbit_enabled(const UIContext *ui)
     }
 #else
     (void)ui;
+#endif
+    return false;
+}
+
+bool ui_event_enqueue(UIContext *ui, UIEventType type)
+{
+    if (!ui)
+    {
+        return false;
+    }
+    return ui_event_queue_push(&ui->event_queue, type);
+}
+
+size_t ui_poll_events(UIContext *ui, UIEvent *events, size_t capacity)
+{
+    if (!ui || !events || capacity == 0U)
+    {
+        return 0U;
+    }
+    UIEventQueue *queue = &ui->event_queue;
+    size_t count = queue->count;
+    if (count == 0U)
+    {
+        return 0U;
+    }
+    if (count > capacity)
+    {
+        count = capacity;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        size_t event_index = (queue->head + index) % UI_EVENT_QUEUE_CAPACITY;
+        events[index] = queue->events[event_index];
+    }
+    queue->head = (queue->head + count) % UI_EVENT_QUEUE_CAPACITY;
+    queue->count -= count;
+    return count;
+}
+
+bool ui_notify_status(UIContext *ui, const char *message)
+{
+    if (!ui)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (internal)
+    {
+        ui_internal_set_status(internal, message);
+        return true;
+    }
+#else
+    (void)message;
 #endif
     return false;
 }
