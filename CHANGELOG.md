@@ -11,3 +11,6 @@ All notable changes to this project will be documented in this file. The format 
 - ISO-8601 date utilities with strict validation for people and timeline entries, plus timeline unit coverage.
 - Marriage metadata support on person records with reciprocal updates and regression tests.
 - Family tree root enumeration API and cycle detection safeguards with new validation tests.
+- JSON save support via `persistence_tree_save`, emitting metadata, people, and relationships with pretty formatting and escaping.
+- Persistence unit tests covering full tree export, root detection, and error handling for invalid inputs.
+- Example JSON tree asset demonstrating the current save format.

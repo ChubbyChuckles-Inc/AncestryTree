@@ -139,12 +139,12 @@ PHASE 3: DATA PERSISTENCE & SERIALIZATION
 ================================================================================
 
 3.1 File Format Design
-  [ ] Design JSON-based save format
-      [ ] Schema for Person objects
-      [ ] Schema for relationships
-      [ ] Schema for tree metadata
-      [ ] Version field for future compatibility
-  [ ] Create example/template tree file
+    [x] Design JSON-based save format
+            [x] Schema for Person objects
+            [x] Schema for relationships
+            [x] Schema for tree metadata
+            [x] Version field for future compatibility
+    [x] Create example/template tree file
 
 3.2 JSON Parsing (Custom or library-based)
   [ ] Implement lightweight JSON parser (or integrate library)
@@ -153,15 +153,15 @@ PHASE 3: DATA PERSISTENCE & SERIALIZATION
       [ ] Handle escaped strings
       [ ] Error reporting with line numbers
   [ ] Implement JSON writer
-      [ ] Pretty-print formatting
-      [ ] Proper escaping
+      [x] Pretty-print formatting
+      [x] Proper escaping
       [ ] UTF-8 support
 
 3.3 Save/Load Functionality
-  [ ] Implement tree_save() function in src/persistence.c
-      [ ] Serialize entire tree to JSON
-      [ ] Write to file with error checking
-      [ ] Create backup before overwriting
+    [ ] Implement tree_save() function in src/persistence.c
+            [x] Serialize entire tree to JSON
+            [x] Write to file with error checking
+            [ ] Create backup before overwriting
   [ ] Implement tree_load() function
       [ ] Parse JSON from file
       [ ] Reconstruct Person objects

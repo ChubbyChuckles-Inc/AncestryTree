@@ -8,6 +8,7 @@ void register_person_tests(TestRegistry *registry);
 void register_tree_tests(TestRegistry *registry);
 void register_timeline_tests(TestRegistry *registry);
 void register_date_tests(TestRegistry *registry);
+void register_persistence_tests(TestRegistry *registry);
 void register_person_tests(TestRegistry *registry);
 void register_tree_tests(TestRegistry *registry);
 
@@ -23,6 +24,7 @@ int main(void)
     register_tree_tests(&registry);
     register_timeline_tests(&registry);
     register_date_tests(&registry);
+    register_persistence_tests(&registry);
     register_person_tests(&registry);
     register_tree_tests(&registry);
 
