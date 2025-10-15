@@ -84,5 +84,6 @@ bool person_metadata_set(Person *person, const char *key, const char *value);
 bool person_set_marriage(Person *person, Person *spouse, const char *date, const char *location);
 
 bool person_validate(const Person *person, char *error_buffer, size_t error_buffer_size);
+bool person_format_display_name(const Person *person, char *buffer, size_t capacity);
 
 #endif /* PERSON_H */

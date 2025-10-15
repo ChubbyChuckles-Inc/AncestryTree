@@ -11,6 +11,9 @@
 struct CameraController;
 struct LayoutResult;
 struct Person;
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+struct RenderLabelSystem;
+#endif
 
 typedef struct RenderColor
 {
@@ -33,6 +36,8 @@ typedef struct RenderConfig
     bool show_connections;
     bool show_grid;
     bool show_overlay;
+    bool show_name_panels;
+    bool show_profile_images;
 } RenderConfig;
 
 typedef struct RenderConnectionSegment
@@ -51,10 +56,13 @@ typedef struct RenderState
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     struct Shader glow_shader;
     int glow_intensity_loc;
+    int glow_time_loc;
     bool glow_shader_ready;
     float ambient_strength;
     float light_direction[3];
     RenderTexture2D scene_target;
+    struct RenderLabelSystem *label_system;
+    bool label_system_ready;
 #endif
 } RenderState;
 

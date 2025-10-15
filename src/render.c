@@ -7,9 +7,11 @@
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+#include "render_labels.h"
 #include <raymath.h>
 #include <rlgl.h>
 #endif
@@ -46,6 +48,8 @@ static void render_set_default_config(RenderConfig *config)
     config->show_connections = true;
     config->show_grid = true;
     config->show_overlay = true;
+    config->show_name_panels = true;
+    config->show_profile_images = true;
 }
 
 void render_state_init(RenderState *state)
@@ -61,11 +65,14 @@ void render_state_init(RenderState *state)
     state->render_target_ready = false;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     state->glow_shader_ready = false;
+    state->glow_time_loc = -1;
     state->ambient_strength = 0.2f;
     state->light_direction[0] = -0.3f;
     state->light_direction[1] = -1.0f;
     state->light_direction[2] = -0.2f;
     state->scene_target.id = 0;
+    state->label_system = NULL;
+    state->label_system_ready = false;
 #endif
 }
 
@@ -152,10 +159,12 @@ static const char *render_glow_fragment_shader(void)
            "in vec4 fragColor;\n"
            "out vec4 finalColor;\n"
            "uniform float glowIntensity;\n"
+           "uniform float timeSeconds;\n"
            "void main(){\n"
            "    vec4 base = fragColor;\n"
            "    float glow = clamp(glowIntensity, 0.0, 4.0);\n"
-           "    vec3 emissive = base.rgb * glow * 0.35;\n"
+           "    float wobble = 0.35 + 0.15 * sin(timeSeconds * 1.4);\n"
+           "    vec3 emissive = base.rgb * glow * wobble;\n"
            "    finalColor = vec4(base.rgb + emissive, base.a);\n"
            "}";
 #else
@@ -164,10 +173,12 @@ static const char *render_glow_fragment_shader(void)
            "varying vec2 fragTexCoord;\n"
            "varying vec4 fragColor;\n"
            "uniform float glowIntensity;\n"
+           "uniform float timeSeconds;\n"
            "void main(){\n"
            "    vec4 base = fragColor;\n"
            "    float glow = clamp(glowIntensity, 0.0, 4.0);\n"
-           "    vec3 emissive = base.rgb * glow * 0.35;\n"
+           "    float wobble = 0.35 + 0.15 * sin(timeSeconds * 1.4);\n"
+           "    vec3 emissive = base.rgb * glow * wobble;\n"
            "    gl_FragColor = vec4(base.rgb + emissive, base.a);\n"
            "}";
 #endif
@@ -317,6 +328,11 @@ static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool 
     {
         float glow_value = state->config.glow_intensity;
         SetShaderValue(state->glow_shader, state->glow_intensity_loc, &glow_value, SHADER_UNIFORM_FLOAT);
+        if (state->glow_time_loc >= 0)
+        {
+            float time_seconds = (float)GetTime();
+            SetShaderValue(state->glow_shader, state->glow_time_loc, &time_seconds, SHADER_UNIFORM_FLOAT);
+        }
         BeginShaderMode(state->glow_shader);
         DrawSphereEx(position, base_radius, 32, 32, base_color);
         EndShaderMode();
@@ -345,6 +361,61 @@ static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool 
         rlEnableBackfaceCulling();
     }
 }
+
+static void render_draw_label(RenderState *state, const LayoutNode *node, const Camera3D *camera,
+                              const Person *person, bool is_selected, bool is_hovered)
+{
+    if (!state || !state->label_system_ready || !state->label_system || !state->config.show_name_panels)
+    {
+        return;
+    }
+    RenderLabelInfo info;
+    if (!render_labels_acquire(state->label_system, person, state->config.show_profile_images, &info) ||
+        !info.valid)
+    {
+        return;
+    }
+
+    Rectangle source = {0.0f, 0.0f, (float)info.texture.width, (float)info.texture.height};
+    Vector3 base_position = {node->position[0], node->position[1], node->position[2]};
+    float vertical_offset = fmaxf(state->config.sphere_radius * 1.6f, 0.5f);
+    Vector3 label_position = {base_position.x, base_position.y + vertical_offset, base_position.z};
+
+    float distance = Vector3Distance(camera->position, label_position);
+    float scale_factor = 0.0018f * distance;
+    if (scale_factor < 0.14f)
+    {
+        scale_factor = 0.14f;
+    }
+    if (scale_factor > 0.48f)
+    {
+        scale_factor = 0.48f;
+    }
+    if (is_selected)
+    {
+        scale_factor *= 1.18f;
+    }
+    else if (is_hovered)
+    {
+        scale_factor *= 1.08f;
+    }
+
+    Vector2 size = {info.width_pixels * scale_factor, info.height_pixels * scale_factor};
+    Color tint = WHITE;
+    tint.a = (unsigned char)(is_selected ? 255 : (is_hovered ? 244 : 232));
+
+    rlDisableBackfaceCulling();
+    rlDisableDepthMask();
+    DrawBillboardRec(*camera, info.texture, source, label_position, size, tint);
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
+
+    Color tether_color = render_color_to_raylib(state->config.selected_outline_color);
+    tether_color.a = (unsigned char)((int)tether_color.a / 2);
+    Vector3 tether_top = label_position;
+    tether_top.y -= size.y * 0.5f;
+    DrawLine3D(base_position, tether_top, tether_color);
+}
 #endif /* ANCESTRYTREE_HAVE_RAYLIB */
 
 bool render_init(RenderState *state, const RenderConfig *config, char *error_buffer, size_t error_buffer_size)
@@ -365,6 +436,11 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.sphere_radius = config->sphere_radius;
         state->config.glow_intensity = config->glow_intensity;
         state->config.connection_radius = config->connection_radius;
+        state->config.show_connections = config->show_connections;
+        state->config.show_grid = config->show_grid;
+        state->config.show_overlay = config->show_overlay;
+        state->config.show_name_panels = config->show_name_panels;
+        state->config.show_profile_images = config->show_profile_images;
     }
 
     if (!render_config_validate(&state->config))
@@ -373,26 +449,48 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
     }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    const char *vertex_source = render_glow_vertex_shader();
-    const char *fragment_source = render_glow_fragment_shader();
-    state->glow_shader = LoadShaderFromMemory(vertex_source, fragment_source);
-    if (state->glow_shader.id != 0)
+    bool window_ready = IsWindowReady();
+    if (window_ready)
     {
-        state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(state->glow_shader, "mvp");
-        state->glow_intensity_loc = GetShaderLocation(state->glow_shader, "glowIntensity");
-        state->glow_shader_ready = state->glow_intensity_loc >= 0 &&
-                                   state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] >= 0;
+        const char *vertex_source = render_glow_vertex_shader();
+        const char *fragment_source = render_glow_fragment_shader();
+        state->glow_shader = LoadShaderFromMemory(vertex_source, fragment_source);
+        if (state->glow_shader.id != 0)
+        {
+            state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(state->glow_shader, "mvp");
+            state->glow_intensity_loc = GetShaderLocation(state->glow_shader, "glowIntensity");
+            state->glow_time_loc = GetShaderLocation(state->glow_shader, "timeSeconds");
+            state->glow_shader_ready = state->glow_intensity_loc >= 0 &&
+                                       state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] >= 0;
+        }
+        else
+        {
+            state->glow_shader_ready = false;
+        }
+        if (!state->glow_shader_ready)
+        {
+            UnloadShader(state->glow_shader);
+            state->glow_shader.id = 0;
+        }
     }
     else
     {
         state->glow_shader_ready = false;
+        state->glow_shader.id = 0;
+        state->glow_intensity_loc = -1;
+        state->glow_time_loc = -1;
     }
 
-    if (!state->glow_shader_ready)
+    if (!state->label_system)
     {
-        UnloadShader(state->glow_shader);
-        state->glow_shader.id = 0;
+        state->label_system = (RenderLabelSystem *)calloc(1U, sizeof(RenderLabelSystem));
+        if (state->label_system && !render_labels_init(state->label_system))
+        {
+            free(state->label_system);
+            state->label_system = NULL;
+        }
     }
+    state->label_system_ready = (state->label_system != NULL) && window_ready;
 #endif
 
     state->initialized = true;
@@ -410,6 +508,13 @@ void render_cleanup(RenderState *state)
     if (state->glow_shader_ready)
     {
         UnloadShader(state->glow_shader);
+    }
+    if (state->label_system)
+    {
+        render_labels_shutdown(state->label_system);
+        free(state->label_system);
+        state->label_system = NULL;
+        state->label_system_ready = false;
     }
 #endif
     render_state_init(state);
@@ -442,6 +547,13 @@ bool render_resize(RenderState *state, int width, int height, char *error_buffer
     }
 
     render_release_render_target(state);
+    if (!IsWindowReady())
+    {
+        state->scene_target.id = 0;
+        state->render_target_ready = false;
+        return true;
+    }
+
     state->scene_target = LoadRenderTexture(width, height);
     state->render_target_ready = state->scene_target.id != 0;
     if (!state->render_target_ready)
@@ -630,6 +742,16 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         return false;
     }
 
+    if (state->label_system)
+    {
+        state->label_system_ready = IsWindowReady();
+    }
+
+    if (state->label_system_ready && state->label_system)
+    {
+        render_labels_begin_frame(state->label_system);
+    }
+
     bool using_render_target = state->render_target_ready && state->render_width > 0 && state->render_height > 0;
     if (using_render_target)
     {
@@ -661,6 +783,7 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         bool is_selected = (selected_person == person);
         bool is_hovered = (hovered_person == person) && !is_selected;
         render_draw_sphere(state, node, person->is_alive, is_selected, is_hovered, camera_data);
+        render_draw_label(state, node, camera_data, person, is_selected, is_hovered);
     }
 
     EndMode3D();
@@ -677,6 +800,11 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
     if (state->config.show_overlay)
     {
         render_draw_holographic_overlay(state);
+    }
+
+    if (state->label_system_ready && state->label_system)
+    {
+        render_labels_end_frame(state->label_system);
     }
     return true;
 #endif

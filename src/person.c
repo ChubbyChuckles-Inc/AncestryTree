@@ -791,3 +791,59 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
     }
     return true;
 }
+
+bool person_format_display_name(const Person *person, char *buffer, size_t capacity)
+{
+    if (!person || !buffer || capacity == 0U)
+    {
+        return false;
+    }
+    buffer[0] = '\0';
+
+    const char *segments[3] = {person->name.first, person->name.middle, person->name.last};
+    size_t written = 0U;
+    for (size_t index = 0U; index < 3U; ++index)
+    {
+        const char *segment = segments[index];
+        if (!segment || segment[0] == '\0')
+        {
+            continue;
+        }
+        int required = 0;
+        if (written == 0U)
+        {
+            required = snprintf(buffer, capacity, "%s", segment);
+        }
+        else
+        {
+            required = snprintf(buffer + written, capacity - written, " %s", segment);
+        }
+        if (required < 0)
+        {
+            buffer[0] = '\0';
+            return false;
+        }
+        written += (size_t)required;
+        if (written >= capacity)
+        {
+            buffer[capacity - 1U] = '\0';
+            return false;
+        }
+    }
+
+    if (written == 0U)
+    {
+        int required = snprintf(buffer, capacity, "Person %u", person->id);
+        if (required < 0)
+        {
+            buffer[0] = '\0';
+            return false;
+        }
+        if ((size_t)required >= capacity)
+        {
+            buffer[capacity - 1U] = '\0';
+            return false;
+        }
+    }
+    return true;
+}

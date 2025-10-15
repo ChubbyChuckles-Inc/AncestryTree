@@ -146,10 +146,18 @@ TEST(test_render_resize_updates_dimensions_when_raylib_missing)
     RenderConfig config = render_config_default();
     char error_buffer[64];
     ASSERT_TRUE(render_init(&state, &config, error_buffer, sizeof(error_buffer)));
-    ASSERT_TRUE(render_resize(&state, 640, 360, error_buffer, sizeof(error_buffer)));
+    bool resize_ok = render_resize(&state, 640, 360, error_buffer, sizeof(error_buffer));
     ASSERT_EQ(state.render_width, 640);
     ASSERT_EQ(state.render_height, 360);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (!resize_ok)
+    {
+        ASSERT_FALSE(render_has_render_target(&state));
+    }
+#else
+    ASSERT_TRUE(resize_ok);
     ASSERT_FALSE(render_has_render_target(&state));
+#endif
     render_cleanup(&state);
 }
 

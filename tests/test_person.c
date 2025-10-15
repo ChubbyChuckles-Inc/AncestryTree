@@ -157,6 +157,29 @@ TEST(test_person_rejects_invalid_dates)
     person_destroy(person);
 }
 
+TEST(test_person_format_display_name_includes_middle_name)
+{
+    Person *person = person_create(21U);
+    char buffer[128];
+    ASSERT_TRUE(person_set_name(person, "Grace", "Brewster", "Hopper"));
+    ASSERT_TRUE(person_format_display_name(person, buffer, sizeof(buffer)));
+    ASSERT_STREQ(buffer, "Grace Brewster Hopper");
+
+    char small[8];
+    ASSERT_FALSE(person_format_display_name(person, small, sizeof(small)));
+
+    person_destroy(person);
+}
+
+TEST(test_person_format_display_name_falls_back_to_id)
+{
+    Person *person = person_create(42U);
+    char buffer[64];
+    ASSERT_TRUE(person_format_display_name(person, buffer, sizeof(buffer)));
+    ASSERT_STREQ(buffer, "Person 42");
+    person_destroy(person);
+}
+
 void register_person_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_person_create_and_destroy);
@@ -167,4 +190,6 @@ void register_person_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_person_timeline_and_metadata);
     REGISTER_TEST(registry, test_person_validation_rules);
     REGISTER_TEST(registry, test_person_rejects_invalid_dates);
+    REGISTER_TEST(registry, test_person_format_display_name_includes_middle_name);
+    REGISTER_TEST(registry, test_person_format_display_name_falls_back_to_id);
 }

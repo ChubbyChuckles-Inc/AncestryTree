@@ -29,3 +29,4 @@ All notable changes to this project will be documented in this file. The format 
 - Pointer interaction system with hover/selection ray casting, renderer highlights, adaptive link thickness, and regression tests covering hit math and state transitions.
 - Hierarchical layout refinements centering roots, pairing spouses side-by-side, cascading generations vertically, and validating the geometry with new unit tests.
 - Render-target based presentation layer with holographic screen overlay, custom glow vertex shader, responsive Nuklear menu bar/ dialogs, and regression tests for resize handling.
+- Dynamic holographic name panel system with cached billboards, optional profile portraits, animated glow shader timing, and UI toggles to control presentation.

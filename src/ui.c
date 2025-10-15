@@ -605,6 +605,26 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal,
                                            new_overlay ? "Overlay enabled." : "Overlay hidden.");
                 }
+
+                nk_bool show_labels = render_config->show_name_panels ? nk_true : nk_false;
+                nk_checkbox_label(ctx, "Show name panels", &show_labels);
+                bool new_labels = (show_labels == nk_true);
+                if (new_labels != render_config->show_name_panels)
+                {
+                    render_config->show_name_panels = new_labels;
+                    ui_internal_set_status(internal,
+                                           new_labels ? "Holographic name panels enabled." : "Holographic name panels hidden.");
+                }
+
+                nk_bool show_profiles = render_config->show_profile_images ? nk_true : nk_false;
+                nk_checkbox_label(ctx, "Show profile images", &show_profiles);
+                bool new_profiles = (show_profiles == nk_true);
+                if (new_profiles != render_config->show_profile_images)
+                {
+                    render_config->show_profile_images = new_profiles;
+                    ui_internal_set_status(internal,
+                                           new_profiles ? "Portraits enabled in name panels." : "Portraits hidden from name panels.");
+                }
             }
             if (nk_menu_item_label(ctx, internal->auto_orbit ? "Disable Auto Orbit" : "Enable Auto Orbit",
                                    NK_TEXT_LEFT))
