@@ -262,10 +262,10 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [x] Ensure non-overlapping spheres
       [x] Space generations vertically
       [x] Spread siblings horizontally
-  [ ] Implement hierarchical layout
-      [ ] Root at center
-      [ ] Children below parents
-      [ ] Spouses side-by-side
+  [x] Implement hierarchical layout
+      [x] Root at center
+      [x] Children below parents
+      [x] Spouses side-by-side
   [ ] Implement force-directed layout (optional)
       [ ] Physics-based positioning
       [ ] Spring forces for relationships

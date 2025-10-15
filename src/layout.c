@@ -3,6 +3,7 @@
 #include "at_memory.h"
 
 #include <math.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -86,6 +87,48 @@ static size_t layout_collect_generation(Person **buffer, size_t capacity, const 
     return count;
 }
 
+static int layout_find_person_index(Person *const *generation, size_t count, const Person *person)
+{
+    if (!generation || !person)
+    {
+        return -1;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        if (generation[index] == person)
+        {
+            return (int)index;
+        }
+    }
+    return -1;
+}
+
+static const Person *layout_find_generation_spouse(Person *const *generation, size_t count, const Person *person,
+                                                   const bool *assigned)
+{
+    if (!generation || !person)
+    {
+        return NULL;
+    }
+    for (size_t spouse_index = 0U; spouse_index < person->spouses_count; ++spouse_index)
+    {
+        const Person *candidate = person->spouses[spouse_index].partner;
+        if (!candidate)
+        {
+            continue;
+        }
+        int index = layout_find_person_index(generation, count, candidate);
+        if (index >= 0)
+        {
+            if (!assigned || !assigned[index])
+            {
+                return candidate;
+            }
+        }
+    }
+    return NULL;
+}
+
 static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Person *const *generation, size_t count,
                                      float vertical_level)
 {
@@ -93,16 +136,87 @@ static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Pers
     {
         return;
     }
-    const float total_width = (float)(count - 1U) * LAYOUT_HORIZONTAL_SPACING;
-    const float origin = -total_width / 2.0f;
+    if (count == 0U)
+    {
+        return;
+    }
+
+    Person **ordered = (Person **)calloc(count, sizeof(Person *));
+    bool *assigned = (bool *)calloc(count, sizeof(bool));
+    if (!ordered || !assigned)
+    {
+        free(ordered);
+        free(assigned);
+        const float total_width_fallback = (float)(count > 0U ? count - 1U : 0U) * LAYOUT_HORIZONTAL_SPACING;
+        const float origin_fallback = -total_width_fallback / 2.0f;
+        for (size_t index = 0U; index < count; ++index)
+        {
+            LayoutNode *node = &nodes[start_index + index];
+            node->person = generation[index];
+            node->position[0] = origin_fallback + (float)index * LAYOUT_HORIZONTAL_SPACING;
+            node->position[1] = vertical_level;
+            node->position[2] = 0.0f;
+        }
+        return;
+    }
+
+    size_t ordered_count = 0U;
     for (size_t index = 0U; index < count; ++index)
     {
+        if (assigned[index])
+        {
+            continue;
+        }
+        Person *person = generation[index];
+        ordered[ordered_count++] = person;
+        assigned[index] = true;
+
+        const Person *spouse = layout_find_generation_spouse(generation, count, person, assigned);
+        if (spouse)
+        {
+            int spouse_index = layout_find_person_index(generation, count, spouse);
+            if (spouse_index >= 0 && !assigned[spouse_index])
+            {
+                ordered[ordered_count++] = generation[spouse_index];
+                assigned[spouse_index] = true;
+            }
+        }
+    }
+
+    if (ordered_count < count)
+    {
+        for (size_t index = 0U; index < count && ordered_count < count; ++index)
+        {
+            Person *person = generation[index];
+            bool already_added = false;
+            for (size_t scan = 0U; scan < ordered_count; ++scan)
+            {
+                if (ordered[scan] == person)
+                {
+                    already_added = true;
+                    break;
+                }
+            }
+            if (!already_added)
+            {
+                ordered[ordered_count++] = person;
+            }
+        }
+    }
+
+    const float total_width = (float)(ordered_count > 0U ? ordered_count - 1U : 0U) * LAYOUT_HORIZONTAL_SPACING;
+    const float origin = -total_width / 2.0f;
+    for (size_t index = 0U; index < ordered_count; ++index)
+    {
         LayoutNode *node = &nodes[start_index + index];
-        node->person = generation[index];
+        node->person = ordered[index];
         node->position[0] = origin + (float)index * LAYOUT_HORIZONTAL_SPACING;
         node->position[1] = vertical_level;
         node->position[2] = 0.0f;
     }
+
+    free(ordered);
+    free(assigned);
 }
 
 static size_t layout_collect_all(Person **scratch, const FamilyTree *tree)
