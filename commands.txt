@@ -3,7 +3,7 @@ Based on the implementation plan provided in the TODO list at "roadmaps/implemen
 For each feature or task implemented:
 - Add rigorous validation: Include unit tests in tests/ (expand the minimal test framework if needed), manual checks in comments, and runtime assertions/error handling to prevent regressions.
 - Test for regressions: After implementation, verify that previously completed features (marked [x] in the TODO) still work as expected—e.g., re-run existing tests, check 3D rendering stability, UI responsiveness, and cross-platform compilation.
-- Update the TODO list: Mark newly completed tasks as [x] and provide the full updated TODO list at the end of your response.
+- Update the TODO list: Mark newly completed tasks as [x].
 
 Only modify or add files as necessary; do not overwrite unrelated code. Generate complete, compilable code snippets for new/updated files. If a task requires assets (e.g., fonts, models), assume placeholders or generate procedural equivalents in code.
 

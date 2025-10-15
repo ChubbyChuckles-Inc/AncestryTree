@@ -16,6 +16,7 @@ void register_graphics_tests(TestRegistry *registry);
 void register_camera_controller_tests(TestRegistry *registry);
 void register_path_utils_tests(TestRegistry *registry);
 void register_render_tests(TestRegistry *registry);
+void register_interaction_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -37,6 +38,7 @@ int main(void)
     register_camera_controller_tests(&registry);
     register_path_utils_tests(&registry);
     register_render_tests(&registry);
+    register_interaction_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

@@ -279,22 +279,22 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
             [x] Draw lines between parent and child spheres
             [x] Draw lines between spouses
             [x] Color code relationships (parent-child, marriage)
-            [ ] Adjust line thickness based on distance
+            [x] Adjust line thickness based on distance
   [ ] Implement line anti-aliasing
   [ ] Add optional connection styles (curves, beziers)
 
 4.8 Interaction System
-  [ ] Implement ray_cast() function
-      [ ] Cast ray from mouse into 3D scene
-      [ ] Check intersection with spheres
-      [ ] Return closest intersected person
-  [ ] Implement sphere_select() function
-      [ ] Handle mouse click on sphere
+  [x] Implement ray_cast() function
+      [x] Cast ray from mouse into 3D scene
+      [x] Check intersection with spheres
+      [x] Return closest intersected person
+  [x] Implement sphere_select() function
+      [x] Handle mouse click on sphere
       [ ] Trigger expansion animation
-      [ ] Update application state
-  [ ] Implement sphere_hover() function
-      [ ] Detect mouse hover
-      [ ] Show highlight effect
+      [x] Update application state
+  [x] Implement sphere_hover() function
+      [x] Detect mouse hover
+      [x] Show highlight effect
       [ ] Display tooltip (optional)
 
 ================================================================================

@@ -1,6 +1,7 @@
 #include "at_log.h"
 #include "camera_controller.h"
 #include "graphics.h"
+#include "interaction.h"
 #include "layout.h"
 #include "path_utils.h"
 #include "persistence.h"
@@ -175,7 +176,8 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
     }
 }
 
-static void app_render_scene_basic(const LayoutResult *layout, const CameraController *camera)
+static void app_render_scene_basic(const LayoutResult *layout, const CameraController *camera,
+                                   const Person *selected_person, const Person *hovered_person)
 {
     const Camera3D *raylib_camera = camera_controller_get_camera(camera);
     if (!raylib_camera)
@@ -193,8 +195,21 @@ static void app_render_scene_basic(const LayoutResult *layout, const CameraContr
             const LayoutNode *node = &layout->nodes[index];
             const Person *person = node->person;
             Color color = person && person->is_alive ? (Color){0, 195, 255, 255} : (Color){200, 120, 240, 255};
+            float radius = 0.6f;
+            if (person == hovered_person && person != selected_person)
+            {
+                radius *= 1.08f;
+            }
+            if (person == selected_person)
+            {
+                radius *= 1.2f;
+            }
             Vector3 position = {node->position[0], node->position[1], node->position[2]};
-            DrawSphere(position, 0.6f, color);
+            DrawSphere(position, radius, color);
+            if (person == selected_person)
+            {
+                DrawSphereWires(position, radius * 1.05f, 16, 16, RAYWHITE);
+            }
         }
     }
 
@@ -266,6 +281,10 @@ static int app_run(AtLogger *logger)
     bool render_ready = render_init(&render_state, NULL, render_error, sizeof(render_error));
     AT_LOG_WARN_IF(logger, !render_ready, "Render pipeline fallback: %s", render_error);
 
+    InteractionState interaction_state;
+    interaction_state_init(&interaction_state);
+    interaction_state_set_pick_radius(&interaction_state, render_state.config.sphere_radius);
+
     UIContext ui;
     bool ui_ready = ui_init(&ui, graphics_state.width, graphics_state.height);
     AT_LOG_WARN_IF(logger, !ui_ready, "UI overlay unavailable; Nuklear or raylib might be missing.");
@@ -289,10 +308,28 @@ static int app_run(AtLogger *logger)
         BeginDrawing();
         ClearBackground((Color){8, 10, 18, 255});
 
-        bool rendered = render_scene(&render_state, &layout, &camera_controller, NULL);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+        Vector2 mouse = GetMousePosition();
+        interaction_update_hover(&interaction_state, &layout, &camera_controller, mouse.x, mouse.y);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            bool keep_selection = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+            interaction_select_at_cursor(&interaction_state, &layout, &camera_controller, mouse.x, mouse.y,
+                                         !keep_selection);
+        }
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            interaction_clear_selection(&interaction_state);
+        }
+#endif
+
+        const Person *selected_person = interaction_get_selected(&interaction_state);
+        const Person *hovered_person = interaction_get_hovered(&interaction_state);
+
+        bool rendered = render_scene(&render_state, &layout, &camera_controller, selected_person, hovered_person);
         if (!rendered)
         {
-            app_render_scene_basic(&layout, &camera_controller);
+            app_render_scene_basic(&layout, &camera_controller, selected_person, hovered_person);
         }
 
         if (ui_frame_started)

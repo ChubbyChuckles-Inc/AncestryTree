@@ -59,7 +59,7 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
 void render_cleanup(RenderState *state);
 
 bool render_scene(RenderState *state, const struct LayoutResult *layout, const struct CameraController *camera,
-                  const struct Person *highlight_person);
+                  const struct Person *selected_person, const struct Person *hovered_person);
 bool render_connections_render(RenderState *state, const struct LayoutResult *layout);
 
 bool render_find_person_position(const struct LayoutResult *layout, const struct Person *person, float out_position[3]);

@@ -159,6 +159,14 @@ static Color render_color_apply_intensity(Color color, float intensity)
     return result;
 }
 
+static float render_distance_between_points(const float a[3], const float b[3])
+{
+    const float dx = a[0] - b[0];
+    const float dy = a[1] - b[1];
+    const float dz = a[2] - b[2];
+    return sqrtf(dx * dx + dy * dy + dz * dz);
+}
+
 static void render_draw_connection(RenderState *state, const float start[3], const float end[3], RenderColor color)
 {
     if (!state)
@@ -169,9 +177,13 @@ static void render_draw_connection(RenderState *state, const float start[3], con
     Vector3 b = {end[0], end[1], end[2]};
     Color ray_color = render_color_to_raylib(color);
 
-    if (state->config.connection_radius > 0.0f)
+    float radius = state->config.connection_radius;
+    if (radius > 0.0f)
     {
-        DrawCylinderEx(a, b, state->config.connection_radius, state->config.connection_radius, 12, ray_color);
+        float distance = render_distance_between_points(start, end);
+        float scale = 1.0f + fminf(distance * 0.12f, 2.5f);
+        float adjusted = radius * scale;
+        DrawCylinderEx(a, b, adjusted, adjusted, 18, ray_color);
     }
     else
     {
@@ -186,10 +198,14 @@ static void render_apply_lighting(const RenderState *state)
 }
 
 static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool is_alive, bool is_selected,
-                               const Camera3D *camera)
+                               bool is_hovered, const Camera3D *camera)
 {
     Vector3 position = {node->position[0], node->position[1], node->position[2]};
     float base_radius = state->config.sphere_radius;
+    if (is_hovered && !is_selected)
+    {
+        base_radius *= 1.08f;
+    }
     if (is_selected)
     {
         base_radius *= 1.2f;
@@ -236,7 +252,8 @@ static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool 
     {
         Color halo = base_color;
         halo.a = (unsigned char)((int)halo.a / 3);
-        float glow_radius = base_radius * (1.0f + state->config.glow_intensity * 0.4f);
+        float intensity_scale = 1.0f + state->config.glow_intensity * (is_hovered ? 0.55f : 0.4f);
+        float glow_radius = base_radius * intensity_scale;
         DrawSphereEx(position, glow_radius, 24, 24, halo);
     }
 
@@ -468,14 +485,15 @@ bool render_connections_render(RenderState *state, const LayoutResult *layout)
 }
 
 bool render_scene(RenderState *state, const LayoutResult *layout, const CameraController *camera,
-                  const Person *highlight_person)
+                  const Person *selected_person, const Person *hovered_person)
 {
-    (void)highlight_person;
     if (!state || !state->initialized || !layout || !camera)
     {
         return false;
     }
 #if !defined(ANCESTRYTREE_HAVE_RAYLIB)
+    (void)selected_person;
+    (void)hovered_person;
     (void)layout;
     (void)camera;
     return false;
@@ -500,8 +518,9 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         {
             continue;
         }
-        bool is_selected = (highlight_person == person);
-        render_draw_sphere(state, node, person->is_alive, is_selected, camera_data);
+        bool is_selected = (selected_person == person);
+        bool is_hovered = (hovered_person == person) && !is_selected;
+        render_draw_sphere(state, node, person->is_alive, is_selected, is_hovered, camera_data);
     }
 
     EndMode3D();

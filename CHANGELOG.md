@@ -26,3 +26,4 @@ All notable changes to this project will be documented in this file. The format 
 - Orbital camera controller with configurable bounds, pan/zoom handling, and comprehensive math-focused unit tests.
 - Interactive prototype runtime combining raylib rendering, camera controls, and a Nuklear HUD (auto orbit, camera focus) powered by the new application loop and asset path utilities with accompanying unit tests.
 - Rendering pipeline module with glow-shaded spheres, directional lighting, relationship connection lines, and supporting unit tests for spatial lookups and segment generation.
+- Pointer interaction system with hover/selection ray casting, renderer highlights, adaptive link thickness, and regression tests covering hit math and state transitions.
