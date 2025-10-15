@@ -256,12 +256,12 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [ ] Generate mipmaps
 
 4.6 Tree Layout Algorithm
-  [ ] Implement layout_calculate() in src/layout.c
-      [ ] Choose layout algorithm (hierarchical, radial, force-directed)
-      [ ] Calculate 3D positions for each person
-      [ ] Ensure non-overlapping spheres
-      [ ] Space generations vertically
-      [ ] Spread siblings horizontally
+  [x] Implement layout_calculate() in src/layout.c
+      [x] Choose layout algorithm (hierarchical, radial, force-directed)
+      [x] Calculate 3D positions for each person
+      [x] Ensure non-overlapping spheres
+      [x] Space generations vertically
+      [x] Spread siblings horizontally
   [ ] Implement hierarchical layout
       [ ] Root at center
       [ ] Children below parents

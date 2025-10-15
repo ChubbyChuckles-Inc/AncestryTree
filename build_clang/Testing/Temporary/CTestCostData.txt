@@ -1,2 +1,2 @@
-ancestrytree_tests 5 0.0030271
+ancestrytree_tests 7 0.00239319
 ---
