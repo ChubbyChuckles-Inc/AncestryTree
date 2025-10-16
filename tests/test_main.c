@@ -19,12 +19,13 @@ void register_render_tests(TestRegistry *registry);
 void register_interaction_tests(TestRegistry *registry);
 void register_render_labels_tests(TestRegistry *registry);
 void register_shortcuts_tests(TestRegistry *registry);
+void register_settings_tests(TestRegistry *registry);
 
 int main(void)
 {
-    TestCase cases[80];
     TestRegistry registry;
-    test_registry_init(&registry, cases, 80);
+    TestCase cases[88];
+    test_registry_init(&registry, cases, 88);
 
     register_string_tests(&registry);
     register_memory_tests(&registry);
@@ -43,6 +44,7 @@ int main(void)
     register_render_labels_tests(&registry);
     register_interaction_tests(&registry);
     register_shortcuts_tests(&registry);
+    register_settings_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)
