@@ -17,6 +17,10 @@ typedef enum UIEventType
     UI_EVENT_OPEN_TREE,
     UI_EVENT_SAVE_TREE,
     UI_EVENT_SAVE_TREE_AS,
+    UI_EVENT_UNDO,
+    UI_EVENT_REDO,
+    UI_EVENT_RESET_CAMERA,
+    UI_EVENT_ESCAPE,
     UI_EVENT_REQUEST_EXIT
 } UIEventType;
 
@@ -58,5 +62,6 @@ bool ui_auto_orbit_enabled(const UIContext *ui);
 bool ui_event_enqueue(UIContext *ui, UIEventType type);
 size_t ui_poll_events(UIContext *ui, UIEvent *events, size_t capacity);
 bool ui_notify_status(UIContext *ui, const char *message);
+bool ui_handle_escape(UIContext *ui);
 
 #endif /* UI_H */

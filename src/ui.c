@@ -31,6 +31,7 @@ typedef struct UIInternal
     bool scissor_active;
     bool auto_orbit;
     bool show_about_window;
+    bool show_help_window;
     bool show_exit_prompt;
     char status_message[128];
     float status_timer;
@@ -421,6 +422,9 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
         nk_label(ctx, "Current focus: rendering pipeline + UI overlays.", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 18.0f, 1);
         nk_label(ctx, "Raylib + Nuklear integration in progress.", NK_TEXT_LEFT);
+        nk_label(ctx, "Credits: ChubbyChuckles Labs & open-source collaborators.", NK_TEXT_LEFT);
+        nk_label(ctx, "License: MIT (see bundled LICENSE file).", NK_TEXT_LEFT);
+        nk_label(ctx, "Documentation: README.md and docs/ directory.", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 28.0f, 2);
         if (nk_button_label(ctx, "Close"))
         {
@@ -439,6 +443,63 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
     if (nk_window_is_closed(ctx, "About##AncestryTree"))
     {
         internal->show_about_window = false;
+    }
+}
+
+static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
+{
+    if (!internal || !ui || !internal->show_help_window)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    float width = fminf(420.0f, (float)ui->width * 0.75f);
+    float height = fminf(320.0f, (float)ui->height * 0.75f);
+    float x = ((float)ui->width - width) * 0.5f;
+    struct nk_rect bounds = nk_rect(x, 80.0f, width, height);
+    if (nk_begin(ctx, "Quick Help##AncestryTree", bounds,
+                 NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
+    {
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Keyboard Shortcuts", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label(ctx, "Ctrl+N: New placeholder tree", NK_TEXT_LEFT);
+        nk_label(ctx, "Ctrl+O: Load sample tree", NK_TEXT_LEFT);
+        nk_label(ctx, "Ctrl+S: Save current tree", NK_TEXT_LEFT);
+        nk_label(ctx, "Ctrl+Shift+S: Save tree as timestamped copy", NK_TEXT_LEFT);
+        nk_label(ctx, "Ctrl+Z / Ctrl+Y: Undo / Redo (pending command stack)", NK_TEXT_LEFT);
+        nk_label(ctx, "Space: Reset orbital camera", NK_TEXT_LEFT);
+        nk_label(ctx, "Escape: Clear selection & close dialogs", NK_TEXT_LEFT);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Navigation", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label(ctx, "Right mouse drag: Orbit", NK_TEXT_LEFT);
+        nk_label(ctx, "Middle mouse drag / WASD: Pan", NK_TEXT_LEFT);
+        nk_label(ctx, "Mouse wheel: Zoom", NK_TEXT_LEFT);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Troubleshooting", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label(ctx, "If overlays disappear, ensure View > Show holographic overlay remains enabled.",
+                 NK_TEXT_LEFT);
+        nk_label(ctx, "Use Focus Roots after loading large trees to re-center the camera instantly.",
+                 NK_TEXT_LEFT);
+
+        nk_layout_row_dynamic(ctx, 30.0f, 1);
+        if (nk_button_label(ctx, "Close"))
+        {
+            internal->show_help_window = false;
+        }
+    }
+    else
+    {
+        internal->show_help_window = false;
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, "Quick Help##AncestryTree"))
+    {
+        internal->show_help_window = false;
     }
 }
 
@@ -726,6 +787,10 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
             if (nk_menu_item_label(ctx, "About", NK_TEXT_LEFT))
             {
                 internal->show_about_window = true;
+            }
+            if (nk_menu_item_label(ctx, "Quick Help", NK_TEXT_LEFT))
+            {
+                internal->show_help_window = true;
             }
             if (nk_menu_item_label(ctx, "Documentation", NK_TEXT_LEFT))
             {
@@ -1094,6 +1159,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config);
     ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
     ui_draw_about_window(internal, ui);
+    ui_draw_help_window(internal, ui);
     ui_draw_exit_prompt(internal, ui);
     if (hovered_person)
     {
@@ -1198,10 +1264,49 @@ bool ui_notify_status(UIContext *ui, const char *message)
     return false;
 }
 
+bool ui_handle_escape(UIContext *ui)
+{
+    if (!ui || !ui->available)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return false;
+    }
+    bool dismissed = false;
+    if (internal->show_exit_prompt)
+    {
+        internal->show_exit_prompt = false;
+        dismissed = true;
+    }
+    if (internal->show_about_window)
+    {
+        internal->show_about_window = false;
+        dismissed = true;
+    }
+    if (internal->show_help_window)
+    {
+        internal->show_help_window = false;
+        dismissed = true;
+    }
+    if (dismissed)
+    {
+        ui_internal_set_status(internal, "Dialogs dismissed.");
+    }
+    return dismissed;
+#else
+    return false;
+#endif
+}
+
 /* Manual validation checklist (requires raylib + Nuklear):
  * 1. Launch the application and confirm the menu bar renders with File/View/Help entries.
  * 2. Trigger "Reset Camera" and "Focus Roots" from both the menu and HUD buttons; verify camera motion.
  * 3. Toggle auto orbit via the checkbox or menu and observe status banner updates.
  * 4. Open the About dialog from Help and close it via the button and window close control.
- * 5. Select File->Exit and confirm the confirmation dialog responds and closes the application when accepted.
+ * 5. Launch the Quick Help overlay, review shortcut descriptions, and close it with both the Close button and the Escape key.
+ * 6. Select File->Exit and confirm the confirmation dialog responds and closes the application when accepted.
  */

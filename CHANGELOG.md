@@ -40,3 +40,6 @@ All notable changes to this project will be documented in this file. The format 
   guarding JSON edge cases with new targeted unit tests.
 - Layout test coverage now verifies single-person, small family, large sibling groups, multi-generation stacks, and
   complex relationship graphs to enforce non-overlapping holographic placement.
+- Quick Help overlay captures onboarding notes, troubleshooting tips, and the active keyboard shortcut map for testers.
+- Keyboard shortcut mapper consolidates Ctrl+N/O/S/Shift+S/Z/Y plus Space and Escape into UI events with automated
+  regression tests guarding the input routing.

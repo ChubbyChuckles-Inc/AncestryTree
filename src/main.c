@@ -7,6 +7,7 @@
 #include "persistence.h"
 #include "person.h"
 #include "render.h"
+#include "shortcuts.h"
 #include "tree.h"
 #include "ui.h"
 
@@ -369,6 +370,38 @@ static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *
             app_report_status(ui, logger, message);
         }
         break;
+    case UI_EVENT_UNDO:
+        app_report_status(ui, logger, "Undo stack pending implementation.");
+        break;
+    case UI_EVENT_REDO:
+        app_report_status(ui, logger, "Redo stack pending implementation.");
+        break;
+    case UI_EVENT_RESET_CAMERA:
+        camera_controller_reset(camera);
+        app_report_status(ui, logger, "Camera reset to default orbit.");
+        break;
+    case UI_EVENT_ESCAPE:
+    {
+        const Person *selected_before = interaction_get_selected(interaction_state);
+        if (selected_before)
+        {
+            interaction_clear_selection(interaction_state);
+        }
+        bool dismissed = ui_handle_escape(ui);
+        if (dismissed && selected_before)
+        {
+            app_report_status(ui, logger, "Selection cleared and dialogs dismissed.");
+        }
+        else if (dismissed)
+        {
+            app_report_status(ui, logger, "Dialogs dismissed.");
+        }
+        else if (selected_before)
+        {
+            app_report_status(ui, logger, "Selection cleared.");
+        }
+    }
+    break;
     case UI_EVENT_REQUEST_EXIT:
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
         CloseWindow();
@@ -398,6 +431,52 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
         app_process_ui_event(events[index].type, ui, file_state, tree, layout, interaction_state, render_state, camera,
                              logger);
     }
+}
+
+static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
+                                      LayoutResult *layout, InteractionState *interaction_state,
+                                      RenderState *render_state, CameraController *camera, AtLogger *logger)
+{
+    if (!ui)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    ShortcutState state;
+    state.ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    state.shift_down = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    state.key_new_pressed = IsKeyPressed(KEY_N);
+    state.key_open_pressed = IsKeyPressed(KEY_O);
+    state.key_save_pressed = IsKeyPressed(KEY_S);
+    state.key_undo_pressed = IsKeyPressed(KEY_Z);
+    state.key_redo_pressed = IsKeyPressed(KEY_Y);
+    state.key_space_pressed = IsKeyPressed(KEY_SPACE);
+    state.key_escape_pressed = IsKeyPressed(KEY_ESCAPE);
+
+    ShortcutResult result;
+    shortcuts_evaluate(&state, &result);
+    if (result.event != UI_EVENT_NONE)
+    {
+        if (!ui_event_enqueue(ui, result.event))
+        {
+            app_process_ui_event(result.event, ui, file_state, tree, layout, interaction_state, render_state, camera,
+                                 logger);
+        }
+    }
+    /* Manual validation checklist:
+     * 1. Press Ctrl+N/O/S/Shift+S to verify the status banner reports the corresponding action.
+     * 2. Press Space to confirm the camera immediately snaps back to its default orbit.
+     * 3. Press Escape while dialogs are open to ensure they close and the selection clears.
+     */
+#else
+    (void)file_state;
+    (void)tree;
+    (void)layout;
+    (void)interaction_state;
+    (void)render_state;
+    (void)camera;
+    (void)logger;
+#endif
 }
 
 static FamilyTree *app_create_placeholder_tree(void)
@@ -684,10 +763,6 @@ static int app_run(AtLogger *logger)
             interaction_select_at_cursor(&interaction_state, &layout, &camera_controller, mouse.x, mouse.y,
                                          !keep_selection);
         }
-        if (IsKeyPressed(KEY_ESCAPE))
-        {
-            interaction_clear_selection(&interaction_state);
-        }
 #endif
 
         const Person *selected_person = interaction_get_selected(&interaction_state);
@@ -707,6 +782,8 @@ static int app_run(AtLogger *logger)
             ui_end_frame(&ui);
         }
 
+        app_handle_shortcut_input(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
+                                  &camera_controller, logger);
         EndDrawing();
 
         app_handle_pending_ui_events(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
