@@ -177,9 +177,9 @@ PHASE 3: DATA PERSISTENCE & SERIALIZATION
       [x] Copy images to assets directory
       [x] Generate unique filenames
       [x] Maintain relative paths in tree data
-  [ ] Implement asset_cleanup() function
-      [ ] Remove unreferenced assets
-      [ ] Verify asset integrity
+  [x] Implement asset_cleanup() function
+      [x] Remove unreferenced assets
+      [x] Verify asset integrity
   [ ] Implement asset_export() function
       [ ] Package tree with all assets
       [ ] Create portable archive
