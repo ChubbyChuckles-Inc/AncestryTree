@@ -93,6 +93,7 @@ void app_state_init(AppState *state)
     memset(state, 0, sizeof(AppState));
     state->interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
     state->active_layout_algorithm = LAYOUT_ALGORITHM_HIERARCHICAL;
+    expansion_state_reset(&state->expansion);
 }
 
 bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layout, InteractionState *interaction,
@@ -110,6 +111,7 @@ bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layou
     state->persisted_settings = persisted_settings;
     state->selected_person = NULL;
     state->tree_dirty = false;
+    expansion_state_reset(&state->expansion);
     layout_result_destroy(&state->layout_transition_start);
     layout_result_destroy(&state->layout_transition_target);
     state->layout_transition_active = false;
@@ -133,6 +135,7 @@ void app_state_shutdown(AppState *state)
     state->settings = NULL;
     state->persisted_settings = NULL;
     state->selected_person = NULL;
+    expansion_state_reset(&state->expansion);
     layout_result_destroy(&state->layout_transition_start);
     layout_result_destroy(&state->layout_transition_target);
     state->layout_transition_active = false;
@@ -312,6 +315,11 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
         return;
     }
 
+    if (expansion_is_active(&state->expansion))
+    {
+        app_state_force_detail_abort(state);
+    }
+
     FamilyTree *tree = state->tree ? *state->tree : NULL;
     if (!tree)
     {
@@ -344,6 +352,10 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
         state->layout_transition_elapsed = 0.0f;
         state->layout_transition_duration = 0.0f;
         state->active_layout_algorithm = algorithm;
+        if (state->interaction_mode == APP_INTERACTION_MODE_DETAIL_VIEW)
+        {
+            state->interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
+        }
         return;
     }
 
@@ -397,6 +409,27 @@ void app_state_tick(AppState *state, float delta_seconds)
         {
             app_state_refresh_layout(state, desired, true);
         }
+    }
+
+    if (expansion_is_active(&state->expansion))
+    {
+        bool completed = expansion_update(&state->expansion, delta_seconds, state->camera);
+        if (!expansion_is_active(&state->expansion))
+        {
+            state->interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
+        }
+        else if (expansion_is_in_detail_mode(&state->expansion))
+        {
+            state->interaction_mode = APP_INTERACTION_MODE_DETAIL_VIEW;
+        }
+        else if (completed)
+        {
+            state->interaction_mode = APP_INTERACTION_MODE_DETAIL_VIEW;
+        }
+    }
+    else if (state->interaction_mode == APP_INTERACTION_MODE_DETAIL_VIEW)
+    {
+        state->interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
     }
 
     if (!state->layout_transition_active)
@@ -463,6 +496,7 @@ bool app_state_add_person(AppState *state, Person *person, char *error_buffer, s
         }
         return false;
     }
+    app_state_force_detail_abort(state);
     if (!family_tree_add_person(*state->tree, person))
     {
         if (error_buffer && error_buffer_size > 0U)
@@ -567,6 +601,7 @@ bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_bu
         }
         return false;
     }
+    app_state_force_detail_abort(state);
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     return true;
@@ -636,7 +671,73 @@ bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonE
         return false;
     }
     state->tree_dirty = true;
+    if (state->expansion.person == person)
+    {
+        app_state_force_detail_abort(state);
+    }
     return true;
+}
+
+bool app_state_begin_detail_view(AppState *state, const Person *person)
+{
+    if (!state || !person || !state->layout)
+    {
+        return false;
+    }
+    if (!state->layout->nodes || state->layout->count == 0U)
+    {
+        return false;
+    }
+    if (expansion_is_active(&state->expansion))
+    {
+        if (state->expansion.person == person && expansion_is_in_detail_mode(&state->expansion))
+        {
+            return true;
+        }
+        app_state_force_detail_abort(state);
+    }
+    if (!expansion_start(&state->expansion, state->layout, person, state->camera))
+    {
+        return false;
+    }
+    state->selected_person = (Person *)person;
+    state->interaction_mode = APP_INTERACTION_MODE_DETAIL_VIEW;
+    return true;
+}
+
+void app_state_request_detail_exit(AppState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    if (!expansion_is_active(&state->expansion))
+    {
+        return;
+    }
+    expansion_reverse(&state->expansion, state->camera);
+}
+
+const ExpansionState *app_state_get_expansion(const AppState *state)
+{
+    if (!state)
+    {
+        return NULL;
+    }
+    return &state->expansion;
+}
+
+void app_state_force_detail_abort(AppState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    expansion_state_reset(&state->expansion);
+    if (state->interaction_mode == APP_INTERACTION_MODE_DETAIL_VIEW)
+    {
+        state->interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
+    }
 }
 
 bool app_state_is_tree_dirty(const AppState *state)

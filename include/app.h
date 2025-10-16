@@ -5,6 +5,7 @@
 #include "interaction.h"
 #include "layout.h"
 #include "person.h"
+#include "expansion.h"
 #include "settings.h"
 #include "tree.h"
 
@@ -81,6 +82,7 @@ extern "C"
         AppInteractionMode interaction_mode;
         AppCommandStack undo_stack;
         AppCommandStack redo_stack;
+        ExpansionState expansion;
         bool layout_transition_active;
         bool tree_dirty;
     } AppState;
@@ -112,6 +114,11 @@ extern "C"
     bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_buffer, size_t error_buffer_size);
     bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonEditData *edit_data,
                                char *error_buffer, size_t error_buffer_size);
+
+    bool app_state_begin_detail_view(AppState *state, const Person *person);
+    void app_state_request_detail_exit(AppState *state);
+    const ExpansionState *app_state_get_expansion(const AppState *state);
+    void app_state_force_detail_abort(AppState *state);
 
     bool app_state_is_tree_dirty(const AppState *state);
     bool app_state_is_history_empty(const AppState *state);
