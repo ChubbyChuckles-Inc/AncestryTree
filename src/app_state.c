@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include "at_memory.h"
+#include "at_string.h"
 #include "layout.h"
 #include "person.h"
 
@@ -511,4 +512,511 @@ void app_state_clear_tree_dirty(AppState *state)
         return;
     }
     state->tree_dirty = false;
+}
+
+static void app_state_clear_selection_if_matches(AppState *state, const Person *person)
+{
+    if (!state)
+    {
+        return;
+    }
+    if (state->selected_person == person)
+    {
+        state->selected_person = NULL;
+    }
+}
+
+static bool app_restore_person_relationship_links(AppState *state, Person *person)
+{
+    if (!state || !state->tree || !*state->tree || !person)
+    {
+        return false;
+    }
+    FamilyTree *tree = *state->tree;
+    for (size_t index = 0U; index < 2U; ++index)
+    {
+        Person *parent = person->parents[index];
+        if (!parent)
+        {
+            continue;
+        }
+        if (!family_tree_find_person(tree, parent->id))
+        {
+            continue;
+        }
+        if (!person_add_child(parent, person))
+        {
+            return false;
+        }
+    }
+    for (size_t index = 0U; index < person->children_count; ++index)
+    {
+        Person *child = person->children[index];
+        if (!child)
+        {
+            continue;
+        }
+        if (!family_tree_find_person(tree, child->id))
+        {
+            continue;
+        }
+        bool slot_found = false;
+        for (size_t slot = 0U; slot < 2U; ++slot)
+        {
+            if (child->parents[slot] == person)
+            {
+                slot_found = true;
+                break;
+            }
+            if (!child->parents[slot])
+            {
+                child->parents[slot] = person;
+                slot_found = true;
+                break;
+            }
+        }
+        if (!slot_found)
+        {
+            return false;
+        }
+    }
+    for (size_t index = 0U; index < person->spouses_count; ++index)
+    {
+        PersonSpouseRecord *record = &person->spouses[index];
+        Person *partner = record->partner;
+        if (!partner)
+        {
+            continue;
+        }
+        if (!family_tree_find_person(tree, partner->id))
+        {
+            continue;
+        }
+        if (!person_add_spouse(partner, person))
+        {
+            return false;
+        }
+        if (!person_set_marriage(partner, person, record->marriage_date, record->marriage_location))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+typedef struct AppCommandAddPerson
+{
+    AppCommand base;
+    Person *person;
+    bool inserted;
+} AppCommandAddPerson;
+
+static bool app_command_add_person_execute(AppCommand *command, AppState *state)
+{
+    AppCommandAddPerson *self = (AppCommandAddPerson *)command;
+    if (!self || !state || !state->tree || !*state->tree || !self->person)
+    {
+        return false;
+    }
+    if (self->inserted)
+    {
+        return true;
+    }
+    if (!family_tree_add_person(*state->tree, self->person))
+    {
+        return false;
+    }
+    if (!app_restore_person_relationship_links(state, self->person))
+    {
+        (void)family_tree_extract_person(*state->tree, self->person->id);
+        return false;
+    }
+    app_state_refresh_layout(state);
+    state->tree_dirty = true;
+    state->selected_person = self->person;
+    self->inserted = true;
+    return true;
+}
+
+static bool app_command_add_person_undo(AppCommand *command, AppState *state)
+{
+    AppCommandAddPerson *self = (AppCommandAddPerson *)command;
+    if (!self || !state || !state->tree || !*state->tree)
+    {
+        return false;
+    }
+    if (!self->inserted)
+    {
+        return true;
+    }
+    app_remove_person_relationship_links(*state->tree, self->person);
+    if (!family_tree_extract_person(*state->tree, self->person->id))
+    {
+        return false;
+    }
+    self->inserted = false;
+    app_state_clear_selection_if_matches(state, self->person);
+    app_state_refresh_layout(state);
+    return true;
+}
+
+static void app_command_add_person_destroy(AppCommand *command)
+{
+    AppCommandAddPerson *self = (AppCommandAddPerson *)command;
+    if (!self)
+    {
+        return;
+    }
+    if (!self->inserted && self->person)
+    {
+        person_destroy(self->person);
+    }
+    free(self);
+}
+
+static const AppCommandVTable APP_COMMAND_ADD_PERSON_VTABLE = {
+    app_command_add_person_execute,
+    app_command_add_person_undo,
+    app_command_add_person_destroy,
+};
+
+typedef struct AppCommandDeletePerson
+{
+    AppCommand base;
+    uint32_t person_id;
+    Person *person;
+    bool inserted;
+    bool selection_was_target;
+} AppCommandDeletePerson;
+
+static bool app_command_delete_person_execute(AppCommand *command, AppState *state)
+{
+    AppCommandDeletePerson *self = (AppCommandDeletePerson *)command;
+    if (!self || !state || !state->tree || !*state->tree || self->person_id == 0U)
+    {
+        return false;
+    }
+    if (!self->inserted)
+    {
+        return true;
+    }
+    Person *person = family_tree_find_person(*state->tree, self->person_id);
+    if (!person)
+    {
+        return false;
+    }
+    self->selection_was_target = (state->selected_person == person);
+    app_remove_person_relationship_links(*state->tree, person);
+    self->person = family_tree_extract_person(*state->tree, self->person_id);
+    if (!self->person)
+    {
+        return false;
+    }
+    self->inserted = false;
+    app_state_clear_selection_if_matches(state, person);
+    app_state_refresh_layout(state);
+    state->tree_dirty = true;
+    return true;
+}
+
+static bool app_command_delete_person_undo(AppCommand *command, AppState *state)
+{
+    AppCommandDeletePerson *self = (AppCommandDeletePerson *)command;
+    if (!self || !state || !state->tree || !*state->tree || !self->person)
+    {
+        return false;
+    }
+    if (self->inserted)
+    {
+        return true;
+    }
+    if (!family_tree_add_person(*state->tree, self->person))
+    {
+        return false;
+    }
+    if (!app_restore_person_relationship_links(state, self->person))
+    {
+        (void)family_tree_extract_person(*state->tree, self->person->id);
+        return false;
+    }
+    self->inserted = true;
+    if (self->selection_was_target)
+    {
+        state->selected_person = self->person;
+    }
+    app_state_refresh_layout(state);
+    state->tree_dirty = true;
+    return true;
+}
+
+static void app_command_delete_person_destroy(AppCommand *command)
+{
+    AppCommandDeletePerson *self = (AppCommandDeletePerson *)command;
+    if (!self)
+    {
+        return;
+    }
+    if (!self->inserted && self->person)
+    {
+        person_destroy(self->person);
+    }
+    free(self);
+}
+
+static const AppCommandVTable APP_COMMAND_DELETE_PERSON_VTABLE = {
+    app_command_delete_person_execute,
+    app_command_delete_person_undo,
+    app_command_delete_person_destroy,
+};
+
+typedef struct AppCommandPersonFields
+{
+    char *first;
+    char *middle;
+    char *last;
+    char *birth_date;
+    char *birth_location;
+    char *death_date;
+    char *death_location;
+} AppCommandPersonFields;
+
+static void app_command_person_fields_reset(AppCommandPersonFields *fields)
+{
+    if (!fields)
+    {
+        return;
+    }
+    free(fields->first);
+    free(fields->middle);
+    free(fields->last);
+    free(fields->birth_date);
+    free(fields->birth_location);
+    free(fields->death_date);
+    free(fields->death_location);
+    memset(fields, 0, sizeof(AppCommandPersonFields));
+}
+
+static bool app_command_person_fields_capture(AppCommandPersonFields *fields, const Person *person)
+{
+    if (!fields || !person)
+    {
+        return false;
+    }
+    app_command_person_fields_reset(fields);
+    fields->first = at_string_dup(person->name.first);
+    fields->middle = person->name.middle ? at_string_dup(person->name.middle) : NULL;
+    fields->last = at_string_dup(person->name.last);
+    fields->birth_date = at_string_dup(person->dates.birth_date);
+    fields->birth_location = person->dates.birth_location ? at_string_dup(person->dates.birth_location) : NULL;
+    fields->death_date = person->dates.death_date ? at_string_dup(person->dates.death_date) : NULL;
+    fields->death_location = person->dates.death_location ? at_string_dup(person->dates.death_location) : NULL;
+    if (!fields->first || !fields->last || !fields->birth_date)
+    {
+        app_command_person_fields_reset(fields);
+        return false;
+    }
+    return true;
+}
+
+static bool app_command_person_fields_from_edit_data(AppCommandPersonFields *fields,
+                                                     const AppPersonEditData *edit_data)
+{
+    if (!fields || !edit_data)
+    {
+        return false;
+    }
+    app_command_person_fields_reset(fields);
+    fields->first = edit_data->first ? at_string_dup(edit_data->first) : NULL;
+    fields->middle = edit_data->middle && edit_data->middle[0] != '\0' ? at_string_dup(edit_data->middle) : NULL;
+    fields->last = edit_data->last ? at_string_dup(edit_data->last) : NULL;
+    fields->birth_date = edit_data->birth_date ? at_string_dup(edit_data->birth_date) : NULL;
+    fields->birth_location = edit_data->birth_location && edit_data->birth_location[0] != '\0'
+                                 ? at_string_dup(edit_data->birth_location)
+                                 : NULL;
+    if (edit_data->clear_death)
+    {
+        fields->death_date = NULL;
+        fields->death_location = NULL;
+    }
+    else
+    {
+        fields->death_date = edit_data->death_date && edit_data->death_date[0] != '\0'
+                                 ? at_string_dup(edit_data->death_date)
+                                 : NULL;
+        fields->death_location = edit_data->death_location && edit_data->death_location[0] != '\0'
+                                     ? at_string_dup(edit_data->death_location)
+                                     : NULL;
+    }
+    if (!fields->first || !fields->last || !fields->birth_date)
+    {
+        app_command_person_fields_reset(fields);
+        return false;
+    }
+    return true;
+}
+
+static bool app_command_person_fields_apply(Person *person, const AppCommandPersonFields *fields)
+{
+    if (!person || !fields)
+    {
+        return false;
+    }
+    if (!person_set_name(person, fields->first, fields->middle, fields->last))
+    {
+        return false;
+    }
+    if (!person_set_birth(person, fields->birth_date, fields->birth_location))
+    {
+        return false;
+    }
+    if (fields->death_date)
+    {
+        if (!person_set_death(person, fields->death_date, fields->death_location))
+        {
+            return false;
+        }
+    }
+    else if (!person_set_death(person, NULL, NULL))
+    {
+        return false;
+    }
+    return true;
+}
+
+typedef struct AppCommandEditPerson
+{
+    AppCommand base;
+    uint32_t person_id;
+    AppCommandPersonFields original_fields;
+    AppCommandPersonFields new_fields;
+    bool has_snapshot;
+    bool applied_new_state;
+} AppCommandEditPerson;
+
+static bool app_command_edit_person_execute(AppCommand *command, AppState *state)
+{
+    AppCommandEditPerson *self = (AppCommandEditPerson *)command;
+    if (!self || !state || !state->tree || !*state->tree || self->person_id == 0U)
+    {
+        return false;
+    }
+    Person *person = family_tree_find_person(*state->tree, self->person_id);
+    if (!person)
+    {
+        return false;
+    }
+    if (!self->has_snapshot)
+    {
+        if (!app_command_person_fields_capture(&self->original_fields, person))
+        {
+            return false;
+        }
+        self->has_snapshot = true;
+    }
+    if (!app_command_person_fields_apply(person, &self->new_fields))
+    {
+        return false;
+    }
+    self->applied_new_state = true;
+    state->tree_dirty = true;
+    return true;
+}
+
+static bool app_command_edit_person_undo(AppCommand *command, AppState *state)
+{
+    AppCommandEditPerson *self = (AppCommandEditPerson *)command;
+    if (!self || !state || !state->tree || !*state->tree || !self->has_snapshot)
+    {
+        return false;
+    }
+    Person *person = family_tree_find_person(*state->tree, self->person_id);
+    if (!person)
+    {
+        return false;
+    }
+    if (!app_command_person_fields_apply(person, &self->original_fields))
+    {
+        return false;
+    }
+    self->applied_new_state = false;
+    state->tree_dirty = true;
+    return true;
+}
+
+static void app_command_edit_person_destroy(AppCommand *command)
+{
+    AppCommandEditPerson *self = (AppCommandEditPerson *)command;
+    if (!self)
+    {
+        return;
+    }
+    app_command_person_fields_reset(&self->original_fields);
+    app_command_person_fields_reset(&self->new_fields);
+    free(self);
+}
+
+static const AppCommandVTable APP_COMMAND_EDIT_PERSON_VTABLE = {
+    app_command_edit_person_execute,
+    app_command_edit_person_undo,
+    app_command_edit_person_destroy,
+};
+
+AppCommand *app_command_create_add_person(Person *person)
+{
+    if (!person)
+    {
+        return NULL;
+    }
+    AppCommandAddPerson *command = calloc(1U, sizeof(AppCommandAddPerson));
+    if (!command)
+    {
+        return NULL;
+    }
+    command->base.vtable = &APP_COMMAND_ADD_PERSON_VTABLE;
+    command->person = person;
+    command->inserted = false;
+    /* Manual QA: verify holographic add/undo cycle via UI panel once available. */
+    return (AppCommand *)command;
+}
+
+AppCommand *app_command_create_delete_person(uint32_t person_id)
+{
+    if (person_id == 0U)
+    {
+        return NULL;
+    }
+    AppCommandDeletePerson *command = calloc(1U, sizeof(AppCommandDeletePerson));
+    if (!command)
+    {
+        return NULL;
+    }
+    command->base.vtable = &APP_COMMAND_DELETE_PERSON_VTABLE;
+    command->person_id = person_id;
+    command->inserted = true;
+    /* Manual QA: exercise delete/undo from UI context when panel wiring lands. */
+    return (AppCommand *)command;
+}
+
+AppCommand *app_command_create_edit_person(uint32_t person_id, const AppPersonEditData *edit_data)
+{
+    if (person_id == 0U || !edit_data)
+    {
+        return NULL;
+    }
+    AppCommandEditPerson *command = calloc(1U, sizeof(AppCommandEditPerson));
+    if (!command)
+    {
+        return NULL;
+    }
+    command->base.vtable = &APP_COMMAND_EDIT_PERSON_VTABLE;
+    command->person_id = person_id;
+    if (!app_command_person_fields_from_edit_data(&command->new_fields, edit_data))
+    {
+        app_command_edit_person_destroy((AppCommand *)command);
+        return NULL;
+    }
+    command->has_snapshot = false;
+    command->applied_new_state = false;
+    /* Manual QA: cross-check edit form behaviour in holographic panel workflows. */
+    return (AppCommand *)command;
 }

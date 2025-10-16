@@ -53,3 +53,5 @@ All notable changes to this project will be documented in this file. The format 
   integration into the main loop and Nuklear event handling (including functional Undo/Redo menu actions).
 - AppState unit tests covering command execution failure paths, undo/redo cycling, and history resets to guard the new
   state manager contract.
+- Undoable person command suite (`add`, `edit`, `delete`) preserving relationships, refreshing holographic layouts, and
+  shipping with regression tests that exercise undo/redo restoration semantics.

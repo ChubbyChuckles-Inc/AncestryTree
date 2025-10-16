@@ -109,6 +109,22 @@ static int family_tree_index_of(const FamilyTree *tree, const Person *person)
     return -1;
 }
 
+static int family_tree_index_of_id(const FamilyTree *tree, uint32_t id)
+{
+    if (!tree || id == 0U)
+    {
+        return -1;
+    }
+    for (size_t index = 0; index < tree->person_count; ++index)
+    {
+        if (tree->persons[index] && tree->persons[index]->id == id)
+        {
+            return (int)index;
+        }
+    }
+    return -1;
+}
+
 static bool family_tree_detect_cycle_from(const FamilyTree *tree, size_t index, unsigned char *states,
                                           size_t *cycle_index)
 {
@@ -188,24 +204,37 @@ Person *family_tree_find_person(const FamilyTree *tree, uint32_t id)
 
 bool family_tree_remove_person(FamilyTree *tree, uint32_t id)
 {
-    if (!tree || id == 0U)
+    Person *person = family_tree_extract_person(tree, id);
+    if (!person)
     {
         return false;
     }
-    for (size_t index = 0; index < tree->person_count; ++index)
+    person_destroy(person);
+    return true;
+}
+
+Person *family_tree_extract_person(FamilyTree *tree, uint32_t id)
+{
+    if (!tree || id == 0U)
     {
-        if (tree->persons[index]->id == id)
-        {
-            person_destroy(tree->persons[index]);
-            for (size_t shift = index + 1; shift < tree->person_count; ++shift)
-            {
-                tree->persons[shift - 1] = tree->persons[shift];
-            }
-            tree->person_count--;
-            return true;
-        }
+        return NULL;
     }
-    return false;
+    int index = family_tree_index_of_id(tree, id);
+    if (index < 0)
+    {
+        return NULL;
+    }
+    Person *person = tree->persons[index];
+    for (size_t shift = (size_t)index + 1U; shift < tree->person_count; ++shift)
+    {
+        tree->persons[shift - 1U] = tree->persons[shift];
+    }
+    tree->person_count--;
+    if (tree->person_count > 0U)
+    {
+        tree->persons[tree->person_count] = NULL;
+    }
+    return person;
 }
 
 size_t family_tree_get_roots(const FamilyTree *tree, Person **out_roots, size_t capacity)

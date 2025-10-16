@@ -111,6 +111,10 @@ extern "C"
     void app_state_mark_tree_dirty(AppState *state);
     void app_state_clear_tree_dirty(AppState *state);
 
+    AppCommand *app_command_create_add_person(Person *person);
+    AppCommand *app_command_create_delete_person(uint32_t person_id);
+    AppCommand *app_command_create_edit_person(uint32_t person_id, const AppPersonEditData *edit_data);
+
 #ifdef __cplusplus
 }
 #endif

@@ -527,9 +527,9 @@ PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
             [x] Execute function pointer
             [x] Undo function pointer
             [x] Command-specific data
-  [ ] Implement command_add_person()
-  [ ] Implement command_edit_person()
-  [ ] Implement command_delete_person()
+    [x] Implement command_add_person()
+    [x] Implement command_edit_person()
+    [x] Implement command_delete_person()
     [x] Implement undo_push() function
     [x] Implement undo_execute() function
     [x] Implement redo_execute() function
@@ -614,7 +614,7 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
             [x] Test full workflow: create tree, add persons, save, load
       [ ] Test expansion animation workflow
       [ ] Test UI interaction workflow
-      [ ] Test undo/redo workflow
+    [x] Test undo/redo workflow
 
 8.7 Memory Leak Tests
   [ ] Integrate Valgrind for Linux
