@@ -26,6 +26,7 @@ void register_search_tests(TestRegistry *registry);
 void register_integration_tests(TestRegistry *registry);
 void register_app_state_tests(TestRegistry *registry);
 void register_error_tests(TestRegistry *registry);
+void register_assets_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -57,6 +58,7 @@ int main(void)
     register_search_tests(&registry);
     register_integration_tests(&registry);
     register_error_tests(&registry);
+    register_assets_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

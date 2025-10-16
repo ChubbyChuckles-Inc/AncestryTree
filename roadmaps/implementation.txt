@@ -173,10 +173,10 @@ PHASE 3: DATA PERSISTENCE & SERIALIZATION
       [x] Save before risky operations
 
 3.4 Asset Management
-  [ ] Implement asset_copy() function
-      [ ] Copy images to assets directory
-      [ ] Generate unique filenames
-      [ ] Maintain relative paths in tree data
+  [x] Implement asset_copy() function
+      [x] Copy images to assets directory
+      [x] Generate unique filenames
+      [x] Maintain relative paths in tree data
   [ ] Implement asset_cleanup() function
       [ ] Remove unreferenced assets
       [ ] Verify asset integrity

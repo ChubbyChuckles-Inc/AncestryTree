@@ -59,3 +59,5 @@ All notable changes to this project will be documented in this file. The format 
   error-handling macros (`AT_CHECK_NULL`, `AT_CHECK_ALLOC`, `AT_TRY`/`AT_THROW`) with dedicated regression tests.
 - Modal error dialog surfaces runtime failures to the user, while the logger now attaches a default on-disk sink for
   persistent diagnostics.
+- Asset pipeline gains `asset_copy` utility to relocate external media into project-managed imports with unique naming
+  and relative-path emission, guarded by automated tests.
