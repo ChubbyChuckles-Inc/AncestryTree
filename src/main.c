@@ -5,6 +5,7 @@
 #include "graphics.h"
 #include "interaction.h"
 #include "layout.h"
+#include "event.h"
 #include "path_utils.h"
 #include "persistence.h"
 #include "person.h"
@@ -248,10 +249,30 @@ static bool app_handle_save_as(FamilyTree *tree, AppFileState *files, char *erro
     return true;
 }
 
-static bool app_swap_tree(FamilyTree **tree, LayoutResult *layout, FamilyTree *replacement)
+static LayoutAlgorithm app_select_layout_algorithm(const AppState *app_state, const Settings *settings)
+{
+    if (app_state)
+    {
+        return app_state->active_layout_algorithm;
+    }
+    if (settings && settings->default_layout_algorithm == SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED)
+    {
+        return LAYOUT_ALGORITHM_FORCE_DIRECTED;
+    }
+    return LAYOUT_ALGORITHM_HIERARCHICAL;
+}
+
+static bool app_swap_tree(FamilyTree **tree, LayoutResult *layout, FamilyTree *replacement,
+                          LayoutAlgorithm algorithm)
 {
     if (!tree || !layout || !replacement)
     {
+        return false;
+    }
+    LayoutResult new_layout = layout_calculate_with_algorithm(replacement, algorithm);
+    if (replacement->person_count > 0U && (!new_layout.nodes || new_layout.count == 0U))
+    {
+        layout_result_destroy(&new_layout);
         return false;
     }
     layout_result_destroy(layout);
@@ -260,7 +281,7 @@ static bool app_swap_tree(FamilyTree **tree, LayoutResult *layout, FamilyTree *r
         family_tree_destroy(*tree);
     }
     *tree = replacement;
-    *layout = layout_calculate(*tree);
+    *layout = new_layout;
     return true;
 }
 
@@ -306,11 +327,21 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             app_report_error(ui, logger, "Failed to create new tree.");
             return;
         }
-        if (!app_swap_tree(tree, layout, replacement))
+        LayoutAlgorithm algorithm = app_select_layout_algorithm(app_state, settings);
+        if (!app_swap_tree(tree, layout, replacement, algorithm))
         {
             family_tree_destroy(replacement);
             app_report_error(ui, logger, "Unable to swap in new tree data.");
             return;
+        }
+        if (app_state)
+        {
+            layout_result_destroy(&app_state->layout_transition_start);
+            layout_result_destroy(&app_state->layout_transition_target);
+            app_state->layout_transition_active = false;
+            app_state->layout_transition_elapsed = 0.0f;
+            app_state->layout_transition_duration = 0.0f;
+            app_state->active_layout_algorithm = algorithm;
         }
         app_file_state_clear(file_state);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
@@ -338,11 +369,21 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             app_report_error(ui, logger, message);
             return;
         }
-        if (!app_swap_tree(tree, layout, loaded))
+        LayoutAlgorithm algorithm = app_select_layout_algorithm(app_state, settings);
+        if (!app_swap_tree(tree, layout, loaded, algorithm))
         {
             family_tree_destroy(loaded);
             app_report_error(ui, logger, "Unable to replace current tree with loaded data.");
             return;
+        }
+        if (app_state)
+        {
+            layout_result_destroy(&app_state->layout_transition_start);
+            layout_result_destroy(&app_state->layout_transition_target);
+            app_state->layout_transition_active = false;
+            app_state->layout_transition_elapsed = 0.0f;
+            app_state->layout_transition_duration = 0.0f;
+            app_state->active_layout_algorithm = algorithm;
         }
         app_file_state_set(file_state, resolved_path);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
@@ -642,6 +683,77 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
                              logger, settings, persisted_settings, settings_path, auto_save, settings_applied_revision,
                              app_state);
     }
+}
+
+static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
+                                      LayoutResult *layout, InteractionState *interaction_state,
+                                      RenderState *render_state, CameraController *camera, AtLogger *logger,
+                                      Settings *settings, Settings *persisted_settings, const char *settings_path,
+                                      PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
+                                      AppState *app_state);
+
+typedef struct EventShortcutPayload
+{
+    UIContext *ui;
+    AppFileState *file_state;
+    FamilyTree **tree;
+    LayoutResult *layout;
+    InteractionState *interaction_state;
+    RenderState *render_state;
+    CameraController *camera;
+    AtLogger *logger;
+    Settings *settings;
+    Settings *persisted_settings;
+    const char *settings_path;
+    PersistenceAutoSave *auto_save;
+    unsigned int *settings_revision;
+    AppState *app_state;
+} EventShortcutPayload;
+
+typedef struct EventQueuePayload
+{
+    UIContext *ui;
+    AppFileState *file_state;
+    FamilyTree **tree;
+    LayoutResult *layout;
+    InteractionState *interaction_state;
+    RenderState *render_state;
+    CameraController *camera;
+    AtLogger *logger;
+    Settings *settings;
+    Settings *persisted_settings;
+    const char *settings_path;
+    PersistenceAutoSave *auto_save;
+    unsigned int *settings_revision;
+    AppState *app_state;
+} EventQueuePayload;
+
+static void event_shortcut_handler(void *user_data, float delta_seconds)
+{
+    (void)delta_seconds;
+    EventShortcutPayload *payload = (EventShortcutPayload *)user_data;
+    if (!payload)
+    {
+        return;
+    }
+    app_handle_shortcut_input(payload->ui, payload->file_state, payload->tree, payload->layout,
+                              payload->interaction_state, payload->render_state, payload->camera, payload->logger,
+                              payload->settings, payload->persisted_settings, payload->settings_path,
+                              payload->auto_save, payload->settings_revision, payload->app_state);
+}
+
+static void event_queue_handler(void *user_data, float delta_seconds)
+{
+    (void)delta_seconds;
+    EventQueuePayload *payload = (EventQueuePayload *)user_data;
+    if (!payload)
+    {
+        return;
+    }
+    app_handle_pending_ui_events(payload->ui, payload->file_state, payload->tree, payload->layout,
+                                 payload->interaction_state, payload->render_state, payload->camera, payload->logger,
+                                 payload->settings, payload->persisted_settings, payload->settings_path,
+                                 payload->auto_save, payload->settings_revision, payload->app_state);
 }
 
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
@@ -1011,7 +1123,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         }
     }
 
-    LayoutResult layout = layout_calculate(tree);
+    LayoutAlgorithm initial_algorithm = app_select_layout_algorithm(NULL, &settings);
+    LayoutResult layout = layout_calculate_with_algorithm(tree, initial_algorithm);
     app_focus_camera_on_layout(&camera_controller, &layout);
 
     RenderState render_state;
@@ -1101,50 +1214,76 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
     SetTargetFPS((int)config.target_fps);
 
+    EventShortcutPayload shortcut_payload;
+    shortcut_payload.ui = ui_ready ? &ui : NULL;
+    shortcut_payload.file_state = &file_state;
+    shortcut_payload.tree = &tree;
+    shortcut_payload.layout = &layout;
+    shortcut_payload.interaction_state = &interaction_state;
+    shortcut_payload.render_state = &render_state;
+    shortcut_payload.camera = &camera_controller;
+    shortcut_payload.logger = logger;
+    shortcut_payload.settings = &settings;
+    shortcut_payload.persisted_settings = &persisted_settings;
+    shortcut_payload.settings_path = settings_path;
+    shortcut_payload.auto_save = auto_save_ready ? &auto_save : NULL;
+    shortcut_payload.settings_revision = &settings_applied_revision;
+    shortcut_payload.app_state = &app_state;
+
+    EventQueuePayload queue_payload;
+    queue_payload.ui = ui_ready ? &ui : NULL;
+    queue_payload.file_state = &file_state;
+    queue_payload.tree = &tree;
+    queue_payload.layout = &layout;
+    queue_payload.interaction_state = &interaction_state;
+    queue_payload.render_state = &render_state;
+    queue_payload.camera = &camera_controller;
+    queue_payload.logger = logger;
+    queue_payload.settings = &settings;
+    queue_payload.persisted_settings = &persisted_settings;
+    queue_payload.settings_path = settings_path;
+    queue_payload.auto_save = auto_save_ready ? &auto_save : NULL;
+    queue_payload.settings_revision = &settings_applied_revision;
+    queue_payload.app_state = &app_state;
+
+    EventProcessContext event_context;
+    event_context.graphics_state = &graphics_state;
+    event_context.ui = ui_ready ? &ui : NULL;
+    event_context.interaction_state = &interaction_state;
+    event_context.layout = &layout;
+    event_context.camera = &camera_controller;
+    event_context.render_state = &render_state;
+    event_context.render_ready = render_ready;
+    event_context.render_error_buffer = render_error;
+    event_context.render_error_capacity = sizeof(render_error);
+    event_context.render_target_warned = &render_target_warned;
+    event_context.logger = logger;
+    event_context.shortcut_handler = event_shortcut_handler;
+    event_context.shortcut_user_data = &shortcut_payload;
+    event_context.queue_handler = event_queue_handler;
+    event_context.queue_user_data = &queue_payload;
+
     while (!WindowShouldClose())
     {
         float delta_seconds = GetFrameTime();
-        if (graphics_window_handle_resize(&graphics_state))
-        {
-            ui_resize(&ui, graphics_state.width, graphics_state.height);
-            if (render_ready)
-            {
-                if (!render_resize(&render_state, graphics_state.width, graphics_state.height, render_error,
-                                   sizeof(render_error)))
-                {
-                    if (!render_target_warned)
-                    {
-                        AT_LOG(logger, AT_LOG_WARN, "Render target resize failed: %s", render_error);
-                        render_target_warned = true;
-                    }
-                }
-                else if (render_target_warned)
-                {
-                    AT_LOG(logger, AT_LOG_INFO, "Render target restored after resize.");
-                    render_target_warned = false;
-                }
-            }
-        }
+        event_context.render_ready = render_ready;
+        event_context.ui = ui_ready ? &ui : NULL;
+        shortcut_payload.ui = event_context.ui;
+        queue_payload.ui = event_context.ui;
+        shortcut_payload.auto_save = auto_save_ready ? &auto_save : NULL;
+        queue_payload.auto_save = auto_save_ready ? &auto_save : NULL;
+
+        event_process(&event_context, EVENT_PROCESS_PHASE_PRE_FRAME, delta_seconds);
 
         CameraControllerInput controller_input;
         app_collect_camera_input(&controller_input, ui_auto_orbit_enabled(&ui), &settings);
         camera_controller_update(&camera_controller, &controller_input, delta_seconds);
+        app_state_tick(&app_state, delta_seconds);
 
         bool ui_frame_started = ui_begin_frame(&ui, delta_seconds);
 
         BeginDrawing();
         ClearBackground((Color){8, 10, 18, 255});
-
-#if defined(ANCESTRYTREE_HAVE_RAYLIB)
-        Vector2 mouse = GetMousePosition();
-        interaction_update_hover(&interaction_state, &layout, &camera_controller, mouse.x, mouse.y);
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-        {
-            bool keep_selection = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-            interaction_select_at_cursor(&interaction_state, &layout, &camera_controller, mouse.x, mouse.y,
-                                         !keep_selection);
-        }
-#endif
 
         const Person *selected_person = interaction_get_selected(&interaction_state);
         const Person *hovered_person = interaction_get_hovered(&interaction_state);
@@ -1170,15 +1309,9 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
             app_apply_settings(&settings, &render_state, &camera_controller, auto_save_ready ? &auto_save : NULL);
             settings_applied_revision = settings_get_revision(&settings);
         }
-
-        app_handle_shortcut_input(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
-                                  &camera_controller, logger, &settings, &persisted_settings, settings_path,
-                                  &auto_save, &settings_applied_revision, &app_state);
         EndDrawing();
 
-        app_handle_pending_ui_events(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
-                                     &camera_controller, logger, &settings, &persisted_settings, settings_path,
-                                     &auto_save, &settings_applied_revision, &app_state);
+        event_process(&event_context, EVENT_PROCESS_PHASE_POST_FRAME, delta_seconds);
 
         if (auto_save_ready)
         {

@@ -9,6 +9,8 @@
 #include <string.h>
 #include <stdio.h>
 
+static LayoutAlgorithm app_state_resolve_algorithm_from_settings(const Settings *settings);
+
 static void app_command_stack_clear(AppCommandStack *stack)
 {
     if (!stack)
@@ -90,6 +92,7 @@ void app_state_init(AppState *state)
     }
     memset(state, 0, sizeof(AppState));
     state->interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
+    state->active_layout_algorithm = LAYOUT_ALGORITHM_HIERARCHICAL;
 }
 
 bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layout, InteractionState *interaction,
@@ -107,6 +110,12 @@ bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layou
     state->persisted_settings = persisted_settings;
     state->selected_person = NULL;
     state->tree_dirty = false;
+    layout_result_destroy(&state->layout_transition_start);
+    layout_result_destroy(&state->layout_transition_target);
+    state->layout_transition_active = false;
+    state->layout_transition_elapsed = 0.0f;
+    state->layout_transition_duration = 0.0f;
+    state->active_layout_algorithm = app_state_resolve_algorithm_from_settings(settings);
     return true;
 }
 
@@ -124,6 +133,9 @@ void app_state_shutdown(AppState *state)
     state->settings = NULL;
     state->persisted_settings = NULL;
     state->selected_person = NULL;
+    layout_result_destroy(&state->layout_transition_start);
+    layout_result_destroy(&state->layout_transition_target);
+    state->layout_transition_active = false;
 }
 
 void app_state_reset_history(AppState *state)
@@ -282,14 +294,163 @@ bool app_state_redo(AppState *state, char *error_buffer, size_t error_buffer_siz
     return true;
 }
 
-static void app_state_refresh_layout(AppState *state)
+static LayoutAlgorithm app_state_resolve_algorithm_from_settings(const Settings *settings)
+{
+    if (!settings)
+    {
+        return LAYOUT_ALGORITHM_HIERARCHICAL;
+    }
+    return (settings->default_layout_algorithm == SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED)
+               ? LAYOUT_ALGORITHM_FORCE_DIRECTED
+               : LAYOUT_ALGORITHM_HIERARCHICAL;
+}
+
+static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm, bool allow_animation)
 {
     if (!state || !state->tree || !state->layout)
     {
         return;
     }
-    layout_result_destroy(state->layout);
-    *state->layout = layout_calculate(*state->tree);
+
+    FamilyTree *tree = state->tree ? *state->tree : NULL;
+    if (!tree)
+    {
+        layout_result_destroy(state->layout);
+        layout_result_destroy(&state->layout_transition_start);
+        layout_result_destroy(&state->layout_transition_target);
+        state->layout_transition_active = false;
+        state->active_layout_algorithm = algorithm;
+        return;
+    }
+
+    LayoutResult target = layout_calculate_with_algorithm(tree, algorithm);
+    if (tree->person_count > 0U && (!target.nodes || target.count == 0U))
+    {
+        layout_result_destroy(&target);
+        return;
+    }
+
+    size_t current_count = (state->layout && state->layout->nodes) ? state->layout->count : 0U;
+    bool counts_match = (current_count == target.count);
+    bool can_animate = allow_animation && counts_match && current_count > 0U;
+
+    if (!can_animate)
+    {
+        layout_result_destroy(state->layout);
+        layout_result_move(state->layout, &target);
+        layout_result_destroy(&state->layout_transition_start);
+        layout_result_destroy(&state->layout_transition_target);
+        state->layout_transition_active = false;
+        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_duration = 0.0f;
+        state->active_layout_algorithm = algorithm;
+        return;
+    }
+
+    if (!layout_result_copy(&state->layout_transition_start, state->layout) ||
+        !layout_result_copy(&state->layout_transition_target, &target))
+    {
+        layout_result_destroy(&state->layout_transition_start);
+        layout_result_destroy(&state->layout_transition_target);
+        layout_result_destroy(state->layout);
+        layout_result_move(state->layout, &target);
+        layout_result_destroy(&target);
+        state->layout_transition_active = false;
+        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_duration = 0.0f;
+        state->active_layout_algorithm = algorithm;
+        return;
+    }
+
+    if (!layout_result_copy(state->layout, &state->layout_transition_start))
+    {
+        layout_result_destroy(&state->layout_transition_start);
+        layout_result_destroy(&state->layout_transition_target);
+        layout_result_destroy(state->layout);
+        layout_result_move(state->layout, &target);
+        layout_result_destroy(&target);
+        state->layout_transition_active = false;
+        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_duration = 0.0f;
+        state->active_layout_algorithm = algorithm;
+        return;
+    }
+
+    layout_result_destroy(&target);
+    state->layout_transition_active = true;
+    state->layout_transition_elapsed = 0.0f;
+    state->layout_transition_duration = 0.9f;
+    state->active_layout_algorithm = algorithm;
+}
+
+void app_state_tick(AppState *state, float delta_seconds)
+{
+    if (!state)
+    {
+        return;
+    }
+
+    if (state->settings)
+    {
+        LayoutAlgorithm desired = app_state_resolve_algorithm_from_settings(state->settings);
+        if (desired != state->active_layout_algorithm)
+        {
+            app_state_refresh_layout(state, desired, true);
+        }
+    }
+
+    if (!state->layout_transition_active)
+    {
+        return;
+    }
+    if (!state->layout)
+    {
+        layout_result_destroy(&state->layout_transition_start);
+        layout_result_destroy(&state->layout_transition_target);
+        state->layout_transition_active = false;
+        return;
+    }
+
+    if (!(delta_seconds > 0.0f))
+    {
+        delta_seconds = 0.0f;
+    }
+
+    state->layout_transition_elapsed += delta_seconds;
+    float duration = state->layout_transition_duration;
+    if (!(duration > 0.0f))
+    {
+        duration = 0.0f;
+    }
+    float alpha = (duration > 0.0f) ? (state->layout_transition_elapsed / duration) : 1.0f;
+    if (alpha >= 1.0f)
+    {
+        layout_result_destroy(state->layout);
+        if (!layout_result_copy(state->layout, &state->layout_transition_target))
+        {
+            layout_result_move(state->layout, &state->layout_transition_target);
+        }
+        layout_result_destroy(&state->layout_transition_start);
+        layout_result_destroy(&state->layout_transition_target);
+        state->layout_transition_active = false;
+        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_duration = 0.0f;
+        return;
+    }
+
+    if (!layout_animate(&state->layout_transition_start, &state->layout_transition_target, alpha, state->layout))
+    {
+        layout_result_destroy(state->layout);
+        if (!layout_result_copy(state->layout, &state->layout_transition_target))
+        {
+            layout_result_move(state->layout, &state->layout_transition_target);
+        }
+        layout_result_destroy(&state->layout_transition_start);
+        layout_result_destroy(&state->layout_transition_target);
+        state->layout_transition_active = false;
+        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_duration = 0.0f;
+    }
 }
 
 bool app_state_add_person(AppState *state, Person *person, char *error_buffer, size_t error_buffer_size)
@@ -310,7 +471,7 @@ bool app_state_add_person(AppState *state, Person *person, char *error_buffer, s
         }
         return false;
     }
-    app_state_refresh_layout(state);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     return true;
 }
@@ -406,7 +567,7 @@ bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_bu
         }
         return false;
     }
-    app_state_refresh_layout(state);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     return true;
 }
@@ -631,7 +792,7 @@ static bool app_command_add_person_execute(AppCommand *command, AppState *state)
         (void)family_tree_extract_person(*state->tree, self->person->id);
         return false;
     }
-    app_state_refresh_layout(state);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     state->selected_person = self->person;
     self->inserted = true;
@@ -656,7 +817,7 @@ static bool app_command_add_person_undo(AppCommand *command, AppState *state)
     }
     self->inserted = false;
     app_state_clear_selection_if_matches(state, self->person);
-    app_state_refresh_layout(state);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     return true;
 }
 
@@ -714,7 +875,7 @@ static bool app_command_delete_person_execute(AppCommand *command, AppState *sta
     }
     self->inserted = false;
     app_state_clear_selection_if_matches(state, person);
-    app_state_refresh_layout(state);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     return true;
 }
@@ -744,7 +905,7 @@ static bool app_command_delete_person_undo(AppCommand *command, AppState *state)
     {
         state->selected_person = self->person;
     }
-    app_state_refresh_layout(state);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     return true;
 }

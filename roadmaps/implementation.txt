@@ -266,13 +266,13 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [x] Root at center
       [x] Children below parents
       [x] Spouses side-by-side
-  [ ] Implement force-directed layout (optional)
-      [ ] Physics-based positioning
-      [ ] Spring forces for relationships
-      [ ] Repulsion between nodes
-  [ ] Implement layout_animate() function
-      [ ] Smooth transition between layouts
-      [ ] Animate sphere positions
+  [x] Implement force-directed layout (optional)
+      [x] Physics-based positioning
+      [x] Spring forces for relationships
+      [x] Repulsion between nodes
+  [x] Implement layout_animate() function
+      [x] Smooth transition between layouts
+      [x] Animate sphere positions
 
 4.7 Connection Lines
     [x] Implement connections_render() function
@@ -508,11 +508,11 @@ PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
   [ ] Implement proper error handling throughout
 
 7.3 Event Handling
-  [ ] Implement event_process() function
-      [ ] Mouse events (move, click, wheel)
-      [ ] Keyboard events (shortcuts)
-      [ ] Window events (resize, focus)
-      [ ] Route events to appropriate handlers
+    [x] Implement event_process() function
+            [x] Mouse events (move, click, wheel)
+            [x] Keyboard events (shortcuts)
+            [x] Window events (resize, focus)
+            [x] Route events to appropriate handlers
   [x] Implement keyboard shortcuts
       [x] Ctrl+N: New tree
       [x] Ctrl+O: Open tree

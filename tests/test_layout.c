@@ -19,6 +19,22 @@ static bool position_is_finite(const float position[3])
     return true;
 }
 
+static const LayoutNode *find_node_by_id(const LayoutResult *result, uint32_t id)
+{
+    if (!result || !result->nodes)
+    {
+        return NULL;
+    }
+    for (size_t index = 0U; index < result->count; ++index)
+    {
+        if (result->nodes[index].person && result->nodes[index].person->id == id)
+        {
+            return &result->nodes[index];
+        }
+    }
+    return NULL;
+}
+
 TEST(test_layout_assigns_positions_for_all_persons)
 {
     FamilyTree *tree = test_build_sample_tree();
@@ -540,6 +556,68 @@ TEST(test_layout_complex_relationships_remain_finite)
     }
 
     layout_result_destroy(&result);
+    family_tree_destroy(tree);
+}
+
+TEST(test_layout_force_directed_preserves_levels)
+{
+    FamilyTree *tree = test_build_sample_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult hierarchical = layout_calculate(tree);
+    LayoutResult force = layout_calculate_force_directed(tree);
+    ASSERT_EQ(force.count, hierarchical.count);
+
+    bool any_moved = false;
+    for (size_t index = 0U; index < force.count; ++index)
+    {
+        const LayoutNode *force_node = &force.nodes[index];
+        ASSERT_NOT_NULL(force_node->person);
+        ASSERT_TRUE(position_is_finite(force_node->position));
+        const LayoutNode *baseline = find_node_by_id(&hierarchical, force_node->person->id);
+        ASSERT_NOT_NULL(baseline);
+        ASSERT_TRUE(fabsf(force_node->position[1] - baseline->position[1]) < 0.05f);
+        if (fabsf(force_node->position[0] - baseline->position[0]) > 0.05f ||
+            fabsf(force_node->position[2] - baseline->position[2]) > 0.05f)
+        {
+            any_moved = true;
+        }
+    }
+    ASSERT_TRUE(any_moved);
+
+    layout_result_destroy(&force);
+    layout_result_destroy(&hierarchical);
+    family_tree_destroy(tree);
+}
+
+TEST(test_layout_animate_interpolates_between_layouts)
+{
+    FamilyTree *tree = test_build_sample_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult start = layout_calculate(tree);
+    LayoutResult target = layout_calculate_force_directed(tree);
+    LayoutResult blended = {0};
+
+    ASSERT_TRUE(layout_animate(&start, &target, 0.5f, &blended));
+    ASSERT_EQ(blended.count, target.count);
+
+    const LayoutNode *start_root = find_node_by_id(&start, 1U);
+    const LayoutNode *target_root = find_node_by_id(&target, 1U);
+    const LayoutNode *blend_root = find_node_by_id(&blended, 1U);
+    ASSERT_NOT_NULL(start_root);
+    ASSERT_NOT_NULL(target_root);
+    ASSERT_NOT_NULL(blend_root);
+
+    float expected_x = (start_root->position[0] + target_root->position[0]) * 0.5f;
+    float expected_z = (start_root->position[2] + target_root->position[2]) * 0.5f;
+    ASSERT_TRUE(fabsf(blend_root->position[0] - expected_x) < 0.05f);
+    ASSERT_TRUE(fabsf(blend_root->position[2] - expected_z) < 0.05f);
+    ASSERT_TRUE(fabsf(blend_root->position[1] - target_root->position[1]) < 0.05f);
+
+    layout_result_destroy(&blended);
+    layout_result_destroy(&target);
+    layout_result_destroy(&start);
     family_tree_destroy(tree);
 }
 

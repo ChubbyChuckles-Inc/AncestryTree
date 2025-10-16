@@ -211,6 +211,35 @@ DECLARE_TEST(test_app_state_reset_history_clears_dirty_flag)
     app_state_test_context_shutdown(&state, &layout, tree);
 }
 
+DECLARE_TEST(test_app_state_layout_algorithm_switch_triggers_transition)
+{
+    AppState state;
+    FamilyTree *tree = NULL;
+    LayoutResult layout;
+    InteractionState interaction;
+    CameraController camera;
+    Settings settings;
+    Settings persisted_settings;
+
+    app_state_test_context_init(&state, &tree, &layout, &interaction, &camera, &settings, &persisted_settings);
+
+    settings.default_layout_algorithm = SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED;
+    app_state_tick(&state, 0.0f);
+    ASSERT_TRUE(state.layout_transition_active);
+
+    /* Advance animation to completion. */
+    for (int step = 0; step < 12; ++step)
+    {
+        app_state_tick(&state, 0.1f);
+    }
+
+    ASSERT_FALSE(state.layout_transition_active);
+    ASSERT_EQ(state.active_layout_algorithm, LAYOUT_ALGORITHM_FORCE_DIRECTED);
+    ASSERT_EQ(layout.count, tree->person_count);
+
+    app_state_test_context_shutdown(&state, &layout, tree);
+}
+
 DECLARE_TEST(test_app_command_add_person_roundtrip)
 {
     AppState state;

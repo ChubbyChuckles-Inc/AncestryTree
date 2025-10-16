@@ -67,15 +67,21 @@ extern "C"
     {
         FamilyTree **tree;
         LayoutResult *layout;
+        LayoutResult layout_transition_start;
+        LayoutResult layout_transition_target;
         InteractionState *interaction;
         CameraController *camera;
         Settings *settings;
         Settings *persisted_settings;
+        LayoutAlgorithm active_layout_algorithm;
+        float layout_transition_elapsed;
+        float layout_transition_duration;
         Person *selected_person;
         AppUIState ui_state;
         AppInteractionMode interaction_mode;
         AppCommandStack undo_stack;
         AppCommandStack redo_stack;
+        bool layout_transition_active;
         bool tree_dirty;
     } AppState;
 
@@ -96,6 +102,7 @@ extern "C"
                              CameraController *camera, Settings *settings, Settings *persisted_settings);
     void app_state_shutdown(AppState *state);
     void app_state_reset_history(AppState *state);
+    void app_state_tick(AppState *state, float delta_seconds);
 
     bool app_state_push_command(AppState *state, AppCommand *command, char *error_buffer, size_t error_buffer_size);
     bool app_state_undo(AppState *state, char *error_buffer, size_t error_buffer_size);

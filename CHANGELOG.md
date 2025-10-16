@@ -40,6 +40,10 @@ All notable changes to this project will be documented in this file. The format 
   guarding JSON edge cases with new targeted unit tests.
 - Layout test coverage now verifies single-person, small family, large sibling groups, multi-generation stacks, and
   complex relationship graphs to enforce non-overlapping holographic placement.
+- Force-directed layout option adds physics-based separation with spring connections and generational anchoring,
+  validated by new layout regression tests.
+- Layout transition system blends between layout variants using `app_state_tick`, delivering smooth holographic
+  animations with dedicated AppState and layout unit coverage.
 - Quick Help overlay captures onboarding notes, troubleshooting tips, and the active keyboard shortcut map for testers.
 - Keyboard shortcut mapper consolidates Ctrl+N/O/S/Shift+S/Z/Y plus Space and Escape into UI events with automated
   regression tests guarding the input routing.
@@ -67,3 +71,5 @@ All notable changes to this project will be documented in this file. The format 
   media, enabling portable sharing with automated regression coverage.
 - Debug builds now activate a central allocation tracker with leak diagnostics, runtime stats queries, and new unit
   tests verifying realloc safety and outstanding allocation reporting.
+- Centralised `event_process` orchestration ties together window resize handling, pointer interactions, and shortcut
+  routing while powering new unit tests that exercise shortcut and UI queue dispatch without raylib dependencies.
