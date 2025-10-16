@@ -32,3 +32,5 @@ All notable changes to this project will be documented in this file. The format 
 - Dynamic holographic name panel system with cached billboards, optional profile portraits, configurable font sizing (UI control + multi-font caching with mipmaps), animated glow shader timing, and dedicated regression tests.
 - Camera orbit controller now eases towards new targets (half-life smoothing) and focus transitions, reducing snap while preserving precise controls, plus accompanying smoothing regression tests.
 - Batched sphere rendering that groups alive and deceased nodes to minimize shader state changes, validated by new batching planner unit tests.
+- Connection rendering upgrades with antialiased lines and optional bezier-style curves for parent/child links, plus
+  configuration validation tests ensuring style ranges remain safe.

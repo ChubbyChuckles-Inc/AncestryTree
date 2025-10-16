@@ -280,8 +280,8 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
             [x] Draw lines between spouses
             [x] Color code relationships (parent-child, marriage)
             [x] Adjust line thickness based on distance
-  [ ] Implement line anti-aliasing
-  [ ] Add optional connection styles (curves, beziers)
+    [x] Implement line anti-aliasing
+    [x] Add optional connection styles (curves, beziers)
 
 4.8 Interaction System
   [x] Implement ray_cast() function

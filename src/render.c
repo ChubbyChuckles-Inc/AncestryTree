@@ -42,6 +42,9 @@ static void render_set_default_config(RenderConfig *config)
     config->sphere_radius = 0.6f;
     config->glow_intensity = 0.85f;
     config->connection_radius = 0.05f;
+    config->connection_antialiasing = true;
+    config->connection_style_parent_child = RENDER_CONNECTION_STYLE_BEZIER;
+    config->connection_style_spouse = RENDER_CONNECTION_STYLE_STRAIGHT;
     config->alive_color = render_color_make(0, 195, 255, 255);
     config->deceased_color = render_color_make(200, 120, 240, 255);
     config->selected_outline_color = render_color_make(255, 255, 255, 255);
@@ -101,6 +104,16 @@ bool render_config_validate(const RenderConfig *config)
         return false;
     }
     if (!(config->connection_radius >= 0.0f))
+    {
+        return false;
+    }
+    if (config->connection_style_parent_child < RENDER_CONNECTION_STYLE_STRAIGHT ||
+        config->connection_style_parent_child > RENDER_CONNECTION_STYLE_BEZIER)
+    {
+        return false;
+    }
+    if (config->connection_style_spouse < RENDER_CONNECTION_STYLE_STRAIGHT ||
+        config->connection_style_spouse > RENDER_CONNECTION_STYLE_BEZIER)
     {
         return false;
     }
@@ -215,37 +228,134 @@ static Color render_color_apply_intensity(Color color, float intensity)
     return result;
 }
 
-static float render_distance_between_points(const float a[3], const float b[3])
-{
-    const float dx = a[0] - b[0];
-    const float dy = a[1] - b[1];
-    const float dz = a[2] - b[2];
-    return sqrtf(dx * dx + dy * dy + dz * dz);
-}
-
-static void render_draw_connection(RenderState *state, const float start[3], const float end[3], RenderColor color)
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+static void render_draw_segment(RenderState *state, const Vector3 *a, const Vector3 *b, RenderColor color)
 {
     if (!state)
     {
         return;
     }
-    Vector3 a = {start[0], start[1], start[2]};
-    Vector3 b = {end[0], end[1], end[2]};
     Color ray_color = render_color_to_raylib(color);
-
     float radius = state->config.connection_radius;
+
     if (radius > 0.0f)
     {
-        float distance = render_distance_between_points(start, end);
+        float distance = Vector3Distance(*a, *b);
         float scale = 1.0f + fminf(distance * 0.12f, 2.5f);
         float adjusted = radius * scale;
-        DrawCylinderEx(a, b, adjusted, adjusted, 18, ray_color);
+        DrawCylinderEx(*a, *b, adjusted, adjusted, 18, ray_color);
+        return;
+    }
+
+    if (state->config.connection_antialiasing)
+    {
+        rlEnableSmoothLines();
+        float width = 1.6f + 0.15f * Vector3Distance(*a, *b);
+        if (width > 6.0f)
+        {
+            width = 6.0f;
+        }
+        rlSetLineWidth(width);
+        DrawLine3D(*a, *b, ray_color);
+        rlSetLineWidth(1.0f);
+        rlDisableSmoothLines();
+        return;
+    }
+
+    DrawLine3D(*a, *b, ray_color);
+}
+
+static void render_evaluate_cubic(const Vector3 *p0, const Vector3 *p1, const Vector3 *p2, const Vector3 *p3, float t,
+                                  Vector3 *result)
+{
+    float it = 1.0f - t;
+    float b0 = it * it * it;
+    float b1 = 3.0f * it * it * t;
+    float b2 = 3.0f * it * t * t;
+    float b3 = t * t * t;
+    result->x = b0 * p0->x + b1 * p1->x + b2 * p2->x + b3 * p3->x;
+    result->y = b0 * p0->y + b1 * p1->y + b2 * p2->y + b3 * p3->y;
+    result->z = b0 * p0->z + b1 * p1->z + b2 * p2->z + b3 * p3->z;
+}
+
+static void render_draw_connection_straight(RenderState *state, const float start[3], const float end[3],
+                                            RenderColor color)
+{
+    Vector3 a = {start[0], start[1], start[2]};
+    Vector3 b = {end[0], end[1], end[2]};
+    render_draw_segment(state, &a, &b, color);
+}
+
+static void render_draw_connection_bezier(RenderState *state, const float start[3], const float end[3],
+                                          RenderColor color)
+{
+    if (!state)
+    {
+        return;
+    }
+
+    Vector3 p0 = {start[0], start[1], start[2]};
+    Vector3 p3 = {end[0], end[1], end[2]};
+    Vector3 direction = Vector3Subtract(p3, p0);
+    float distance = Vector3Length(direction);
+    if (distance < 0.0001f)
+    {
+        render_draw_segment(state, &p0, &p3, color);
+        return;
+    }
+
+    float arc_height = fmaxf(0.6f, distance * 0.25f);
+    Vector3 up = {0.0f, 1.0f, 0.0f};
+    Vector3 right = Vector3CrossProduct(direction, up);
+    if (Vector3Length(right) < 0.0001f)
+    {
+        right = Vector3Normalize((Vector3){1.0f, 0.0f, 0.0f});
     }
     else
     {
-        DrawLine3D(a, b, ray_color);
+        right = Vector3Normalize(right);
+    }
+    float lateral_offset = distance * 0.12f;
+    Vector3 p1 = Vector3Add(Vector3Add(p0, Vector3Scale(direction, 0.18f)), Vector3Scale(right, lateral_offset));
+    p1.y += arc_height * 0.6f;
+    Vector3 p2 = Vector3Add(Vector3Add(p0, Vector3Scale(direction, 0.68f)), Vector3Scale(right, -lateral_offset));
+    p2.y += arc_height * 0.6f;
+
+    const size_t segment_count = 16U;
+    Vector3 previous = p0;
+    for (size_t index = 1U; index <= segment_count; ++index)
+    {
+        float t = (float)index / (float)segment_count;
+        Vector3 current;
+        render_evaluate_cubic(&p0, &p1, &p2, &p3, t, &current);
+        render_draw_segment(state, &previous, &current, color);
+        previous = current;
     }
 }
+
+static void render_draw_connection(RenderState *state, const float start[3], const float end[3], RenderColor color,
+                                   RenderConnectionStyle style)
+{
+    if (style == RENDER_CONNECTION_STYLE_BEZIER)
+    {
+        render_draw_connection_bezier(state, start, end, color);
+    }
+    else
+    {
+        render_draw_connection_straight(state, start, end, color);
+    }
+}
+#else
+static void render_draw_connection(RenderState *state, const float start[3], const float end[3], RenderColor color,
+                                   RenderConnectionStyle style)
+{
+    (void)state;
+    (void)start;
+    (void)end;
+    (void)color;
+    (void)style;
+}
+#endif
 
 static void render_apply_lighting(const RenderState *state)
 {
@@ -588,6 +698,9 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.sphere_radius = config->sphere_radius;
         state->config.glow_intensity = config->glow_intensity;
         state->config.connection_radius = config->connection_radius;
+        state->config.connection_antialiasing = config->connection_antialiasing;
+        state->config.connection_style_parent_child = config->connection_style_parent_child;
+        state->config.connection_style_spouse = config->connection_style_spouse;
         state->config.show_connections = config->show_connections;
         state->config.show_grid = config->show_grid;
         state->config.show_overlay = config->show_overlay;
@@ -863,7 +976,8 @@ bool render_connections_render(RenderState *state, const LayoutResult *layout)
             if (render_find_person_position(layout, child, child_position))
             {
                 render_draw_connection(state, node->position, child_position,
-                                       state->config.connection_color_parent_child);
+                                       state->config.connection_color_parent_child,
+                                       state->config.connection_style_parent_child);
             }
         }
         for (size_t spouse_index = 0; spouse_index < person->spouses_count; ++spouse_index)
@@ -877,7 +991,8 @@ bool render_connections_render(RenderState *state, const LayoutResult *layout)
             if (render_find_person_position(layout, partner, partner_position))
             {
                 render_draw_connection(state, node->position, partner_position,
-                                       state->config.connection_color_spouse);
+                                       state->config.connection_color_spouse,
+                                       state->config.connection_style_spouse);
             }
         }
     }
@@ -1026,4 +1141,6 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
  * 3. Resize the window repeatedly and confirm the render target regenerates without artifacts.
  * 4. Verify the holographic screen overlay animates above the 3D content and below the UI widgets.
  * 5. Hover and select multiple persons to ensure batched draws preserve highlight scaling and glow order.
+ * 6. Toggle connection style and antialiasing in debug UI to compare straight vs. bezier links and confirm line
+ *    smoothing is artifact free.
  */

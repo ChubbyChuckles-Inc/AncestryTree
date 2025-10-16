@@ -25,6 +25,9 @@ TEST(test_render_config_default_is_valid)
     RenderConfig config = render_config_default();
     ASSERT_TRUE(render_config_validate(&config));
     ASSERT_TRUE(config.sphere_radius > 0.0f);
+    ASSERT_TRUE(config.connection_antialiasing);
+    ASSERT_EQ(config.connection_style_parent_child, RENDER_CONNECTION_STYLE_BEZIER);
+    ASSERT_EQ(config.connection_style_spouse, RENDER_CONNECTION_STYLE_STRAIGHT);
 }
 
 TEST(test_render_find_person_position_returns_expected_coordinates)
@@ -139,6 +142,16 @@ TEST(test_render_collect_spouse_segments_ignores_duplicates)
     test_free_layout(&layout);
     person_destroy(two);
     person_destroy(one);
+}
+
+TEST(test_render_config_validate_rejects_invalid_style)
+{
+    RenderConfig config = render_config_default();
+    config.connection_style_parent_child = (RenderConnectionStyle)42;
+    ASSERT_FALSE(render_config_validate(&config));
+    config = render_config_default();
+    config.connection_style_spouse = (RenderConnectionStyle)(-1);
+    ASSERT_FALSE(render_config_validate(&config));
 }
 
 TEST(test_render_batcher_plan_groups_alive_and_deceased)
@@ -278,6 +291,7 @@ void register_render_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_render_find_person_position_returns_expected_coordinates);
     REGISTER_TEST(registry, test_render_collect_parent_child_segments_collects_all_children);
     REGISTER_TEST(registry, test_render_collect_spouse_segments_ignores_duplicates);
+    REGISTER_TEST(registry, test_render_config_validate_rejects_invalid_style);
     REGISTER_TEST(registry, test_render_batcher_plan_groups_alive_and_deceased);
     REGISTER_TEST(registry, test_render_batcher_plan_handles_selected_and_hovered);
     REGISTER_TEST(registry, test_render_batcher_plan_handles_hover_equal_selected);

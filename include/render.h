@@ -24,11 +24,20 @@ typedef struct RenderColor
     unsigned char a;
 } RenderColor;
 
+typedef enum RenderConnectionStyle
+{
+    RENDER_CONNECTION_STYLE_STRAIGHT = 0,
+    RENDER_CONNECTION_STYLE_BEZIER = 1
+} RenderConnectionStyle;
+
 typedef struct RenderConfig
 {
     float sphere_radius;
     float glow_intensity;
     float connection_radius;
+    bool connection_antialiasing;
+    RenderConnectionStyle connection_style_parent_child;
+    RenderConnectionStyle connection_style_spouse;
     RenderColor alive_color;
     RenderColor deceased_color;
     RenderColor selected_outline_color;
