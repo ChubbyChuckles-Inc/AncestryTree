@@ -15,6 +15,7 @@
 #include "shortcuts.h"
 #include "tree.h"
 #include "ui.h"
+#include "expansion.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -948,7 +949,7 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
 
 static void app_render_scene_basic(const LayoutResult *layout, const CameraController *camera,
                                    const Person *selected_person, const Person *hovered_person,
-                                   const RenderConfig *config)
+                                   const RenderConfig *config, const ExpansionState *expansion)
 {
     const Camera3D *raylib_camera = camera_controller_get_camera(camera);
     if (!raylib_camera)
@@ -962,6 +963,18 @@ static void app_render_scene_basic(const LayoutResult *layout, const CameraContr
         DrawGrid(24, 1.0f);
     }
 
+    const ExpansionState *exp_state = expansion;
+    bool expansion_active = exp_state && expansion_is_active(exp_state);
+    const Person *exp_person = expansion_active ? exp_state->person : NULL;
+    float expansion_primary_scale_value = expansion_active ? expansion_primary_scale(exp_state) : 1.0f;
+    float expansion_inactive_scale_value = expansion_active ? expansion_inactive_scale(exp_state) : 1.0f;
+    float expansion_fade_value = expansion_active ? expansion_inactive_opacity(exp_state) : 1.0f;
+    float expansion_position[3] = {0.0f, 0.0f, 0.0f};
+    if (expansion_active)
+    {
+        expansion_current_position(exp_state, expansion_position);
+    }
+
     if (layout)
     {
         for (size_t index = 0U; index < layout->count; ++index)
@@ -970,6 +983,21 @@ static void app_render_scene_basic(const LayoutResult *layout, const CameraContr
             const Person *person = node->person;
             Color color = person && person->is_alive ? (Color){0, 195, 255, 255} : (Color){200, 120, 240, 255};
             float radius = 0.6f;
+            float alpha_scale = 1.0f;
+            Vector3 position = {node->position[0], node->position[1], node->position[2]};
+            if (expansion_active && person)
+            {
+                if (person == exp_person)
+                {
+                    radius *= expansion_primary_scale_value;
+                    position = (Vector3){expansion_position[0], expansion_position[1], expansion_position[2]};
+                }
+                else
+                {
+                    radius *= expansion_inactive_scale_value;
+                    alpha_scale = expansion_fade_value;
+                }
+            }
             if (person == hovered_person && person != selected_person)
             {
                 radius *= 1.08f;
@@ -978,7 +1006,11 @@ static void app_render_scene_basic(const LayoutResult *layout, const CameraContr
             {
                 radius *= 1.2f;
             }
-            Vector3 position = {node->position[0], node->position[1], node->position[2]};
+            color.a = (unsigned char)((float)color.a * alpha_scale);
+            if (color.a == 0)
+            {
+                continue;
+            }
             DrawSphere(position, radius, color);
             if (person == selected_person)
             {
@@ -1288,11 +1320,13 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         const Person *selected_person = interaction_get_selected(&interaction_state);
         const Person *hovered_person = interaction_get_hovered(&interaction_state);
 
-        bool rendered = render_scene(&render_state, &layout, &camera_controller, selected_person, hovered_person);
+        const ExpansionState *expansion = app_state_get_expansion(&app_state);
+        bool rendered = render_scene(&render_state, &layout, &camera_controller, selected_person, hovered_person,
+                                     expansion);
         if (!rendered)
         {
             app_render_scene_basic(&layout, &camera_controller, selected_person, hovered_person,
-                                   &render_state.config);
+                                   &render_state.config, expansion);
         }
 
         bool settings_dirty = memcmp(&settings, &persisted_settings, sizeof(Settings)) != 0;

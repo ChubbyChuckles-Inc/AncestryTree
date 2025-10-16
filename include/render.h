@@ -12,6 +12,7 @@ struct CameraController;
 struct LayoutResult;
 struct LayoutNode;
 struct Person;
+struct ExpansionState;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 struct RenderLabelSystem;
 #endif
@@ -91,7 +92,8 @@ bool render_resize(RenderState *state, int width, int height, char *error_buffer
 bool render_has_render_target(const RenderState *state);
 
 bool render_scene(RenderState *state, const struct LayoutResult *layout, const struct CameraController *camera,
-                  const struct Person *selected_person, const struct Person *hovered_person);
+                  const struct Person *selected_person, const struct Person *hovered_person,
+                  const struct ExpansionState *expansion);
 bool render_connections_render(RenderState *state, const struct LayoutResult *layout);
 
 bool render_find_person_position(const struct LayoutResult *layout, const struct Person *person, float out_position[3]);

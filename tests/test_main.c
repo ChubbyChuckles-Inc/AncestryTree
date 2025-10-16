@@ -19,6 +19,7 @@ void register_path_utils_tests(TestRegistry *registry);
 void register_render_tests(TestRegistry *registry);
 void register_interaction_tests(TestRegistry *registry);
 void register_render_labels_tests(TestRegistry *registry);
+void register_expansion_tests(TestRegistry *registry);
 void register_shortcuts_tests(TestRegistry *registry);
 void register_settings_tests(TestRegistry *registry);
 void register_settings_runtime_tests(TestRegistry *registry);
@@ -51,6 +52,7 @@ int main(void)
     register_path_utils_tests(&registry);
     register_render_tests(&registry);
     register_render_labels_tests(&registry);
+    register_expansion_tests(&registry);
     register_interaction_tests(&registry);
     register_app_state_tests(&registry);
     register_shortcuts_tests(&registry);

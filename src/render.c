@@ -3,6 +3,7 @@
 #include "render_internal.h"
 
 #include "camera_controller.h"
+#include "expansion.h"
 #include "layout.h"
 #include "person.h"
 
@@ -31,6 +32,28 @@ static void render_copy_color(RenderColor *dst, const RenderColor *src)
         return;
     }
     memcpy(dst, src, sizeof(RenderColor));
+}
+
+static unsigned char render_apply_alpha_scale(unsigned char value, float scale)
+{
+    if (!(scale > 0.0f))
+    {
+        return 0U;
+    }
+    if (scale > 1.0f)
+    {
+        scale = 1.0f;
+    }
+    float adjusted = (float)value * scale;
+    if (adjusted < 0.0f)
+    {
+        adjusted = 0.0f;
+    }
+    if (adjusted > 255.0f)
+    {
+        adjusted = 255.0f;
+    }
+    return (unsigned char)(adjusted + 0.5f);
 }
 
 static void render_set_default_config(RenderConfig *config)
@@ -437,10 +460,13 @@ static bool render_ensure_batch_capacity(RenderState *state, size_t required_cap
 }
 
 static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool is_alive, bool is_selected,
-                               bool is_hovered, const Camera3D *camera)
+                               bool is_hovered, const Camera3D *camera, float radius_scale, float alpha_scale,
+                               const float *position_override)
 {
-    Vector3 position = {node->position[0], node->position[1], node->position[2]};
-    float base_radius = state->config.sphere_radius;
+    float scale = (radius_scale > 0.0f) ? radius_scale : 1.0f;
+    Vector3 position = position_override ? (Vector3){position_override[0], position_override[1], position_override[2]}
+                                         : (Vector3){node->position[0], node->position[1], node->position[2]};
+    float base_radius = state->config.sphere_radius * scale;
     if (is_hovered && !is_selected)
     {
         base_radius *= 1.08f;
@@ -450,6 +476,7 @@ static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool 
         base_radius *= 1.2f;
     }
     Color base_color = render_color_to_raylib(is_alive ? state->config.alive_color : state->config.deceased_color);
+    base_color.a = render_apply_alpha_scale(base_color.a, alpha_scale);
 
     Vector3 light_dir = {state->light_direction[0], state->light_direction[1], state->light_direction[2]};
     if (Vector3Length(light_dir) < 0.0001f)
@@ -504,6 +531,7 @@ static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool 
     if (is_selected)
     {
         Color outline = render_color_to_raylib(state->config.selected_outline_color);
+        outline.a = render_apply_alpha_scale(outline.a, alpha_scale);
         rlDisableBackfaceCulling();
         rlDisableDepthMask();
         DrawSphereWires(position, base_radius * 1.02f, 18, 18, outline);
@@ -620,9 +648,14 @@ static void render_draw_sphere_group(RenderState *state, const LayoutNode *const
 }
 
 static void render_draw_label(RenderState *state, const LayoutNode *node, const Camera3D *camera,
-                              const Person *person, bool is_selected, bool is_hovered)
+                              const Person *person, bool is_selected, bool is_hovered, float alpha_scale,
+                              const float *position_override)
 {
     if (!state || !state->label_system_ready || !state->label_system || !state->config.show_name_panels)
+    {
+        return;
+    }
+    if (!(alpha_scale > 0.05f))
     {
         return;
     }
@@ -648,7 +681,8 @@ static void render_draw_label(RenderState *state, const LayoutNode *node, const 
     }
 
     Rectangle source = {0.0f, 0.0f, (float)info.texture.width, (float)info.texture.height};
-    Vector3 base_position = {node->position[0], node->position[1], node->position[2]};
+    Vector3 base_position = position_override ? (Vector3){position_override[0], position_override[1], position_override[2]}
+                                              : (Vector3){node->position[0], node->position[1], node->position[2]};
     float vertical_offset = fmaxf(state->config.sphere_radius * 1.6f, 0.5f);
     Vector3 label_position = {base_position.x, base_position.y + vertical_offset, base_position.z};
 
@@ -665,6 +699,7 @@ static void render_draw_label(RenderState *state, const LayoutNode *node, const 
     Vector2 size = {info.width_pixels * scale_factor, info.height_pixels * scale_factor};
     Color tint = WHITE;
     tint.a = (unsigned char)(is_selected ? 255 : (is_hovered ? 244 : 232));
+    tint.a = render_apply_alpha_scale(tint.a, alpha_scale);
 
     rlDisableBackfaceCulling();
     rlDisableDepthMask();
@@ -674,6 +709,7 @@ static void render_draw_label(RenderState *state, const LayoutNode *node, const 
 
     Color tether_color = render_color_to_raylib(state->config.selected_outline_color);
     tether_color.a = (unsigned char)((int)tether_color.a / 2);
+    tether_color.a = render_apply_alpha_scale(tether_color.a, alpha_scale);
     Vector3 tether_top = label_position;
     tether_top.y -= size.y * 0.5f;
     DrawLine3D(base_position, tether_top, tether_color);
@@ -1001,7 +1037,7 @@ bool render_connections_render(RenderState *state, const LayoutResult *layout)
 }
 
 bool render_scene(RenderState *state, const LayoutResult *layout, const CameraController *camera,
-                  const Person *selected_person, const Person *hovered_person)
+                  const Person *selected_person, const Person *hovered_person, const ExpansionState *expansion)
 {
     if (!state || !state->initialized || !layout || !camera)
     {
@@ -1058,10 +1094,16 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         (void)render_connections_render(state, layout);
     }
 
+    const ExpansionState *exp_state = expansion;
+    bool expansion_active = exp_state && expansion_is_active(exp_state);
+    const Person *expansion_person = (expansion_active && exp_state) ? exp_state->person : NULL;
+    float expansion_primary_scale_value = expansion_active ? expansion_primary_scale(exp_state) : 1.0f;
+    float expansion_inactive_scale_value = expansion_active ? expansion_inactive_scale(exp_state) : 1.0f;
+    float expansion_inactive_opacity_value = expansion_active ? expansion_inactive_opacity(exp_state) : 1.0f;
     bool drew_with_batching = false;
     RenderBatcherGrouping grouping;
     render_batcher_grouping_reset(&grouping);
-    if (render_ensure_batch_capacity(state, layout->count) &&
+    if (!expansion_active && render_ensure_batch_capacity(state, layout->count) &&
         render_batcher_plan(layout, selected_person, hovered_person, &grouping, state->batch_alive_nodes,
                             state->batch_capacity, state->batch_deceased_nodes, state->batch_capacity))
     {
@@ -1071,12 +1113,12 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         if (grouping.hovered_node && grouping.hovered_node->person)
         {
             render_draw_sphere(state, grouping.hovered_node, grouping.hovered_node->person->is_alive, false, true,
-                               camera_data);
+                               camera_data, 1.0f, 1.0f, NULL);
         }
         if (grouping.selected_node && grouping.selected_node->person)
         {
             render_draw_sphere(state, grouping.selected_node, grouping.selected_node->person->is_alive, true, false,
-                               camera_data);
+                               camera_data, 1.0f, 1.0f, NULL);
         }
         drew_with_batching = true;
     }
@@ -1093,7 +1135,34 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
             }
             bool is_selected = (selected_person == person);
             bool is_hovered = (hovered_person == person) && !is_selected;
-            render_draw_sphere(state, node, person->is_alive, is_selected, is_hovered, camera_data);
+            float radius_scale = 1.0f;
+            float alpha_scale = 1.0f;
+            float position_override[3];
+            const float *override_ptr = NULL;
+
+            if (expansion_active)
+            {
+                if (person == expansion_person)
+                {
+                    radius_scale = expansion_primary_scale_value;
+                    alpha_scale = 1.0f;
+                    expansion_current_position(exp_state, position_override);
+                    override_ptr = position_override;
+                }
+                else
+                {
+                    radius_scale = expansion_inactive_scale_value;
+                    alpha_scale = expansion_inactive_opacity_value;
+                }
+            }
+
+            if (alpha_scale <= 0.01f)
+            {
+                continue;
+            }
+
+            render_draw_sphere(state, node, person->is_alive, is_selected, is_hovered, camera_data, radius_scale,
+                               alpha_scale, override_ptr);
         }
     }
 
@@ -1107,7 +1176,23 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         }
         bool is_selected = (selected_person == person);
         bool is_hovered = (hovered_person == person) && !is_selected;
-        render_draw_label(state, node, camera_data, person, is_selected, is_hovered);
+        float alpha_scale = 1.0f;
+        const float *override_ptr = NULL;
+        float override_position[3];
+        if (expansion_active)
+        {
+            if (person == expansion_person)
+            {
+                alpha_scale = 1.0f;
+                expansion_current_position(exp_state, override_position);
+                override_ptr = override_position;
+            }
+            else
+            {
+                alpha_scale = expansion_inactive_opacity_value;
+            }
+        }
+        render_draw_label(state, node, camera_data, person, is_selected, is_hovered, alpha_scale, override_ptr);
     }
 
     EndMode3D();

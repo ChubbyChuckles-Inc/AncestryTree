@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Sphere expansion pipeline that animates the focused person into holographic detail view, eases the camera toward the
+  target, fades/scales surrounding nodes, and exposes AppState helpers plus dedicated unit tests for start/update/reverse
+  flows.
 - Initial repository scaffolding and documentation.
 - Core unit tests for person and family tree modules covering relationships, metadata, and validation.
 - ISO-8601 date utilities with strict validation for people and timeline entries, plus timeline unit coverage.

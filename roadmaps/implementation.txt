@@ -302,23 +302,23 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
 ================================================================================
 
 5.1 Expansion Animation
-  [ ] Implement expansion_start() in src/expansion.c
-      [ ] Store initial sphere position and size
-      [ ] Calculate target position (camera center)
-      [ ] Calculate target size (full screen)
-      [ ] Set animation duration
-  [ ] Implement expansion_update() function
-      [ ] Interpolate position over time (easing)
-      [ ] Interpolate scale over time
-      [ ] Update camera to follow
-      [ ] Fade out other spheres
-  [ ] Implement expansion_complete() function
-      [ ] Switch to detail view mode
+  [x] Implement expansion_start() in src/expansion.c
+      [x] Store initial sphere position and size
+      [x] Calculate target position (camera center)
+      [x] Calculate target size (full screen)
+      [x] Set animation duration
+  [x] Implement expansion_update() function
+      [x] Interpolate position over time (easing)
+      [x] Interpolate scale over time
+      [x] Update camera to follow
+      [x] Fade out other spheres
+  [x] Implement expansion_complete() function
+      [x] Switch to detail view mode
       [ ] Show detail UI panels
-  [ ] Implement expansion_reverse() function
-      [ ] Animate sphere back to tree
-      [ ] Return camera to tree view
-      [ ] Fade in other spheres
+  [x] Implement expansion_reverse() function
+      [x] Animate sphere back to tree
+      [x] Return camera to tree view
+      [x] Fade in other spheres
 
 5.2 Detail View Rendering
   [ ] Implement detail_view_init() function
@@ -612,7 +612,7 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
 8.6 Integration Tests
     [x] Create tests/test_integration.c
             [x] Test full workflow: create tree, add persons, save, load
-      [ ] Test expansion animation workflow
+    [x] Test expansion animation workflow
       [ ] Test UI interaction workflow
     [x] Test undo/redo workflow
 
