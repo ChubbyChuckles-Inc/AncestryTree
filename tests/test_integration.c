@@ -1,6 +1,8 @@
 #include "persistence.h"
 #include "person.h"
 #include "test_framework.h"
+#include "test_persistence_helpers.h"
+#include "tree.h"
 
 #include <stdio.h>
 
@@ -18,7 +20,7 @@ DECLARE_TEST(test_integration_create_save_load_round_trip)
 
     ASSERT_TRUE(person_set_name(alex, "Alex", NULL, "Integration"));
     ASSERT_TRUE(person_set_birth(alex, "1970-01-01", "Mars Colony"));
-    alex->is_alive = false;
+    ASSERT_TRUE(person_set_death(alex, "2024-05-01", "Mars Colony"));
 
     ASSERT_TRUE(person_set_name(blair, "Blair", NULL, "Integration"));
     ASSERT_TRUE(person_set_birth(blair, "1972-05-16", "Mars Colony"));
@@ -38,9 +40,16 @@ DECLARE_TEST(test_integration_create_save_load_round_trip)
     ASSERT_TRUE(person_set_parent(casey, blair, PERSON_PARENT_MOTHER));
 
     char path_buffer[128];
-    (void)snprintf(path_buffer, sizeof(path_buffer), "test_integration_output.json");
+    test_temp_file_path(path_buffer, sizeof(path_buffer), "integration_output.json");
     char error_buffer[256];
     error_buffer[0] = '\0';
+    char validation_error[256];
+    validation_error[0] = '\0';
+    if (!family_tree_validate(tree, validation_error, sizeof(validation_error)))
+    {
+        printf("family_tree_validate failed: %s\n", validation_error);
+        ASSERT_TRUE(false);
+    }
     ASSERT_TRUE(persistence_tree_save(tree, path_buffer, error_buffer, sizeof(error_buffer)));
 
     FamilyTree *loaded = persistence_tree_load(path_buffer, error_buffer, sizeof(error_buffer));

@@ -484,16 +484,16 @@ PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
 ================================================================================
 
 7.1 Application State
-  [ ] Define AppState struct in include/app.h
-      [ ] Current FamilyTree pointer
-      [ ] Camera state
-      [ ] Selected person pointer
-      [ ] UI state (active panels, dialog flags)
-      [ ] Interaction mode (tree view, detail view, edit mode)
-      [ ] Settings/configuration
-      [ ] Undo/redo stacks
-  [ ] Implement app_state_init() function
-  [ ] Implement app_state_cleanup() function
+    [x] Define AppState struct in include/app.h
+            [x] Current FamilyTree pointer
+            [x] Camera state
+            [x] Selected person pointer
+            [x] UI state (active panels, dialog flags)
+            [x] Interaction mode (tree view, detail view, edit mode)
+            [x] Settings/configuration
+            [x] Undo/redo stacks
+    [x] Implement app_state_init() function
+    [x] Implement app_state_cleanup() function
 
 7.2 Main Loop
   [ ] Implement main() in src/main.c
@@ -523,17 +523,17 @@ PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
       [x] Escape: Exit detail view or close dialogs
 
 7.4 Undo/Redo System
-  [ ] Define Command interface/pattern
-      [ ] Execute function pointer
-      [ ] Undo function pointer
-      [ ] Command-specific data
+    [x] Define Command interface/pattern
+            [x] Execute function pointer
+            [x] Undo function pointer
+            [x] Command-specific data
   [ ] Implement command_add_person()
   [ ] Implement command_edit_person()
   [ ] Implement command_delete_person()
-  [ ] Implement undo_push() function
-  [ ] Implement undo_execute() function
-  [ ] Implement redo_execute() function
-  [ ] Clear redo stack on new action
+    [x] Implement undo_push() function
+    [x] Implement undo_execute() function
+    [x] Implement redo_execute() function
+    [x] Clear redo stack on new action
 
 7.5 Error Handling & Logging
   [ ] Implement logging system in src/log.c
@@ -610,8 +610,8 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
     [x] Test memory management wrappers (tests/test_memory.c)
 
 8.6 Integration Tests
-  [ ] Create tests/test_integration.c
-      [ ] Test full workflow: create tree, add persons, save, load
+    [x] Create tests/test_integration.c
+            [x] Test full workflow: create tree, add persons, save, load
       [ ] Test expansion animation workflow
       [ ] Test UI interaction workflow
       [ ] Test undo/redo workflow

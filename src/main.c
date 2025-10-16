@@ -1,3 +1,4 @@
+#include "app.h"
 #include "at_log.h"
 #include "camera_controller.h"
 #include "graphics.h"
@@ -95,11 +96,6 @@ static bool layout_compute_center(const LayoutResult *layout, float out_center[3
     out_center[2] /= count;
     return true;
 }
-
-typedef struct AppFileState
-{
-    char current_path[512];
-} AppFileState;
 
 static FamilyTree *app_create_placeholder_tree(void);
 static FamilyTree *app_auto_save_tree_supplier(void *user_data);
@@ -283,7 +279,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                                  LayoutResult *layout, InteractionState *interaction_state,
                                  RenderState *render_state, CameraController *camera, AtLogger *logger,
                                  Settings *settings, Settings *persisted_settings, const char *settings_path,
-                                 PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision)
+                                 PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
+                                 AppState *app_state)
 {
     if (!event || !tree || !layout || !interaction_state || !render_state)
     {
@@ -312,6 +309,11 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         }
         app_file_state_clear(file_state);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
+        if (app_state)
+        {
+            app_state_reset_history(app_state);
+            app_state_mark_tree_dirty(app_state);
+        }
         app_report_status(ui, logger, "New placeholder tree created.");
     }
     break;
@@ -339,6 +341,11 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         }
         app_file_state_set(file_state, resolved_path);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
+        if (app_state)
+        {
+            app_state_reset_history(app_state);
+            app_state_clear_tree_dirty(app_state);
+        }
         app_report_status(ui, logger, "Sample tree loaded.");
     }
     break;
@@ -357,6 +364,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         }
         else
         {
+            if (app_state)
+            {
+                app_state_clear_tree_dirty(app_state);
+            }
             char message[256];
             (void)snprintf(message, sizeof(message), "Saved tree to %s", file_state->current_path);
             app_report_status(ui, logger, message);
@@ -378,6 +389,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 (void)snprintf(message, sizeof(message), "Save As failed: %s", error_buffer);
                 app_report_error(ui, logger, message);
                 return;
+            }
+            if (app_state)
+            {
+                app_state_clear_tree_dirty(app_state);
             }
             char message[256];
             (void)snprintf(message, sizeof(message), "Saved tree to %s", destination);
@@ -457,11 +472,57 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
     }
     break;
     case UI_EVENT_UNDO:
-        app_report_status(ui, logger, "Undo stack pending implementation.");
-        break;
+    {
+        if (!app_state)
+        {
+            app_report_error(ui, logger, "Undo unavailable; application state not configured.");
+            break;
+        }
+        char command_error[256];
+        command_error[0] = '\0';
+        if (!app_state_undo(app_state, command_error, sizeof(command_error)))
+        {
+            if (command_error[0] != '\0')
+            {
+                app_report_status(ui, logger, command_error);
+            }
+            else
+            {
+                app_report_status(ui, logger, "Nothing to undo.");
+            }
+        }
+        else
+        {
+            app_report_status(ui, logger, "Undo applied.");
+        }
+    }
+    break;
     case UI_EVENT_REDO:
-        app_report_status(ui, logger, "Redo stack pending implementation.");
-        break;
+    {
+        if (!app_state)
+        {
+            app_report_error(ui, logger, "Redo unavailable; application state not configured.");
+            break;
+        }
+        char command_error[256];
+        command_error[0] = '\0';
+        if (!app_state_redo(app_state, command_error, sizeof(command_error)))
+        {
+            if (command_error[0] != '\0')
+            {
+                app_report_status(ui, logger, command_error);
+            }
+            else
+            {
+                app_report_status(ui, logger, "Nothing to redo.");
+            }
+        }
+        else
+        {
+            app_report_status(ui, logger, "Redo applied.");
+        }
+    }
+    break;
     case UI_EVENT_RESET_CAMERA:
         camera_controller_reset(camera);
         app_report_status(ui, logger, "Camera reset to default orbit.");
@@ -561,7 +622,8 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
                                          LayoutResult *layout, InteractionState *interaction_state,
                                          RenderState *render_state, CameraController *camera, AtLogger *logger,
                                          Settings *settings, Settings *persisted_settings, const char *settings_path,
-                                         PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision)
+                                         PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
+                                         AppState *app_state)
 {
     if (!ui)
     {
@@ -572,7 +634,8 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
     for (size_t index = 0U; index < count; ++index)
     {
         app_process_ui_event(&events[index], ui, file_state, tree, layout, interaction_state, render_state, camera,
-                             logger, settings, persisted_settings, settings_path, auto_save, settings_applied_revision);
+                             logger, settings, persisted_settings, settings_path, auto_save, settings_applied_revision,
+                             app_state);
     }
 }
 
@@ -580,7 +643,8 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
                                       LayoutResult *layout, InteractionState *interaction_state,
                                       RenderState *render_state, CameraController *camera, AtLogger *logger,
                                       Settings *settings, Settings *persisted_settings, const char *settings_path,
-                                      PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision)
+                                      PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
+                                      AppState *app_state)
 {
     if (!ui)
     {
@@ -609,7 +673,7 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
             fallback_event.param_u32 = 0U;
             app_process_ui_event(&fallback_event, ui, file_state, tree, layout, interaction_state, render_state,
                                  camera, logger, settings, persisted_settings, settings_path, auto_save,
-                                 settings_applied_revision);
+                                 settings_applied_revision, app_state);
         }
     }
     /* Manual validation checklist:
@@ -919,6 +983,22 @@ static int app_run(AtLogger *logger)
     interaction_state_init(&interaction_state);
     interaction_state_set_pick_radius(&interaction_state, render_state.config.sphere_radius);
 
+    AppState app_state;
+    app_state_init(&app_state);
+    if (!app_state_configure(&app_state, &tree, &layout, &interaction_state, &camera_controller, &settings,
+                             &persisted_settings))
+    {
+        AT_LOG(logger, AT_LOG_ERROR, "Unable to configure application state manager.");
+        layout_result_destroy(&layout);
+        family_tree_destroy(tree);
+        if (render_ready)
+        {
+            render_cleanup(&render_state);
+        }
+        graphics_window_shutdown(&graphics_state);
+        return 1;
+    }
+
     PersistenceAutoSave auto_save;
     memset(&auto_save, 0, sizeof(auto_save));
     bool auto_save_ready = false;
@@ -950,10 +1030,12 @@ static int app_run(AtLogger *logger)
     if (tree_loaded_from_asset)
     {
         app_report_status(&ui, logger, "Sample tree loaded.");
+        app_state_clear_tree_dirty(&app_state);
     }
     else if (placeholder_used)
     {
         app_report_status(&ui, logger, "Placeholder tree initialised.");
+        app_state_mark_tree_dirty(&app_state);
     }
 
     SetTargetFPS((int)config.target_fps);
@@ -1030,12 +1112,12 @@ static int app_run(AtLogger *logger)
 
         app_handle_shortcut_input(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
                                   &camera_controller, logger, &settings, &persisted_settings, settings_path,
-                                  auto_save_ready ? &auto_save : NULL, &settings_applied_revision);
+                                  &auto_save, &settings_applied_revision, &app_state);
         EndDrawing();
 
         app_handle_pending_ui_events(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
                                      &camera_controller, logger, &settings, &persisted_settings, settings_path,
-                                     auto_save_ready ? &auto_save : NULL, &settings_applied_revision);
+                                     &auto_save, &settings_applied_revision, &app_state);
 
         if (auto_save_ready)
         {
@@ -1060,6 +1142,7 @@ static int app_run(AtLogger *logger)
     EnableCursor();
     ui_cleanup(&ui);
     render_cleanup(&render_state);
+    app_state_shutdown(&app_state);
     layout_result_destroy(&layout);
     family_tree_destroy(tree);
     graphics_window_shutdown(&graphics_state);

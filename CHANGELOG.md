@@ -49,3 +49,7 @@ All notable changes to this project will be documented in this file. The format 
   camera focus for selected results, supported by a direct-selection interaction helper.
 - Search execution module with targeted unit tests plus an integration workflow test that exercises create/save/load
   round-tripping via the persistence layer.
+- Centralised `AppState` layer managing UI mode flags, selection state, undo/redo stacks, and tree dirty tracking with
+  integration into the main loop and Nuklear event handling (including functional Undo/Redo menu actions).
+- AppState unit tests covering command execution failure paths, undo/redo cycling, and history resets to guard the new
+  state manager contract.
