@@ -40,8 +40,11 @@ typedef struct UIInternal
     bool show_settings_window;
     bool show_search_panel;
     bool show_exit_prompt;
+    bool show_error_dialog;
     char status_message[128];
     float status_timer;
+    char error_dialog_title[64];
+    char error_dialog_message[256];
     char search_query[64];
     bool search_include_alive;
     bool search_include_deceased;
@@ -427,6 +430,20 @@ static void ui_internal_set_status(UIInternal *internal, const char *message)
     }
     (void)snprintf(internal->status_message, sizeof(internal->status_message), "%s", message);
     internal->status_timer = 4.0f;
+}
+
+static void ui_internal_show_error(UIInternal *internal, const char *title, const char *message)
+{
+    if (!internal)
+    {
+        return;
+    }
+    const char *resolved_title = (title && title[0] != '\0') ? title : "Error";
+    const char *resolved_message = (message && message[0] != '\0') ? message : "An unexpected error occurred.";
+    (void)snprintf(internal->error_dialog_title, sizeof(internal->error_dialog_title), "%s", resolved_title);
+    (void)snprintf(internal->error_dialog_message, sizeof(internal->error_dialog_message), "%s", resolved_message);
+    internal->show_error_dialog = true;
+    ui_internal_set_status(internal, resolved_message);
 }
 
 static void ui_internal_tick(UIInternal *internal, float delta_seconds)
@@ -1128,6 +1145,51 @@ static void ui_draw_exit_prompt(UIInternal *internal, UIContext *ui)
     }
 }
 
+static void ui_draw_error_dialog(UIInternal *internal, UIContext *ui)
+{
+    if (!internal || !ui || !internal->show_error_dialog)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    const char *title = internal->error_dialog_title[0] != '\0' ? internal->error_dialog_title : "Error";
+    char window_title[96];
+    (void)snprintf(window_title, sizeof(window_title), "%s##ErrorDialog", title);
+    float width = fminf(480.0f, (float)ui->width * 0.7f);
+    float height = fminf(220.0f, (float)ui->height * 0.45f);
+    float x = ((float)ui->width - width) * 0.5f;
+    float y = ((float)ui->height - height) * 0.5f;
+    struct nk_rect bounds = nk_rect(x, y, width, height);
+    if (nk_begin(ctx, window_title, bounds,
+                 NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
+    {
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, title, NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacer(ctx);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label_wrap(ctx, internal->error_dialog_message);
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacer(ctx);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label_wrap(ctx, "The incident has been recorded in the application log.");
+        nk_layout_row_dynamic(ctx, 32.0f, 1);
+        if (nk_button_label(ctx, "Dismiss"))
+        {
+            internal->show_error_dialog = false;
+        }
+    }
+    else
+    {
+        internal->show_error_dialog = false;
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, window_title))
+    {
+        internal->show_error_dialog = false;
+    }
+}
+
 static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
                              CameraController *camera, RenderConfig *render_config, bool settings_dirty)
 {
@@ -1500,6 +1562,9 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->font.query = nk_raylib_query_font;
     internal->font.texture = nk_handle_ptr(NULL);
     internal->auto_orbit = false;
+    internal->show_error_dialog = false;
+    internal->error_dialog_title[0] = '\0';
+    internal->error_dialog_message[0] = '\0';
     internal->show_search_panel = false;
     internal->search_query[0] = '\0';
     internal->search_include_alive = true;
@@ -1793,6 +1858,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     ui_draw_search_panel(internal, ui, tree);
     ui_draw_settings_window(internal, ui, settings, settings_dirty);
     ui_draw_exit_prompt(internal, ui);
+    ui_draw_error_dialog(internal, ui);
     if (hovered_person)
     {
         ui_draw_hover_tooltip(internal, ui, hovered_person);
@@ -1913,6 +1979,27 @@ bool ui_notify_status(UIContext *ui, const char *message)
     return false;
 }
 
+bool ui_show_error_dialog(UIContext *ui, const char *title, const char *message)
+{
+    if (!ui || !ui->available)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return false;
+    }
+    ui_internal_show_error(internal, title, message);
+    return true;
+#else
+    (void)title;
+    (void)message;
+    return false;
+#endif
+}
+
 bool ui_handle_escape(UIContext *ui)
 {
     if (!ui || !ui->available)
@@ -1926,6 +2013,11 @@ bool ui_handle_escape(UIContext *ui)
         return false;
     }
     bool dismissed = false;
+    if (internal->show_error_dialog)
+    {
+        internal->show_error_dialog = false;
+        dismissed = true;
+    }
     if (internal->show_exit_prompt)
     {
         internal->show_exit_prompt = false;

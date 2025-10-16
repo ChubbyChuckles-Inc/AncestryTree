@@ -57,3 +57,5 @@ All notable changes to this project will be documented in this file. The format 
   shipping with regression tests that exercise undo/redo restoration semantics.
 - Logging subsystem upgrades enabling optional file sinks, console toggles, and timestamped levels, alongside defensive
   error-handling macros (`AT_CHECK_NULL`, `AT_CHECK_ALLOC`, `AT_TRY`/`AT_THROW`) with dedicated regression tests.
+- Modal error dialog surfaces runtime failures to the user, while the logger now attaches a default on-disk sink for
+  persistent diagnostics.

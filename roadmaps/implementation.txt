@@ -545,9 +545,9 @@ PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
       [x] CHECK_NULL
       [x] CHECK_ALLOC
       [x] TRY/CATCH simulation (setjmp/longjmp)
-  [ ] Implement error_dialog() function
-      [ ] Display error messages to user
-      [ ] Log errors to file
+  [x] Implement error_dialog() function
+      [x] Display error messages to user
+      [x] Log errors to file
 
 ================================================================================
 PHASE 8: TESTING FRAMEWORK & TEST SUITE

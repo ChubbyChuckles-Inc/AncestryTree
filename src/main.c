@@ -27,6 +27,7 @@
 #define APP_DEFAULT_SAVE_PATH "assets/manual_save.json"
 #define APP_SETTINGS_PATH "assets/settings.cfg"
 #define APP_AUTO_SAVE_PATH "assets/auto_save.json"
+#define APP_LOG_PATH "ancestrytree.log"
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 
@@ -148,7 +149,10 @@ static void app_report_error(UIContext *ui, AtLogger *logger, const char *messag
     {
         return;
     }
-    (void)ui_notify_status(ui, message);
+    if (!ui_show_error_dialog(ui, "Application Error", message))
+    {
+        (void)ui_notify_status(ui, message);
+    }
     if (logger)
     {
         AT_LOG(logger, AT_LOG_ERROR, "%s", message);
@@ -1156,6 +1160,20 @@ int main(void)
     AtLogger logger;
     at_logger_init(&logger);
     at_logger_set_level(&logger, AT_LOG_INFO);
+    char log_error[256];
+    log_error[0] = '\0';
+    if (at_logger_open_file(&logger, APP_LOG_PATH, log_error, sizeof(log_error)))
+    {
+        AT_LOG(&logger, AT_LOG_INFO, "Log file attached: %s", APP_LOG_PATH);
+    }
+    else if (log_error[0] != '\0')
+    {
+        AT_LOG(&logger, AT_LOG_WARN, "Failed to open log file (%s).", log_error);
+    }
+    else
+    {
+        AT_LOG(&logger, AT_LOG_WARN, "Failed to open log file.");
+    }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     AT_LOG(&logger, AT_LOG_INFO, "AncestryTree prototype starting.");

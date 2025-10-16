@@ -70,5 +70,6 @@ bool ui_event_enqueue_with_u32(UIContext *ui, UIEventType type, uint32_t value);
 size_t ui_poll_events(UIContext *ui, UIEvent *events, size_t capacity);
 bool ui_notify_status(UIContext *ui, const char *message);
 bool ui_handle_escape(UIContext *ui);
+bool ui_show_error_dialog(UIContext *ui, const char *title, const char *message);
 
 #endif /* UI_H */
