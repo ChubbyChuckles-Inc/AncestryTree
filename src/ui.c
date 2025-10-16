@@ -4,6 +4,7 @@
 #include "graphics.h"
 #include "layout.h"
 #include "render.h"
+#include "settings.h"
 #include "tree.h"
 
 #include <math.h>
@@ -32,6 +33,7 @@ typedef struct UIInternal
     bool auto_orbit;
     bool show_about_window;
     bool show_help_window;
+    bool show_settings_window;
     bool show_exit_prompt;
     char status_message[128];
     float status_timer;
@@ -98,6 +100,54 @@ static const char *ui_connection_style_label(RenderConnectionStyle style)
         return "Bezier";
     default:
         return "Unknown";
+    }
+}
+
+static const char *ui_settings_graphics_quality_label(SettingsGraphicsQuality quality)
+{
+    switch (quality)
+    {
+    case SETTINGS_GRAPHICS_QUALITY_PERFORMANCE:
+        return "Performance";
+    case SETTINGS_GRAPHICS_QUALITY_QUALITY:
+    default:
+        return "Quality";
+    }
+}
+
+static const char *ui_settings_layout_label(SettingsLayoutAlgorithm algorithm)
+{
+    switch (algorithm)
+    {
+    case SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED:
+        return "Force-directed";
+    case SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL:
+    default:
+        return "Hierarchical";
+    }
+}
+
+static const char *ui_settings_color_scheme_label(SettingsColorScheme scheme)
+{
+    switch (scheme)
+    {
+    case SETTINGS_COLOR_SCHEME_SOLAR_ORCHID:
+        return "Solar Orchid";
+    case SETTINGS_COLOR_SCHEME_CYAN_GRAPH:
+    default:
+        return "Cyan Graph";
+    }
+}
+
+static const char *ui_settings_language_label(SettingsLanguage language)
+{
+    switch (language)
+    {
+    case SETTINGS_LANGUAGE_FUTURE:
+        return "Future Tongue";
+    case SETTINGS_LANGUAGE_ENGLISH:
+    default:
+        return "English";
     }
 }
 
@@ -503,6 +553,233 @@ static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
     }
 }
 
+static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Settings *settings, bool settings_dirty)
+{
+    if (!internal || !ui || !settings || !internal->show_settings_window)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    float width = fminf(420.0f, (float)ui->width - 40.0f);
+    if (width < 280.0f)
+    {
+        width = 280.0f;
+    }
+    struct nk_rect bounds = nk_rect((float)ui->width - width - 20.0f, 60.0f, width, 460.0f);
+    if (nk_begin(ctx, "Settings##AncestryTree", bounds,
+                 NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_CLOSABLE))
+    {
+        if (settings_dirty)
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            nk_label(ctx, "Unsaved changes pending.", NK_TEXT_LEFT);
+        }
+        else
+        {
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            nk_label(ctx, "Settings match saved configuration.", NK_TEXT_LEFT);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacer(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, "Graphics", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_combo_begin_label(ctx, ui_settings_graphics_quality_label(settings->graphics_quality),
+                                 nk_vec2(220.0f, 80.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            if (nk_combo_item_label(ctx, "Quality", NK_TEXT_LEFT) &&
+                settings->graphics_quality != SETTINGS_GRAPHICS_QUALITY_QUALITY)
+            {
+                settings->graphics_quality = SETTINGS_GRAPHICS_QUALITY_QUALITY;
+                settings_mark_dirty(settings);
+            }
+            if (nk_combo_item_label(ctx, "Performance", NK_TEXT_LEFT) &&
+                settings->graphics_quality != SETTINGS_GRAPHICS_QUALITY_PERFORMANCE)
+            {
+                settings->graphics_quality = SETTINGS_GRAPHICS_QUALITY_PERFORMANCE;
+                settings_mark_dirty(settings);
+            }
+            nk_combo_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Color Scheme", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_combo_begin_label(ctx, ui_settings_color_scheme_label(settings->color_scheme), nk_vec2(220.0f, 80.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            if (nk_combo_item_label(ctx, "Cyan Graph", NK_TEXT_LEFT) &&
+                settings->color_scheme != SETTINGS_COLOR_SCHEME_CYAN_GRAPH)
+            {
+                settings->color_scheme = SETTINGS_COLOR_SCHEME_CYAN_GRAPH;
+                settings_mark_dirty(settings);
+            }
+            if (nk_combo_item_label(ctx, "Solar Orchid", NK_TEXT_LEFT) &&
+                settings->color_scheme != SETTINGS_COLOR_SCHEME_SOLAR_ORCHID)
+            {
+                settings->color_scheme = SETTINGS_COLOR_SCHEME_SOLAR_ORCHID;
+                settings_mark_dirty(settings);
+            }
+            nk_combo_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacer(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, "Camera Sensitivity", NK_TEXT_LEFT);
+
+        float rotation = settings->camera_rotation_sensitivity;
+        nk_property_float(ctx, "Orbit", 0.05f, &rotation, 5.0f, 0.05f, 0.01f);
+        if (fabsf(rotation - settings->camera_rotation_sensitivity) > 0.0001f)
+        {
+            settings->camera_rotation_sensitivity = rotation;
+            settings_mark_dirty(settings);
+        }
+
+        float pan_mouse = settings->camera_pan_sensitivity;
+        nk_property_float(ctx, "Pan (mouse)", 0.05f, &pan_mouse, 10.0f, 0.05f, 0.01f);
+        if (fabsf(pan_mouse - settings->camera_pan_sensitivity) > 0.0001f)
+        {
+            settings->camera_pan_sensitivity = pan_mouse;
+            settings_mark_dirty(settings);
+        }
+
+        float pan_keyboard = settings->camera_keyboard_pan_sensitivity;
+        nk_property_float(ctx, "Pan (keys)", 0.05f, &pan_keyboard, 10.0f, 0.05f, 0.01f);
+        if (fabsf(pan_keyboard - settings->camera_keyboard_pan_sensitivity) > 0.0001f)
+        {
+            settings->camera_keyboard_pan_sensitivity = pan_keyboard;
+            settings_mark_dirty(settings);
+        }
+
+        float zoom = settings->camera_zoom_sensitivity;
+        nk_property_float(ctx, "Zoom", 0.05f, &zoom, 5.0f, 0.05f, 0.01f);
+        if (fabsf(zoom - settings->camera_zoom_sensitivity) > 0.0001f)
+        {
+            settings->camera_zoom_sensitivity = zoom;
+            settings_mark_dirty(settings);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacer(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, "Layout", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_combo_begin_label(ctx, ui_settings_layout_label(settings->default_layout_algorithm),
+                                 nk_vec2(220.0f, 70.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            if (nk_combo_item_label(ctx, "Hierarchical", NK_TEXT_LEFT) &&
+                settings->default_layout_algorithm != SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL)
+            {
+                settings->default_layout_algorithm = SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL;
+                settings_mark_dirty(settings);
+            }
+            if (nk_combo_item_label(ctx, "Force-directed (prototype)", NK_TEXT_LEFT) &&
+                settings->default_layout_algorithm != SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED)
+            {
+                settings->default_layout_algorithm = SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED;
+                settings_mark_dirty(settings);
+            }
+            nk_combo_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Language", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_combo_begin_label(ctx, ui_settings_language_label(settings->language), nk_vec2(220.0f, 70.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            if (nk_combo_item_label(ctx, "English", NK_TEXT_LEFT) && settings->language != SETTINGS_LANGUAGE_ENGLISH)
+            {
+                settings->language = SETTINGS_LANGUAGE_ENGLISH;
+                settings_mark_dirty(settings);
+            }
+            if (nk_combo_item_label(ctx, "Future Tongue", NK_TEXT_LEFT) &&
+                settings->language != SETTINGS_LANGUAGE_FUTURE)
+            {
+                settings->language = SETTINGS_LANGUAGE_FUTURE;
+                settings_mark_dirty(settings);
+            }
+            nk_combo_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacer(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, "Auto-save", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_bool auto_save = settings->auto_save_enabled ? nk_true : nk_false;
+        auto_save = nk_check_label(ctx, "Enable auto-save", auto_save);
+        bool new_auto_save = (auto_save == nk_true);
+        if (new_auto_save != settings->auto_save_enabled)
+        {
+            settings->auto_save_enabled = new_auto_save;
+            settings_mark_dirty(settings);
+        }
+
+        int interval = (int)settings->auto_save_interval_seconds;
+        nk_property_int(ctx, "Interval (sec)", 15, &interval, 3600, 15, 15);
+        if (interval < 15)
+        {
+            interval = 15;
+        }
+        if ((unsigned int)interval != settings->auto_save_interval_seconds)
+        {
+            settings->auto_save_interval_seconds = (unsigned int)interval;
+            settings_mark_dirty(settings);
+        }
+
+        nk_layout_row_dynamic(ctx, 12.0f, 1);
+        nk_spacer(ctx);
+
+        nk_layout_row_dynamic(ctx, 28.0f, 2);
+        if (nk_button_label(ctx, "Save to Disk"))
+        {
+            if (ui_event_enqueue(ui, UI_EVENT_SAVE_SETTINGS))
+            {
+                ui_internal_set_status(internal, "Settings save requested.");
+            }
+            else
+            {
+                ui_internal_set_status(internal, "Settings save aborted; event queue full.");
+            }
+        }
+        if (nk_button_label(ctx, "Reload from Disk"))
+        {
+            if (ui_event_enqueue(ui, UI_EVENT_RELOAD_SETTINGS))
+            {
+                ui_internal_set_status(internal, "Settings reload requested.");
+            }
+            else
+            {
+                ui_internal_set_status(internal, "Settings reload aborted; event queue full.");
+            }
+        }
+
+        /* Manual validation checklist:
+         * 1. Adjust orbit/pan/zoom sliders and verify camera responsiveness changes after closing the window.
+         * 2. Toggle graphics quality and confirm connection smoothing/portraits update per selection.
+         * 3. Change auto-save interval and observe log output indicating the new cadence.
+         */
+    }
+    else
+    {
+        internal->show_settings_window = false;
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, "Settings##AncestryTree"))
+    {
+        internal->show_settings_window = false;
+    }
+}
+
 static void ui_draw_exit_prompt(UIInternal *internal, UIContext *ui)
 {
     if (!internal || !ui || !internal->show_exit_prompt)
@@ -550,7 +827,7 @@ static void ui_draw_exit_prompt(UIInternal *internal, UIContext *ui)
 }
 
 static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
-                             CameraController *camera, RenderConfig *render_config)
+                             CameraController *camera, RenderConfig *render_config, bool settings_dirty)
 {
     if (!internal || !ui)
     {
@@ -629,6 +906,12 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         nk_layout_row_push(ctx, 70.0f);
         if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT, nk_vec2(220.0f, 200.0f)))
         {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            const char *settings_label = settings_dirty ? "Settings... *" : "Settings...";
+            if (nk_menu_item_label(ctx, settings_label, NK_TEXT_LEFT))
+            {
+                internal->show_settings_window = true;
+            }
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (nk_menu_item_label(ctx, "Reset Camera", NK_TEXT_LEFT))
             {
@@ -1144,7 +1427,7 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
 
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
                      float fps, const Person *selected_person, const Person *hovered_person,
-                     RenderConfig *render_config)
+                     RenderConfig *render_config, Settings *settings, bool settings_dirty)
 {
     if (!ui || !ui->available)
     {
@@ -1156,10 +1439,11 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         return;
     }
-    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config);
+    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings_dirty);
     ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
     ui_draw_about_window(internal, ui);
     ui_draw_help_window(internal, ui);
+    ui_draw_settings_window(internal, ui, settings, settings_dirty);
     ui_draw_exit_prompt(internal, ui);
     if (hovered_person)
     {
@@ -1173,6 +1457,8 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     (void)selected_person;
     (void)hovered_person;
     (void)render_config;
+    (void)settings;
+    (void)settings_dirty;
 #endif
 }
 
@@ -1292,6 +1578,11 @@ bool ui_handle_escape(UIContext *ui)
         internal->show_help_window = false;
         dismissed = true;
     }
+    if (internal->show_settings_window)
+    {
+        internal->show_settings_window = false;
+        dismissed = true;
+    }
     if (dismissed)
     {
         ui_internal_set_status(internal, "Dialogs dismissed.");
@@ -1309,4 +1600,5 @@ bool ui_handle_escape(UIContext *ui)
  * 4. Open the About dialog from Help and close it via the button and window close control.
  * 5. Launch the Quick Help overlay, review shortcut descriptions, and close it with both the Close button and the Escape key.
  * 6. Select File->Exit and confirm the confirmation dialog responds and closes the application when accepted.
+ * 7. Open View->Settings, tweak sensitivities and graphics quality, then save and reload to confirm persistence and runtime application.
  */

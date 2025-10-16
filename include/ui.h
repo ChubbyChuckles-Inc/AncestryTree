@@ -9,6 +9,7 @@ typedef struct LayoutResult LayoutResult;
 typedef struct CameraController CameraController;
 struct RenderConfig;
 struct Person;
+typedef struct Settings Settings;
 
 typedef enum UIEventType
 {
@@ -21,7 +22,9 @@ typedef enum UIEventType
     UI_EVENT_REDO,
     UI_EVENT_RESET_CAMERA,
     UI_EVENT_ESCAPE,
-    UI_EVENT_REQUEST_EXIT
+    UI_EVENT_REQUEST_EXIT,
+    UI_EVENT_SAVE_SETTINGS,
+    UI_EVENT_RELOAD_SETTINGS
 } UIEventType;
 
 typedef struct UIEvent
@@ -55,7 +58,7 @@ void ui_shutdown(UIContext *ui);
 bool ui_begin_frame(UIContext *ui, float delta_seconds);
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
                      float fps, const struct Person *selected_person, const struct Person *hovered_person,
-                     struct RenderConfig *render_config);
+                     struct RenderConfig *render_config, Settings *settings, bool settings_dirty);
 void ui_end_frame(UIContext *ui);
 bool ui_is_available(const UIContext *ui);
 bool ui_auto_orbit_enabled(const UIContext *ui);

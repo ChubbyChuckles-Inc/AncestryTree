@@ -457,16 +457,16 @@ PHASE 6: USER INTERFACE (NUKLEAR)
       [ ] Allow selection from results
 
 6.7 Settings Panel
-  [ ] Implement settings_panel_render() function
-      [ ] Graphics quality options
-      [ ] Camera sensitivity sliders
-      [ ] Auto-save interval
-      [ ] Default layout algorithm
-      [ ] Color scheme selection
-      [ ] Language selection (future)
-  [ ] Implement settings_save() function
-      [ ] Save to config file
-      [ ] Apply settings immediately
+  [x] Implement settings_panel_render() function
+      [x] Graphics quality options
+      [x] Camera sensitivity sliders
+      [x] Auto-save interval
+      [x] Default layout algorithm
+      [x] Color scheme selection
+      [x] Language selection (future)
+  [x] Implement settings_save() function
+      [x] Save to config file
+      [x] Apply settings immediately
 
 6.8 Help/About Dialog
   [x] Implement about_dialog_render() function

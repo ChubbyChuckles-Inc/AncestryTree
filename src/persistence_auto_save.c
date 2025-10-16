@@ -176,6 +176,16 @@ void persistence_auto_save_set_enabled(PersistenceAutoSave *state, bool enabled)
     }
 }
 
+void persistence_auto_save_set_interval(PersistenceAutoSave *state, unsigned int interval_seconds)
+{
+    if (!state)
+    {
+        return;
+    }
+    state->interval_seconds = interval_seconds;
+    state->elapsed_seconds = 0.0;
+}
+
 bool persistence_auto_save_set_tree_supplier(PersistenceAutoSave *state, FamilyTree *(*tree_supplier)(void *user_data),
                                              void *user_data, char *error_buffer, size_t error_buffer_size)
 {

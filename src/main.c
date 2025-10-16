@@ -7,6 +7,8 @@
 #include "persistence.h"
 #include "person.h"
 #include "render.h"
+#include "settings.h"
+#include "settings_runtime.h"
 #include "shortcuts.h"
 #include "tree.h"
 #include "ui.h"
@@ -22,6 +24,8 @@
 #endif
 
 #define APP_DEFAULT_SAVE_PATH "assets/manual_save.json"
+#define APP_SETTINGS_PATH "assets/settings.cfg"
+#define APP_AUTO_SAVE_PATH "assets/auto_save.json"
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 
@@ -98,6 +102,9 @@ typedef struct AppFileState
 } AppFileState;
 
 static FamilyTree *app_create_placeholder_tree(void);
+static FamilyTree *app_auto_save_tree_supplier(void *user_data);
+static void app_apply_settings(const Settings *settings, RenderState *render_state, CameraController *camera,
+                               PersistenceAutoSave *auto_save);
 
 static void app_file_state_clear(AppFileState *state)
 {
@@ -257,7 +264,7 @@ static bool app_swap_tree(FamilyTree **tree, LayoutResult *layout, FamilyTree *r
 }
 
 static void app_on_tree_changed(LayoutResult *layout, InteractionState *interaction_state, RenderState *render_state,
-                                CameraController *camera)
+                                CameraController *camera, PersistenceAutoSave *auto_save)
 {
     if (!layout || !interaction_state || !render_state)
     {
@@ -266,11 +273,17 @@ static void app_on_tree_changed(LayoutResult *layout, InteractionState *interact
     interaction_clear_selection(interaction_state);
     interaction_state_set_pick_radius(interaction_state, render_state->config.sphere_radius);
     app_focus_camera_on_layout(camera, layout);
+    if (auto_save)
+    {
+        persistence_auto_save_mark_dirty(auto_save);
+    }
 }
 
 static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                  LayoutResult *layout, InteractionState *interaction_state,
-                                 RenderState *render_state, CameraController *camera, AtLogger *logger)
+                                 RenderState *render_state, CameraController *camera, AtLogger *logger,
+                                 Settings *settings, Settings *persisted_settings, const char *settings_path,
+                                 PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision)
 {
     if (!tree || !layout || !interaction_state || !render_state)
     {
@@ -297,7 +310,7 @@ static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *
             return;
         }
         app_file_state_clear(file_state);
-        app_on_tree_changed(layout, interaction_state, render_state, camera);
+        app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
         app_report_status(ui, logger, "New placeholder tree created.");
     }
     break;
@@ -324,7 +337,7 @@ static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *
             return;
         }
         app_file_state_set(file_state, resolved_path);
-        app_on_tree_changed(layout, interaction_state, render_state, camera);
+        app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
         app_report_status(ui, logger, "Sample tree loaded.");
     }
     break;
@@ -370,6 +383,78 @@ static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *
             app_report_status(ui, logger, message);
         }
         break;
+    case UI_EVENT_SAVE_SETTINGS:
+    {
+        if (!settings || !settings_path)
+        {
+            app_report_error(ui, logger, "Settings context unavailable; unable to save configuration.");
+            break;
+        }
+        char settings_error[256];
+        settings_error[0] = '\0';
+        if (!settings_save(settings, settings_path, settings_error, sizeof(settings_error)))
+        {
+            char message[256];
+            if (settings_error[0] != '\0')
+            {
+                (void)snprintf(message, sizeof(message), "Failed to save settings: %s", settings_error);
+            }
+            else
+            {
+                (void)snprintf(message, sizeof(message), "Failed to save settings to %s", settings_path);
+            }
+            app_report_error(ui, logger, message);
+        }
+        else
+        {
+            if (persisted_settings)
+            {
+                *persisted_settings = *settings;
+            }
+            app_report_status(ui, logger, "Settings saved.");
+        }
+    }
+    break;
+    case UI_EVENT_RELOAD_SETTINGS:
+    {
+        if (!settings || !settings_path)
+        {
+            app_report_error(ui, logger, "Settings context unavailable; unable to reload configuration.");
+            break;
+        }
+        Settings reloaded;
+        settings_init_defaults(&reloaded);
+        char settings_error[256];
+        settings_error[0] = '\0';
+        if (!settings_try_load(&reloaded, settings_path, settings_error, sizeof(settings_error)))
+        {
+            char message[256];
+            if (settings_error[0] != '\0')
+            {
+                (void)snprintf(message, sizeof(message), "Failed to reload settings: %s", settings_error);
+            }
+            else
+            {
+                (void)snprintf(message, sizeof(message), "Failed to reload settings from %s", settings_path);
+            }
+            app_report_error(ui, logger, message);
+        }
+        else
+        {
+            *settings = reloaded;
+            if (persisted_settings)
+            {
+                *persisted_settings = reloaded;
+            }
+            app_apply_settings(settings, render_state, camera, auto_save);
+            if (settings_applied_revision)
+            {
+                *settings_applied_revision = settings_get_revision(settings);
+            }
+            app_report_status(ui, logger, "Settings reloaded from disk.");
+        }
+    }
+    break;
     case UI_EVENT_UNDO:
         app_report_status(ui, logger, "Undo stack pending implementation.");
         break;
@@ -418,7 +503,9 @@ static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *
 
 static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                          LayoutResult *layout, InteractionState *interaction_state,
-                                         RenderState *render_state, CameraController *camera, AtLogger *logger)
+                                         RenderState *render_state, CameraController *camera, AtLogger *logger,
+                                         Settings *settings, Settings *persisted_settings, const char *settings_path,
+                                         PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision)
 {
     if (!ui)
     {
@@ -429,13 +516,15 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
     for (size_t index = 0U; index < count; ++index)
     {
         app_process_ui_event(events[index].type, ui, file_state, tree, layout, interaction_state, render_state, camera,
-                             logger);
+                             logger, settings, persisted_settings, settings_path, auto_save, settings_applied_revision);
     }
 }
 
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                       LayoutResult *layout, InteractionState *interaction_state,
-                                      RenderState *render_state, CameraController *camera, AtLogger *logger)
+                                      RenderState *render_state, CameraController *camera, AtLogger *logger,
+                                      Settings *settings, Settings *persisted_settings, const char *settings_path,
+                                      PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision)
 {
     if (!ui)
     {
@@ -460,7 +549,8 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
         if (!ui_event_enqueue(ui, result.event))
         {
             app_process_ui_event(result.event, ui, file_state, tree, layout, interaction_state, render_state, camera,
-                                 logger);
+                                 logger, settings, persisted_settings, settings_path, auto_save,
+                                 settings_applied_revision);
         }
     }
     /* Manual validation checklist:
@@ -476,6 +566,11 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
     (void)render_state;
     (void)camera;
     (void)logger;
+    (void)settings;
+    (void)persisted_settings;
+    (void)settings_path;
+    (void)auto_save;
+    (void)settings_applied_revision;
 #endif
 }
 
@@ -504,16 +599,47 @@ static FamilyTree *app_create_placeholder_tree(void)
     return tree;
 }
 
-static void app_collect_camera_input(CameraControllerInput *input, bool auto_orbit_enabled)
+static FamilyTree *app_auto_save_tree_supplier(void *user_data)
+{
+    FamilyTree **tree_ref = (FamilyTree **)user_data;
+    if (!tree_ref)
+    {
+        return NULL;
+    }
+    return *tree_ref;
+}
+
+static void app_apply_settings(const Settings *settings, RenderState *render_state, CameraController *camera,
+                               PersistenceAutoSave *auto_save)
+{
+    if (camera)
+    {
+        settings_runtime_apply_camera(settings, camera);
+    }
+    if (render_state)
+    {
+        settings_runtime_apply_render(settings, &render_state->config);
+    }
+    if (auto_save && settings)
+    {
+        persistence_auto_save_set_enabled(auto_save, settings->auto_save_enabled);
+        persistence_auto_save_set_interval(auto_save, settings->auto_save_interval_seconds);
+    }
+}
+
+static void app_collect_camera_input(CameraControllerInput *input, bool auto_orbit_enabled, const Settings *settings)
 {
     if (!input)
     {
         return;
     }
 
-    const float orbit_sensitivity = 0.15f;
-    const float pan_sensitivity = 0.5f;
-    const float pan_keyboard_sensitivity = 1.0f;
+    float orbit_sensitivity = 0.15f;
+    float pan_sensitivity = 0.5f;
+    float pan_keyboard_sensitivity = 1.0f;
+    float zoom_sensitivity = 1.0f;
+    settings_runtime_compute_input_sensitivity(settings, &orbit_sensitivity, &pan_sensitivity,
+                                               &pan_keyboard_sensitivity, &zoom_sensitivity);
     static bool cursor_locked = false;
 
     camera_controller_input_clear(input);
@@ -562,7 +688,7 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
         }
     }
 
-    input->zoom_delta = GetMouseWheelMove();
+    input->zoom_delta = GetMouseWheelMove() * zoom_sensitivity;
 
     const float threshold = 0.001f;
     bool has_manual_orbit = (fabsf(input->yaw_delta) > threshold) || (fabsf(input->pitch_delta) > threshold);
@@ -571,7 +697,12 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
 
     if (auto_orbit_enabled && !has_manual_orbit && !has_manual_pan && !has_manual_zoom)
     {
-        input->yaw_delta -= 0.25f;
+        float orbit_scale = orbit_sensitivity / 0.15f;
+        if (!(orbit_scale > 0.0f))
+        {
+            orbit_scale = 1.0f;
+        }
+        input->yaw_delta -= 0.25f * orbit_scale;
     }
 }
 
@@ -644,6 +775,30 @@ static int app_run(AtLogger *logger)
     CameraController camera_controller;
     camera_controller_init(&camera_controller, &camera_config);
 
+    Settings settings;
+    settings_init_defaults(&settings);
+    Settings persisted_settings = settings;
+    const char *settings_path = APP_SETTINGS_PATH;
+    char settings_error[256];
+    settings_error[0] = '\0';
+    if (settings_try_load(&settings, settings_path, settings_error, sizeof(settings_error)))
+    {
+        persisted_settings = settings;
+        AT_LOG(logger, AT_LOG_INFO, "Loaded settings from %s", settings_path);
+    }
+    else
+    {
+        if (settings_error[0] != '\0')
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Settings load failed (%s); defaults in use.", settings_error);
+        }
+        else
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Settings file not found; defaults in use.");
+        }
+    }
+    unsigned int settings_applied_revision = settings_get_revision(&settings);
+
     char tree_path[512];
     FamilyTree *tree = NULL;
     AppFileState file_state;
@@ -705,6 +860,30 @@ static int app_run(AtLogger *logger)
     interaction_state_init(&interaction_state);
     interaction_state_set_pick_radius(&interaction_state, render_state.config.sphere_radius);
 
+    PersistenceAutoSave auto_save;
+    memset(&auto_save, 0, sizeof(auto_save));
+    bool auto_save_ready = false;
+    char auto_save_error[256];
+    auto_save_error[0] = '\0';
+    PersistenceAutoSaveConfig auto_save_config;
+    auto_save_config.tree_supplier = app_auto_save_tree_supplier;
+    auto_save_config.user_data = &tree;
+    auto_save_config.path = APP_AUTO_SAVE_PATH;
+    auto_save_config.interval_seconds = settings.auto_save_interval_seconds;
+    if (persistence_auto_save_init(&auto_save, &auto_save_config, auto_save_error, sizeof(auto_save_error)))
+    {
+        auto_save_ready = true;
+        persistence_auto_save_set_enabled(&auto_save, settings.auto_save_enabled);
+        persistence_auto_save_mark_dirty(&auto_save);
+    }
+    else
+    {
+        AT_LOG(logger, AT_LOG_WARN, "Auto-save unavailable (%s).", auto_save_error);
+    }
+
+    app_apply_settings(&settings, &render_state, &camera_controller, auto_save_ready ? &auto_save : NULL);
+    settings_applied_revision = settings_get_revision(&settings);
+
     UIContext ui;
     bool ui_ready = ui_init(&ui, graphics_state.width, graphics_state.height);
     AT_LOG_WARN_IF(logger, !ui_ready, "UI overlay unavailable; Nuklear or raylib might be missing.");
@@ -746,7 +925,7 @@ static int app_run(AtLogger *logger)
         }
 
         CameraControllerInput controller_input;
-        app_collect_camera_input(&controller_input, ui_auto_orbit_enabled(&ui));
+        app_collect_camera_input(&controller_input, ui_auto_orbit_enabled(&ui), &settings);
         camera_controller_update(&camera_controller, &controller_input, delta_seconds);
 
         bool ui_frame_started = ui_begin_frame(&ui, delta_seconds);
@@ -775,19 +954,48 @@ static int app_run(AtLogger *logger)
                                    &render_state.config);
         }
 
+        bool settings_dirty = memcmp(&settings, &persisted_settings, sizeof(Settings)) != 0;
+
         if (ui_frame_started)
         {
             ui_draw_overlay(&ui, tree, &layout, &camera_controller, (float)GetFPS(), selected_person, hovered_person,
-                            &render_state.config);
+                            &render_state.config, &settings, settings_dirty);
             ui_end_frame(&ui);
         }
 
+        if (settings_get_revision(&settings) != settings_applied_revision)
+        {
+            app_apply_settings(&settings, &render_state, &camera_controller, auto_save_ready ? &auto_save : NULL);
+            settings_applied_revision = settings_get_revision(&settings);
+        }
+
         app_handle_shortcut_input(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
-                                  &camera_controller, logger);
+                                  &camera_controller, logger, &settings, &persisted_settings, settings_path,
+                                  auto_save_ready ? &auto_save : NULL, &settings_applied_revision);
         EndDrawing();
 
         app_handle_pending_ui_events(&ui, &file_state, &tree, &layout, &interaction_state, &render_state,
-                                     &camera_controller, logger);
+                                     &camera_controller, logger, &settings, &persisted_settings, settings_path,
+                                     auto_save_ready ? &auto_save : NULL, &settings_applied_revision);
+
+        if (auto_save_ready)
+        {
+            if (!persistence_auto_save_tick(&auto_save, delta_seconds, auto_save_error, sizeof(auto_save_error)))
+            {
+                AT_LOG(logger, AT_LOG_WARN, "Auto-save tick failed: %s", auto_save_error);
+                auto_save_error[0] = '\0';
+            }
+        }
+    }
+
+    if (auto_save_ready)
+    {
+        if (!persistence_auto_save_flush(&auto_save, auto_save_error, sizeof(auto_save_error)) &&
+            auto_save_error[0] != '\0')
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Auto-save flush failed on shutdown: %s", auto_save_error);
+        }
+        persistence_auto_save_shutdown(&auto_save);
     }
 
     EnableCursor();

@@ -47,6 +47,7 @@ extern "C"
     bool persistence_auto_save_update_path(PersistenceAutoSave *state, const char *path, char *error_buffer,
                                            size_t error_buffer_size);
     void persistence_auto_save_set_enabled(PersistenceAutoSave *state, bool enabled);
+    void persistence_auto_save_set_interval(PersistenceAutoSave *state, unsigned int interval_seconds);
     bool persistence_auto_save_set_tree_supplier(PersistenceAutoSave *state,
                                                  FamilyTree *(*tree_supplier)(void *user_data), void *user_data,
                                                  char *error_buffer, size_t error_buffer_size);

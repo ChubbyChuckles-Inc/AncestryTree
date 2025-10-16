@@ -43,3 +43,5 @@ All notable changes to this project will be documented in this file. The format 
 - Quick Help overlay captures onboarding notes, troubleshooting tips, and the active keyboard shortcut map for testers.
 - Keyboard shortcut mapper consolidates Ctrl+N/O/S/Shift+S/Z/Y plus Space and Escape into UI events with automated
   regression tests guarding the input routing.
+- Settings control panel offering graphics presets, camera sensitivities, color themes, and auto-save cadence with
+  disk persistence, runtime application, and dedicated unit coverage for settings runtime helpers.

@@ -165,10 +165,41 @@ TEST(test_persistence_auto_save_respects_disable)
     fixture_cleanup(&fixture);
 }
 
+TEST(test_persistence_auto_save_interval_updates_reset_timer)
+{
+    AutoSaveFixture fixture;
+    fixture_init(&fixture);
+
+    char auto_save_path[128];
+    test_temp_file_path(auto_save_path, sizeof(auto_save_path), "interval.json");
+    test_delete_file(auto_save_path);
+
+    PersistenceAutoSave state;
+    memset(&state, 0, sizeof(state));
+    PersistenceAutoSaveConfig config;
+    config.tree_supplier = fixture_tree_supplier;
+    config.user_data = &fixture;
+    config.path = auto_save_path;
+    config.interval_seconds = 15U;
+
+    char error[256];
+    ASSERT_TRUE(persistence_auto_save_init(&state, &config, error, sizeof(error)));
+
+    state.elapsed_seconds = 9.5;
+    persistence_auto_save_set_interval(&state, 42U);
+    ASSERT_EQ(state.interval_seconds, 42U);
+    ASSERT_FLOAT_NEAR(state.elapsed_seconds, 0.0f, 0.0001f);
+
+    persistence_auto_save_shutdown(&state);
+    test_delete_file(auto_save_path);
+    fixture_cleanup(&fixture);
+}
+
 void register_persistence_auto_save_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_persistence_auto_save_triggers_after_interval);
     REGISTER_TEST(registry, test_persistence_auto_save_flush_saves_immediately);
     REGISTER_TEST(registry, test_persistence_auto_save_handles_path_updates);
     REGISTER_TEST(registry, test_persistence_auto_save_respects_disable);
+    REGISTER_TEST(registry, test_persistence_auto_save_interval_updates_reset_timer);
 }
