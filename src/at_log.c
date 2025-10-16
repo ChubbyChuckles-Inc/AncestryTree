@@ -1,8 +1,11 @@
 #include "at_log.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 void at_logger_init(AtLogger *logger)
@@ -12,6 +15,8 @@ void at_logger_init(AtLogger *logger)
         return;
     }
     logger->minimum_level = AT_LOG_INFO;
+    logger->console_enabled = true;
+    logger->file = NULL;
 }
 
 void at_logger_set_level(AtLogger *logger, AtLogLevel level)
@@ -72,13 +77,60 @@ void at_logger_message_v(AtLogger *logger, AtLogLevel level, const char *file, i
         timestamp[0] = '\0';
     }
 
-    fprintf(stderr, "%s [%s] (%s:%d) ", timestamp, at_log_level_to_string(level), file, line);
-    vfprintf(stderr, format, args);
-    fputc('\n', stderr);
+    char stack_buffer[256];
+    char *message = stack_buffer;
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int required = vsnprintf(stack_buffer, sizeof(stack_buffer), format, args_copy);
+    va_end(args_copy);
 
-    if (level == AT_LOG_FATAL)
+    if (required < 0)
     {
-        fflush(stderr);
+        (void)snprintf(stack_buffer, sizeof(stack_buffer), "<logging error>");
+        required = (int)strlen(stack_buffer);
+    }
+    else if ((size_t)required >= sizeof(stack_buffer))
+    {
+        size_t length = (size_t)required + 1U;
+        message = (char *)malloc(length);
+        if (message)
+        {
+            va_list args_retry;
+            va_copy(args_retry, args);
+            int written = vsnprintf(message, length, format, args_retry);
+            va_end(args_retry);
+            if (written < 0)
+            {
+                free(message);
+                message = stack_buffer;
+                (void)snprintf(stack_buffer, sizeof(stack_buffer), "<logging error>");
+            }
+        }
+        else
+        {
+            message = stack_buffer;
+            (void)snprintf(stack_buffer, sizeof(stack_buffer), "<logging allocation failure>");
+        }
+    }
+
+    if (logger->console_enabled)
+    {
+        fprintf(stderr, "%s [%s] (%s:%d) %s\n", timestamp, at_log_level_to_string(level), file, line, message);
+        if (level == AT_LOG_FATAL)
+        {
+            fflush(stderr);
+        }
+    }
+
+    if (logger->file)
+    {
+        fprintf(logger->file, "%s [%s] (%s:%d) %s\n", timestamp, at_log_level_to_string(level), file, line, message);
+        fflush(logger->file);
+    }
+
+    if (message != stack_buffer)
+    {
+        free(message);
     }
 }
 
@@ -88,4 +140,61 @@ void at_logger_message(AtLogger *logger, AtLogLevel level, const char *file, int
     va_start(args, format);
     at_logger_message_v(logger, level, file, line, format, args);
     va_end(args);
+}
+
+void at_logger_enable_console(AtLogger *logger, bool enabled)
+{
+    if (!logger)
+    {
+        return;
+    }
+    logger->console_enabled = enabled;
+}
+
+bool at_logger_open_file(AtLogger *logger, const char *path, char *error_buffer, size_t error_buffer_size)
+{
+    if (!logger || !path || path[0] == '\0')
+    {
+        if (error_buffer && error_buffer_size > 0U)
+        {
+            (void)snprintf(error_buffer, error_buffer_size, "Invalid logger or path");
+        }
+        return false;
+    }
+
+    FILE *file = NULL;
+#if defined(_MSC_VER)
+    if (fopen_s(&file, path, "wb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "wb");
+#endif
+    if (!file)
+    {
+        if (error_buffer && error_buffer_size > 0U)
+        {
+            (void)snprintf(error_buffer, error_buffer_size, "Unable to open log file '%s' (errno=%d)", path, errno);
+        }
+        return false;
+    }
+
+    at_logger_close_file(logger);
+    logger->file = file;
+    if (error_buffer && error_buffer_size > 0U)
+    {
+        error_buffer[0] = '\0';
+    }
+    return true;
+}
+
+void at_logger_close_file(AtLogger *logger)
+{
+    if (!logger || !logger->file)
+    {
+        return;
+    }
+    fclose(logger->file);
+    logger->file = NULL;
 }

@@ -4,6 +4,7 @@
 
 void register_string_tests(TestRegistry *registry);
 void register_memory_tests(TestRegistry *registry);
+void register_log_tests(TestRegistry *registry);
 void register_person_tests(TestRegistry *registry);
 void register_tree_tests(TestRegistry *registry);
 void register_timeline_tests(TestRegistry *registry);
@@ -24,6 +25,7 @@ void register_settings_runtime_tests(TestRegistry *registry);
 void register_search_tests(TestRegistry *registry);
 void register_integration_tests(TestRegistry *registry);
 void register_app_state_tests(TestRegistry *registry);
+void register_error_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -33,6 +35,7 @@ int main(void)
 
     register_string_tests(&registry);
     register_memory_tests(&registry);
+    register_log_tests(&registry);
     register_person_tests(&registry);
     register_tree_tests(&registry);
     register_timeline_tests(&registry);
@@ -53,6 +56,7 @@ int main(void)
     register_settings_runtime_tests(&registry);
     register_search_tests(&registry);
     register_integration_tests(&registry);
+    register_error_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

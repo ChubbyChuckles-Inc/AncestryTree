@@ -536,15 +536,15 @@ PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
     [x] Clear redo stack on new action
 
 7.5 Error Handling & Logging
-  [ ] Implement logging system in src/log.c
-      [ ] Log levels (DEBUG, INFO, WARN, ERROR, FATAL)
-      [ ] Console output
-      [ ] File output (optional)
-      [ ] Timestamps
-  [ ] Add error handling macros
-      [ ] CHECK_NULL
-      [ ] CHECK_ALLOC
-      [ ] TRY/CATCH simulation (setjmp/longjmp)
+  [x] Implement logging system in src/log.c
+      [x] Log levels (DEBUG, INFO, WARN, ERROR, FATAL)
+      [x] Console output
+      [x] File output (optional)
+      [x] Timestamps
+  [x] Add error handling macros
+      [x] CHECK_NULL
+      [x] CHECK_ALLOC
+      [x] TRY/CATCH simulation (setjmp/longjmp)
   [ ] Implement error_dialog() function
       [ ] Display error messages to user
       [ ] Log errors to file
