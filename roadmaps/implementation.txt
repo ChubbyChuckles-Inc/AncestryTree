@@ -180,9 +180,9 @@ PHASE 3: DATA PERSISTENCE & SERIALIZATION
   [x] Implement asset_cleanup() function
       [x] Remove unreferenced assets
       [x] Verify asset integrity
-  [ ] Implement asset_export() function
-      [ ] Package tree with all assets
-      [ ] Create portable archive
+  [x] Implement asset_export() function
+      [x] Package tree with all assets
+      [x] Create portable archive
 
 ================================================================================
 PHASE 4: 3D GRAPHICS CORE (RAYLIB)

@@ -63,5 +63,7 @@ All notable changes to this project will be documented in this file. The format 
   and relative-path emission, guarded by automated tests.
 - Asset cleanup routine walks family tree references, validates imported media, prunes unreferenced files from the
   project assets directory, and ships with dedicated unit tests covering removal and integrity failure scenarios.
+- Asset export packaging now assembles deterministic `.atpkg` archives containing the tree JSON and all referenced
+  media, enabling portable sharing with automated regression coverage.
 - Debug builds now activate a central allocation tracker with leak diagnostics, runtime stats queries, and new unit
   tests verifying realloc safety and outstanding allocation reporting.

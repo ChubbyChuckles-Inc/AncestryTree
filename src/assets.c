@@ -39,6 +39,8 @@ static void asset_set_error(char *error_buffer, size_t error_capacity, const cha
     }
 }
 
+static void asset_normalise_path(char *path);
+
 static bool asset_file_exists(const char *path)
 {
     if (!path)
@@ -114,6 +116,38 @@ static bool asset_ensure_directories(const char *path)
         }
     }
     return asset_create_directory(buffer);
+}
+
+static bool asset_ensure_parent_directories(const char *path)
+{
+    if (!path || path[0] == '\0')
+    {
+        return false;
+    }
+    char buffer[ASSET_PATH_MAX];
+    size_t length = strlen(path);
+    if (length + 1U >= sizeof(buffer))
+    {
+        return false;
+    }
+    memcpy(buffer, path, length + 1U);
+    asset_normalise_path(buffer);
+    size_t index = strlen(buffer);
+    while (index > 0U)
+    {
+        char character = buffer[index - 1U];
+        if (character == '/' || character == '\\')
+        {
+            buffer[index - 1U] = '\0';
+            break;
+        }
+        index--;
+    }
+    if (buffer[0] == '\0')
+    {
+        return true;
+    }
+    return asset_ensure_directories(buffer);
 }
 
 static void asset_normalise_path(char *path)
@@ -250,6 +284,36 @@ static bool asset_path_list_add_unique(AssetPathList *list, const char *path)
     }
     list->items[list->count++] = copy;
     return true;
+}
+
+static int asset_path_compare(const void *lhs, const void *rhs)
+{
+    const char *const *left = (const char *const *)lhs;
+    const char *const *right = (const char *const *)rhs;
+    const char *left_value = left ? *left : NULL;
+    const char *right_value = right ? *right : NULL;
+    if (!left_value && !right_value)
+    {
+        return 0;
+    }
+    if (!left_value)
+    {
+        return -1;
+    }
+    if (!right_value)
+    {
+        return 1;
+    }
+    return strcmp(left_value, right_value);
+}
+
+static void asset_path_list_sort(AssetPathList *list)
+{
+    if (!list || list->count <= 1U)
+    {
+        return;
+    }
+    qsort(list->items, list->count, sizeof(char *), asset_path_compare);
 }
 
 #if defined(_WIN32)
@@ -1192,4 +1256,296 @@ bool asset_cleanup(const FamilyTree *tree, const char *asset_root, const char *i
     }
 
     return success;
+}
+
+static bool asset_write_u16(FILE *file, uint16_t value)
+{
+    unsigned char buffer[2];
+    buffer[0] = (unsigned char)(value & 0xFFU);
+    buffer[1] = (unsigned char)((value >> 8) & 0xFFU);
+    return fwrite(buffer, 1U, sizeof(buffer), file) == sizeof(buffer);
+}
+
+static bool asset_write_u32(FILE *file, uint32_t value)
+{
+    unsigned char buffer[4];
+    buffer[0] = (unsigned char)(value & 0xFFU);
+    buffer[1] = (unsigned char)((value >> 8) & 0xFFU);
+    buffer[2] = (unsigned char)((value >> 16) & 0xFFU);
+    buffer[3] = (unsigned char)((value >> 24) & 0xFFU);
+    return fwrite(buffer, 1U, sizeof(buffer), file) == sizeof(buffer);
+}
+
+static bool asset_write_u64(FILE *file, uint64_t value)
+{
+    unsigned char buffer[8];
+    buffer[0] = (unsigned char)(value & 0xFFU);
+    buffer[1] = (unsigned char)((value >> 8) & 0xFFU);
+    buffer[2] = (unsigned char)((value >> 16) & 0xFFU);
+    buffer[3] = (unsigned char)((value >> 24) & 0xFFU);
+    buffer[4] = (unsigned char)((value >> 32) & 0xFFU);
+    buffer[5] = (unsigned char)((value >> 40) & 0xFFU);
+    buffer[6] = (unsigned char)((value >> 48) & 0xFFU);
+    buffer[7] = (unsigned char)((value >> 56) & 0xFFU);
+    return fwrite(buffer, 1U, sizeof(buffer), file) == sizeof(buffer);
+}
+
+static bool asset_package_write_entry(FILE *package, const char *entry_path, const char *source_path,
+                                      AssetExportStats *stats, char *error_buffer, size_t error_capacity)
+{
+    if (!package || !entry_path || !source_path)
+    {
+        return false;
+    }
+
+    size_t file_size = 0U;
+    if (!asset_get_file_size(source_path, &file_size))
+    {
+        char message[ASSET_PATH_MAX + 64U];
+        (void)snprintf(message, sizeof(message), "Failed to stat file for export: %s", source_path);
+        asset_set_error_once(error_buffer, error_capacity, message);
+        return false;
+    }
+
+    FILE *source = NULL;
+#if defined(_WIN32)
+    if (fopen_s(&source, source_path, "rb") != 0)
+    {
+        source = NULL;
+    }
+#else
+    source = fopen(source_path, "rb");
+#endif
+    if (!source)
+    {
+        char message[ASSET_PATH_MAX + 64U];
+        (void)snprintf(message, sizeof(message), "Failed to open file for export: %s", source_path);
+        asset_set_error_once(error_buffer, error_capacity, message);
+        return false;
+    }
+
+    char normalized_path[ASSET_PATH_MAX + 32U];
+    if (!asset_prepare_relative_path(entry_path, normalized_path, sizeof(normalized_path)))
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Export entry path invalid");
+        fclose(source);
+        return false;
+    }
+    size_t path_length = strlen(normalized_path);
+    if (path_length == 0U || path_length > UINT16_MAX)
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Export entry path too long");
+        fclose(source);
+        return false;
+    }
+
+    bool success = asset_write_u16(package, (uint16_t)path_length);
+    if (success)
+    {
+        success = fwrite(normalized_path, 1U, path_length, package) == path_length;
+    }
+    if (success)
+    {
+        success = asset_write_u64(package, (uint64_t)file_size);
+    }
+
+    unsigned char buffer[4096];
+    size_t total_written = 0U;
+    while (success && total_written < file_size)
+    {
+        size_t remaining = file_size - total_written;
+        size_t chunk_size = remaining > sizeof(buffer) ? sizeof(buffer) : remaining;
+        size_t read = fread(buffer, 1U, chunk_size, source);
+        if (read == 0U)
+        {
+            if (ferror(source))
+            {
+                asset_set_error_once(error_buffer, error_capacity, "Failed to read asset while exporting");
+            }
+            success = false;
+            break;
+        }
+        if (fwrite(buffer, 1U, read, package) != read)
+        {
+            asset_set_error_once(error_buffer, error_capacity, "Failed to write package data");
+            success = false;
+            break;
+        }
+        total_written += read;
+    }
+
+    fclose(source);
+    if (success && total_written != file_size)
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Incomplete asset export");
+        success = false;
+    }
+
+    if (success && stats)
+    {
+        stats->exported_files += 1U;
+        stats->exported_bytes += file_size;
+    }
+
+    return success;
+}
+
+bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tree_json_path,
+                  const char *package_path, AssetExportStats *stats, char *error_buffer, size_t error_capacity)
+{
+    AssetExportStats local_stats;
+    local_stats.referenced_files = 0U;
+    local_stats.exported_files = 0U;
+    local_stats.exported_bytes = 0U;
+
+    if (stats)
+    {
+        *stats = local_stats;
+    }
+
+    if (!tree || !asset_root || asset_root[0] == '\0' || !tree_json_path || tree_json_path[0] == '\0' ||
+        !package_path || package_path[0] == '\0')
+    {
+        asset_set_error(error_buffer, error_capacity, "Invalid parameters for asset export");
+        return false;
+    }
+
+    if (!asset_file_exists(tree_json_path))
+    {
+        asset_set_error(error_buffer, error_capacity, "Tree JSON file missing for export");
+        return false;
+    }
+
+    asset_set_error(error_buffer, error_capacity, "");
+
+    AssetPathList references;
+    asset_path_list_init(&references);
+
+    AssetCleanupStats verification_stats;
+    verification_stats.referenced_files = 0U;
+    verification_stats.removed_files = 0U;
+    verification_stats.missing_files = 0U;
+    verification_stats.integrity_failures = 0U;
+
+    bool success = asset_collect_tree_assets(tree, &references, &verification_stats, error_buffer, error_capacity);
+    if (!success)
+    {
+        asset_path_list_dispose(&references);
+        return false;
+    }
+
+    local_stats.referenced_files = references.count;
+
+    if (!asset_verify_references(asset_root, &references, &verification_stats, error_buffer, error_capacity))
+    {
+        asset_path_list_dispose(&references);
+        if (stats)
+        {
+            *stats = local_stats;
+        }
+        return false;
+    }
+
+    asset_path_list_sort(&references);
+
+    if (!asset_ensure_parent_directories(package_path))
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Failed to prepare export directories");
+        asset_path_list_dispose(&references);
+        if (stats)
+        {
+            *stats = local_stats;
+        }
+        return false;
+    }
+
+    FILE *package = NULL;
+#if defined(_WIN32)
+    if (fopen_s(&package, package_path, "wb") != 0)
+    {
+        package = NULL;
+    }
+#else
+    package = fopen(package_path, "wb");
+#endif
+    if (!package)
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Unable to open export package for writing");
+        asset_path_list_dispose(&references);
+        if (stats)
+        {
+            *stats = local_stats;
+        }
+        return false;
+    }
+
+    bool write_ok = true;
+    const unsigned char magic[5] = {'A', 'T', 'P', 'K', 'G'};
+    if (fwrite(magic, 1U, sizeof(magic), package) != sizeof(magic))
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Failed to write package header");
+        write_ok = false;
+    }
+    if (write_ok && !asset_write_u32(package, 1U))
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Failed to write package version");
+        write_ok = false;
+    }
+    uint32_t file_total = (uint32_t)(references.count + 1U);
+    if (write_ok && !asset_write_u32(package, file_total))
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Failed to write package manifest");
+        write_ok = false;
+    }
+
+    if (write_ok)
+    {
+        write_ok = asset_package_write_entry(package, "tree.json", tree_json_path, &local_stats, error_buffer,
+                                             error_capacity);
+    }
+
+    for (size_t index = 0U; write_ok && index < references.count; ++index)
+    {
+        char entry_path[ASSET_PATH_MAX + 32U];
+        int written = snprintf(entry_path, sizeof(entry_path), "assets/%s", references.items[index]);
+        if (written < 0 || (size_t)written >= sizeof(entry_path))
+        {
+            asset_set_error_once(error_buffer, error_capacity, "Export entry path too long");
+            write_ok = false;
+            break;
+        }
+
+        char absolute[ASSET_PATH_MAX];
+        if (!asset_join_path(absolute, sizeof(absolute), asset_root, references.items[index]))
+        {
+            asset_set_error_once(error_buffer, error_capacity, "Failed to build absolute asset path for export");
+            write_ok = false;
+            break;
+        }
+        asset_normalise_path(absolute);
+
+        write_ok = asset_package_write_entry(package, entry_path, absolute, &local_stats, error_buffer, error_capacity);
+    }
+
+    if (write_ok && fflush(package) != 0)
+    {
+        asset_set_error_once(error_buffer, error_capacity, "Failed to flush export package");
+        write_ok = false;
+    }
+
+    fclose(package);
+
+    if (!write_ok)
+    {
+        (void)asset_remove_file_native(package_path);
+    }
+
+    asset_path_list_dispose(&references);
+
+    if (stats)
+    {
+        *stats = local_stats;
+    }
+
+    return write_ok;
 }

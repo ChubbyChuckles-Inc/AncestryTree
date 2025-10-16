@@ -27,11 +27,21 @@ extern "C"
         size_t integrity_failures; /* Referenced files that failed integrity checks (e.g., zero length). */
     } AssetCleanupStats;
 
+    typedef struct AssetExportStats
+    {
+        size_t referenced_files; /* Referenced asset count included in the package (excludes the tree JSON). */
+        size_t exported_files;   /* Total files written to the package, including the tree JSON. */
+        size_t exported_bytes;   /* Aggregate bytes written across all packaged files. */
+    } AssetExportStats;
+
     bool asset_copy(const AssetCopyRequest *request, char *out_relative_path, size_t relative_capacity,
                     char *error_buffer, size_t error_capacity);
 
     bool asset_cleanup(const struct FamilyTree *tree, const char *asset_root, const char *import_subdirectory,
                        AssetCleanupStats *stats, char *error_buffer, size_t error_capacity);
+
+    bool asset_export(const struct FamilyTree *tree, const char *asset_root, const char *tree_json_path,
+                      const char *package_path, AssetExportStats *stats, char *error_buffer, size_t error_capacity);
 
 #ifdef __cplusplus
 }
