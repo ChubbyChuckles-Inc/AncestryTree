@@ -1,4 +1,5 @@
 #include "app.h"
+#include "app_cli.h"
 #include "at_log.h"
 #include "camera_controller.h"
 #include "graphics.h"
@@ -877,7 +878,7 @@ static void app_render_scene_basic(const LayoutResult *layout, const CameraContr
     EndMode3D();
 }
 
-static int app_run(AtLogger *logger)
+static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 {
     if (!graphics_has_raylib_support())
     {
@@ -926,29 +927,71 @@ static int app_run(AtLogger *logger)
     }
     unsigned int settings_applied_revision = settings_get_revision(&settings);
 
-    char tree_path[512];
     FamilyTree *tree = NULL;
     AppFileState file_state;
     app_file_state_clear(&file_state);
+    bool tree_loaded_from_cli = false;
     bool tree_loaded_from_asset = false;
     bool placeholder_used = false;
-    if (app_try_find_asset("assets/example_tree.json", tree_path, sizeof(tree_path)))
+
+    char initial_status[256];
+    initial_status[0] = '\0';
+    char initial_warning[256];
+    initial_warning[0] = '\0';
+    bool warning_pending = false;
+
+    if (options && options->tree_path[0] != '\0')
     {
-        AT_LOG(logger, AT_LOG_INFO, "Loading sample tree from %s", tree_path);
-        tree = persistence_tree_load(tree_path, error_buffer, sizeof(error_buffer));
+        AT_LOG(logger, AT_LOG_INFO, "Loading tree from %s", options->tree_path);
+        tree = persistence_tree_load(options->tree_path, error_buffer, sizeof(error_buffer));
         if (!tree)
         {
-            AT_LOG(logger, AT_LOG_WARN, "Failed to load sample tree (%s). Using placeholder data.", error_buffer);
+            AT_LOG(logger, AT_LOG_ERROR, "Failed to load tree '%s' (%s).", options->tree_path, error_buffer);
+            (void)snprintf(initial_warning, sizeof(initial_warning),
+                           "Startup load failed for '%s'. Placeholder data will be used.", options->tree_path);
+            warning_pending = true;
         }
         else
         {
-            tree_loaded_from_asset = true;
-            app_file_state_set(&file_state, tree_path);
+            tree_loaded_from_cli = true;
+            app_file_state_set(&file_state, options->tree_path);
+            (void)snprintf(initial_status, sizeof(initial_status), "Loaded tree from %s.", options->tree_path);
         }
     }
-    else
+
+    if (!tree && (!options || !options->disable_sample_tree))
     {
-        AT_LOG(logger, AT_LOG_WARN, "Sample tree asset not found; using placeholder data.");
+        char tree_path[512];
+        if (app_try_find_asset("assets/example_tree.json", tree_path, sizeof(tree_path)))
+        {
+            AT_LOG(logger, AT_LOG_INFO, "Loading sample tree from %s", tree_path);
+            tree = persistence_tree_load(tree_path, error_buffer, sizeof(error_buffer));
+            if (!tree)
+            {
+                AT_LOG(logger, AT_LOG_WARN, "Failed to load sample tree (%s). Using placeholder data.",
+                       error_buffer);
+                if (!warning_pending)
+                {
+                    (void)snprintf(initial_warning, sizeof(initial_warning),
+                                   "Failed to load bundled sample tree (%s). Placeholder data will be used.",
+                                   error_buffer);
+                    warning_pending = true;
+                }
+            }
+            else
+            {
+                tree_loaded_from_asset = true;
+                app_file_state_set(&file_state, tree_path);
+                if (initial_status[0] == '\0')
+                {
+                    (void)snprintf(initial_status, sizeof(initial_status), "Sample tree loaded.");
+                }
+            }
+        }
+        else
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Sample tree asset not found; using placeholder data.");
+        }
     }
 
     if (!tree)
@@ -962,6 +1005,10 @@ static int app_run(AtLogger *logger)
         }
         placeholder_used = true;
         app_file_state_clear(&file_state);
+        if (initial_status[0] == '\0')
+        {
+            (void)snprintf(initial_status, sizeof(initial_status), "Placeholder tree initialised.");
+        }
     }
 
     LayoutResult layout = layout_calculate(tree);
@@ -1031,15 +1078,25 @@ static int app_run(AtLogger *logger)
     bool ui_ready = ui_init(&ui, graphics_state.width, graphics_state.height);
     AT_LOG_WARN_IF(logger, !ui_ready, "UI overlay unavailable; Nuklear or raylib might be missing.");
 
-    if (tree_loaded_from_asset)
+    if (tree_loaded_from_asset || tree_loaded_from_cli)
     {
-        app_report_status(&ui, logger, "Sample tree loaded.");
         app_state_clear_tree_dirty(&app_state);
     }
     else if (placeholder_used)
     {
-        app_report_status(&ui, logger, "Placeholder tree initialised.");
         app_state_mark_tree_dirty(&app_state);
+    }
+
+    if (ui_ready)
+    {
+        if (initial_status[0] != '\0')
+        {
+            (void)ui_notify_status(&ui, initial_status);
+        }
+        if (warning_pending && initial_warning[0] != '\0')
+        {
+            (void)ui_show_error_dialog(&ui, "Startup Warning", initial_warning);
+        }
     }
 
     SetTargetFPS((int)config.target_fps);
@@ -1155,11 +1212,28 @@ static int app_run(AtLogger *logger)
 
 #endif /* ANCESTRYTREE_HAVE_RAYLIB */
 
-int main(void)
+int main(int argc, char **argv)
 {
     AtLogger logger;
     at_logger_init(&logger);
-    at_logger_set_level(&logger, AT_LOG_INFO);
+    AppLaunchOptions launch_options;
+    char cli_error[256];
+    const char *program_name = (argc > 0 && argv) ? argv[0] : "ancestrytree";
+    if (!app_cli_parse(argc, argv ? argv : NULL, &launch_options, cli_error, sizeof(cli_error)))
+    {
+        if (cli_error[0] != '\0')
+        {
+            fprintf(stderr, "Error: %s\n\n", cli_error);
+        }
+        app_cli_print_usage(program_name);
+        return 1;
+    }
+    if (launch_options.show_help)
+    {
+        app_cli_print_usage(program_name);
+        return 0;
+    }
+    at_logger_set_level(&logger, launch_options.log_level);
     char log_error[256];
     log_error[0] = '\0';
     if (at_logger_open_file(&logger, APP_LOG_PATH, log_error, sizeof(log_error)))
@@ -1177,7 +1251,7 @@ int main(void)
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     AT_LOG(&logger, AT_LOG_INFO, "AncestryTree prototype starting.");
-    return app_run(&logger);
+    return app_run(&logger, &launch_options);
 #else
     AT_LOG(&logger, AT_LOG_INFO, "AncestryTree prototype starting.");
     AT_LOG(&logger, AT_LOG_INFO, "Rendering systems are not yet initialized in this build.");
