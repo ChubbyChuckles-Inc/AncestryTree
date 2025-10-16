@@ -24,6 +24,7 @@ extern "C"
         float rotation_speed;
         float zoom_speed;
         float pan_speed;
+        float smoothing_half_life_seconds;
     } CameraControllerConfig;
 
     typedef struct CameraControllerInput
@@ -41,10 +42,13 @@ extern "C"
         float target[3];
         float up[3];
         float position[3];
+        float view_target[3];
+        float view_position[3];
         float yaw;
         float pitch;
         float radius;
         bool initialized;
+        bool view_valid;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
         struct Camera3D camera;
 #endif

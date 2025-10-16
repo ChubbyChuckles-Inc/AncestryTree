@@ -1,5 +1,7 @@
 #include "render.h"
 
+#include "render_internal.h"
+
 #include "layout.h"
 #include "person.h"
 #include "test_framework.h"
@@ -139,6 +141,103 @@ TEST(test_render_collect_spouse_segments_ignores_duplicates)
     person_destroy(one);
 }
 
+TEST(test_render_batcher_plan_groups_alive_and_deceased)
+{
+    Person *alive_a = person_create(31U);
+    Person *alive_b = person_create(32U);
+    Person *deceased = person_create(33U);
+    ASSERT_TRUE(alive_a && alive_b && deceased);
+    alive_a->is_alive = true;
+    alive_b->is_alive = true;
+    deceased->is_alive = false;
+
+    LayoutResult layout;
+    layout.count = 3U;
+    layout.nodes = calloc(layout.count, sizeof(LayoutNode));
+    ASSERT_NOT_NULL(layout.nodes);
+    layout.nodes[0].person = alive_a;
+    layout.nodes[1].person = alive_b;
+    layout.nodes[2].person = deceased;
+
+    const LayoutNode *alive_nodes[3] = {0};
+    const LayoutNode *deceased_nodes[3] = {0};
+    RenderBatcherGrouping grouping;
+    render_batcher_grouping_reset(&grouping);
+    ASSERT_TRUE(render_batcher_plan(&layout, NULL, NULL, &grouping, alive_nodes, 3U, deceased_nodes, 3U));
+    ASSERT_EQ(grouping.alive_count, 2U);
+    ASSERT_EQ(grouping.deceased_count, 1U);
+    ASSERT_TRUE(grouping.alive_nodes[0]->person->is_alive);
+    ASSERT_TRUE(grouping.alive_nodes[1]->person->is_alive);
+    ASSERT_FALSE(grouping.deceased_nodes[0]->person->is_alive);
+
+    free(layout.nodes);
+    person_destroy(deceased);
+    person_destroy(alive_b);
+    person_destroy(alive_a);
+}
+
+TEST(test_render_batcher_plan_handles_selected_and_hovered)
+{
+    Person *alive = person_create(40U);
+    Person *hover = person_create(41U);
+    Person *deceased = person_create(42U);
+    ASSERT_TRUE(alive && hover && deceased);
+    alive->is_alive = true;
+    hover->is_alive = true;
+    deceased->is_alive = false;
+
+    LayoutResult layout;
+    layout.count = 3U;
+    layout.nodes = calloc(layout.count, sizeof(LayoutNode));
+    ASSERT_NOT_NULL(layout.nodes);
+    layout.nodes[0].person = alive;
+    layout.nodes[1].person = hover;
+    layout.nodes[2].person = deceased;
+
+    const LayoutNode *alive_nodes[3] = {0};
+    const LayoutNode *deceased_nodes[3] = {0};
+    RenderBatcherGrouping grouping;
+    render_batcher_grouping_reset(&grouping);
+    ASSERT_TRUE(render_batcher_plan(&layout, alive, hover, &grouping, alive_nodes, 3U, deceased_nodes, 3U));
+    ASSERT_EQ(grouping.alive_count, 0U);
+    ASSERT_EQ(grouping.deceased_count, 1U);
+    ASSERT_NOT_NULL(grouping.selected_node);
+    ASSERT_EQ(grouping.selected_node->person, alive);
+    ASSERT_NOT_NULL(grouping.hovered_node);
+    ASSERT_EQ(grouping.hovered_node->person, hover);
+    ASSERT_EQ(grouping.deceased_nodes[0]->person, deceased);
+
+    free(layout.nodes);
+    person_destroy(deceased);
+    person_destroy(hover);
+    person_destroy(alive);
+}
+
+TEST(test_render_batcher_plan_handles_hover_equal_selected)
+{
+    Person *alive = person_create(50U);
+    ASSERT_NOT_NULL(alive);
+    alive->is_alive = true;
+
+    LayoutResult layout;
+    layout.count = 1U;
+    layout.nodes = calloc(layout.count, sizeof(LayoutNode));
+    ASSERT_NOT_NULL(layout.nodes);
+    layout.nodes[0].person = alive;
+
+    const LayoutNode *alive_nodes[1] = {0};
+    const LayoutNode *deceased_nodes[1] = {0};
+    RenderBatcherGrouping grouping;
+    render_batcher_grouping_reset(&grouping);
+    ASSERT_TRUE(render_batcher_plan(&layout, alive, alive, &grouping, alive_nodes, 1U, deceased_nodes, 1U));
+    ASSERT_EQ(grouping.alive_count, 0U);
+    ASSERT_NULL(grouping.hovered_node);
+    ASSERT_NOT_NULL(grouping.selected_node);
+
+    free(layout.nodes);
+    person_destroy(alive);
+}
+
 TEST(test_render_resize_updates_dimensions_when_raylib_missing)
 {
     RenderState state;
@@ -179,6 +278,9 @@ void register_render_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_render_find_person_position_returns_expected_coordinates);
     REGISTER_TEST(registry, test_render_collect_parent_child_segments_collects_all_children);
     REGISTER_TEST(registry, test_render_collect_spouse_segments_ignores_duplicates);
+    REGISTER_TEST(registry, test_render_batcher_plan_groups_alive_and_deceased);
+    REGISTER_TEST(registry, test_render_batcher_plan_handles_selected_and_hovered);
+    REGISTER_TEST(registry, test_render_batcher_plan_handles_hover_equal_selected);
     REGISTER_TEST(registry, test_render_resize_updates_dimensions_when_raylib_missing);
     REGISTER_TEST(registry, test_render_resize_rejects_zero_dimension);
 }

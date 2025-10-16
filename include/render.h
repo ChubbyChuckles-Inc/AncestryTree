@@ -10,6 +10,7 @@
 
 struct CameraController;
 struct LayoutResult;
+struct LayoutNode;
 struct Person;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 struct RenderLabelSystem;
@@ -54,6 +55,9 @@ typedef struct RenderState
     int render_width;
     int render_height;
     bool render_target_ready;
+    const struct LayoutNode **batch_alive_nodes;
+    const struct LayoutNode **batch_deceased_nodes;
+    size_t batch_capacity;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     struct Shader glow_shader;
     int glow_intensity_loc;

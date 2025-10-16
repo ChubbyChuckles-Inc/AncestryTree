@@ -12,3 +12,5 @@ Output format:
 - Validation results (e.g., "Tests passed: 5/5, no regressions detected").
 - Comprehensive commit message
 - Add changes to CHANGELOG.md
+
+Compile the application and run it so I can test the new functionality.

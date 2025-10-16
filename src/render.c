@@ -1,5 +1,7 @@
 #include "render.h"
 
+#include "render_internal.h"
+
 #include "camera_controller.h"
 #include "layout.h"
 #include "person.h"
@@ -291,6 +293,39 @@ static void render_release_render_target(RenderState *state)
 #endif
 }
 
+static bool render_ensure_batch_capacity(RenderState *state, size_t required_capacity)
+{
+    if (!state)
+    {
+        return false;
+    }
+    if (required_capacity == 0U)
+    {
+        return true;
+    }
+    if (state->batch_capacity >= required_capacity && state->batch_alive_nodes && state->batch_deceased_nodes)
+    {
+        return true;
+    }
+
+    size_t new_capacity = required_capacity + (required_capacity / 2U) + 4U;
+    const LayoutNode **alive_new = (const LayoutNode **)malloc(new_capacity * sizeof(*alive_new));
+    const LayoutNode **deceased_new = (const LayoutNode **)malloc(new_capacity * sizeof(*deceased_new));
+    if (!alive_new || !deceased_new)
+    {
+        free(alive_new);
+        free(deceased_new);
+        return false;
+    }
+
+    free((void *)state->batch_alive_nodes);
+    free((void *)state->batch_deceased_nodes);
+    state->batch_alive_nodes = alive_new;
+    state->batch_deceased_nodes = deceased_new;
+    state->batch_capacity = new_capacity;
+    return true;
+}
+
 static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool is_alive, bool is_selected,
                                bool is_hovered, const Camera3D *camera)
 {
@@ -365,6 +400,113 @@ static void render_draw_sphere(RenderState *state, const LayoutNode *node, bool 
         rlEnableDepthMask();
         rlEnableBackfaceCulling();
     }
+}
+
+static void render_draw_sphere_group(RenderState *state, const LayoutNode *const *nodes, size_t count, bool is_alive,
+                                     const Camera3D *camera)
+{
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (!state || !nodes || count == 0U || !camera)
+    {
+        return;
+    }
+
+    float base_radius = state->config.sphere_radius;
+    if (!(base_radius > 0.0f))
+    {
+        base_radius = 0.6f;
+    }
+
+    Vector3 light_dir = {state->light_direction[0], state->light_direction[1], state->light_direction[2]};
+    if (Vector3Length(light_dir) < 0.0001f)
+    {
+        light_dir = Vector3Normalize((Vector3){-0.3f, -1.0f, -0.2f});
+    }
+    else
+    {
+        light_dir = Vector3Normalize(light_dir);
+    }
+    Vector3 light_to_surface = Vector3Scale(light_dir, -1.0f);
+
+    Color base_color = render_color_to_raylib(is_alive ? state->config.alive_color : state->config.deceased_color);
+    bool use_shader = state->glow_shader_ready && is_alive;
+    if (use_shader)
+    {
+        float glow_value = state->config.glow_intensity;
+        SetShaderValue(state->glow_shader, state->glow_intensity_loc, &glow_value, SHADER_UNIFORM_FLOAT);
+        if (state->glow_time_loc >= 0)
+        {
+            float time_seconds = (float)GetTime();
+            SetShaderValue(state->glow_shader, state->glow_time_loc, &time_seconds, SHADER_UNIFORM_FLOAT);
+        }
+        BeginShaderMode(state->glow_shader);
+    }
+
+    for (size_t index = 0; index < count; ++index)
+    {
+        const LayoutNode *node = nodes[index];
+        const Person *person = node ? node->person : NULL;
+        if (!node || !person)
+        {
+            continue;
+        }
+        Vector3 position = {node->position[0], node->position[1], node->position[2]};
+        Vector3 to_camera = {0.0f, 0.0f, 1.0f};
+        if (camera)
+        {
+            to_camera = Vector3Normalize(Vector3Subtract(camera->position, position));
+        }
+        float diffuse = Vector3DotProduct(light_to_surface, to_camera);
+        if (diffuse < 0.0f)
+        {
+            diffuse = 0.0f;
+        }
+        float intensity = state->ambient_strength + (1.0f - state->ambient_strength) * diffuse;
+        Color lit_color = render_color_apply_intensity(base_color, intensity);
+        DrawSphereEx(position, base_radius, 32, 32, lit_color);
+    }
+
+    if (use_shader)
+    {
+        EndShaderMode();
+    }
+
+    if (is_alive)
+    {
+        float intensity_scale = 1.0f + state->config.glow_intensity * 0.4f;
+        float glow_radius = base_radius * intensity_scale;
+        for (size_t index = 0; index < count; ++index)
+        {
+            const LayoutNode *node = nodes[index];
+            const Person *person = node ? node->person : NULL;
+            if (!node || !person)
+            {
+                continue;
+            }
+            Vector3 position = {node->position[0], node->position[1], node->position[2]};
+            Vector3 to_camera = {0.0f, 0.0f, 1.0f};
+            if (camera)
+            {
+                to_camera = Vector3Normalize(Vector3Subtract(camera->position, position));
+            }
+            float diffuse = Vector3DotProduct(light_to_surface, to_camera);
+            if (diffuse < 0.0f)
+            {
+                diffuse = 0.0f;
+            }
+            float intensity = state->ambient_strength + (1.0f - state->ambient_strength) * diffuse;
+            Color halo_color = render_color_apply_intensity(base_color, intensity);
+            halo_color.a = (unsigned char)((int)halo_color.a / 3);
+            DrawSphereEx(position, glow_radius, 24, 24, halo_color);
+        }
+    }
+#else
+    (void)state;
+    (void)nodes;
+    (void)count;
+    (void)is_alive;
+    (void)camera;
+#endif
 }
 
 static void render_draw_label(RenderState *state, const LayoutNode *node, const Camera3D *camera,
@@ -533,6 +675,11 @@ void render_cleanup(RenderState *state)
         state->label_system_ready = false;
     }
 #endif
+    free((void *)state->batch_alive_nodes);
+    free((void *)state->batch_deceased_nodes);
+    state->batch_alive_nodes = NULL;
+    state->batch_deceased_nodes = NULL;
+    state->batch_capacity = 0U;
     render_state_init(state);
 }
 
@@ -796,6 +943,45 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         (void)render_connections_render(state, layout);
     }
 
+    bool drew_with_batching = false;
+    RenderBatcherGrouping grouping;
+    render_batcher_grouping_reset(&grouping);
+    if (render_ensure_batch_capacity(state, layout->count) &&
+        render_batcher_plan(layout, selected_person, hovered_person, &grouping, state->batch_alive_nodes,
+                            state->batch_capacity, state->batch_deceased_nodes, state->batch_capacity))
+    {
+        render_draw_sphere_group(state, grouping.alive_nodes, grouping.alive_count, true, camera_data);
+        render_draw_sphere_group(state, grouping.deceased_nodes, grouping.deceased_count, false, camera_data);
+
+        if (grouping.hovered_node && grouping.hovered_node->person)
+        {
+            render_draw_sphere(state, grouping.hovered_node, grouping.hovered_node->person->is_alive, false, true,
+                               camera_data);
+        }
+        if (grouping.selected_node && grouping.selected_node->person)
+        {
+            render_draw_sphere(state, grouping.selected_node, grouping.selected_node->person->is_alive, true, false,
+                               camera_data);
+        }
+        drew_with_batching = true;
+    }
+
+    if (!drew_with_batching)
+    {
+        for (size_t index = 0; index < layout->count; ++index)
+        {
+            const LayoutNode *node = &layout->nodes[index];
+            const Person *person = node->person;
+            if (!person)
+            {
+                continue;
+            }
+            bool is_selected = (selected_person == person);
+            bool is_hovered = (hovered_person == person) && !is_selected;
+            render_draw_sphere(state, node, person->is_alive, is_selected, is_hovered, camera_data);
+        }
+    }
+
     for (size_t index = 0; index < layout->count; ++index)
     {
         const LayoutNode *node = &layout->nodes[index];
@@ -806,7 +992,6 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         }
         bool is_selected = (selected_person == person);
         bool is_hovered = (hovered_person == person) && !is_selected;
-        render_draw_sphere(state, node, person->is_alive, is_selected, is_hovered, camera_data);
         render_draw_label(state, node, camera_data, person, is_selected, is_hovered);
     }
 
@@ -840,4 +1025,5 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
  * 2. Observe parent/child and spouse connections to ensure lines link correct pairs.
  * 3. Resize the window repeatedly and confirm the render target regenerates without artifacts.
  * 4. Verify the holographic screen overlay animates above the 3D content and below the UI widgets.
+ * 5. Hover and select multiple persons to ensure batched draws preserve highlight scaling and glow order.
  */

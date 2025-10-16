@@ -63,6 +63,69 @@ static void cross3(const float a[3], const float b[3], float out[3])
     out[2] = (a[0] * b[1]) - (a[1] * b[0]);
 }
 
+static void commit_view(CameraController *controller)
+{
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    controller->camera.position =
+        (Vector3){controller->view_position[0], controller->view_position[1], controller->view_position[2]};
+    controller->camera.target =
+        (Vector3){controller->view_target[0], controller->view_target[1], controller->view_target[2]};
+    controller->camera.up = (Vector3){controller->up[0], controller->up[1], controller->up[2]};
+#else
+    (void)controller;
+#endif
+}
+
+static void sync_view(CameraController *controller)
+{
+    copy3(controller->view_position, controller->position);
+    copy3(controller->view_target, controller->target);
+    controller->view_valid = true;
+    commit_view(controller);
+}
+
+static float smoothing_blend(const CameraControllerConfig *config, float delta_seconds)
+{
+    if (!config || config->smoothing_half_life_seconds <= 0.0f || delta_seconds <= 0.0f)
+    {
+        return 1.0f;
+    }
+    /* Exponential smoothing expressed via half-life for intuitive tuning. */
+    float decay = powf(0.5f, delta_seconds / config->smoothing_half_life_seconds);
+    float blend = 1.0f - decay;
+    if (blend < 0.0f)
+    {
+        blend = 0.0f;
+    }
+    if (blend > 1.0f)
+    {
+        blend = 1.0f;
+    }
+    return blend;
+}
+
+static void apply_smoothing(CameraController *controller, float delta_seconds)
+{
+    if (!controller)
+    {
+        return;
+    }
+    if (!controller->view_valid || controller->config.smoothing_half_life_seconds <= 0.0f || delta_seconds <= 0.0f)
+    {
+        sync_view(controller);
+        return;
+    }
+
+    float blend = smoothing_blend(&controller->config, delta_seconds);
+    const float retain = 1.0f - blend;
+    for (int index = 0; index < 3; ++index)
+    {
+        controller->view_position[index] = controller->view_position[index] * retain + controller->position[index] * blend;
+        controller->view_target[index] = controller->view_target[index] * retain + controller->target[index] * blend;
+    }
+    commit_view(controller);
+}
+
 static void recalc_position(CameraController *controller)
 {
     const float yaw = controller->yaw;
@@ -81,12 +144,6 @@ static void recalc_position(CameraController *controller)
     controller->position[0] = controller->target[0] - forward[0] * radius;
     controller->position[1] = controller->target[1] - forward[1] * radius;
     controller->position[2] = controller->target[2] - forward[2] * radius;
-
-#if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    controller->camera.position = (Vector3){controller->position[0], controller->position[1], controller->position[2]};
-    controller->camera.target = (Vector3){controller->target[0], controller->target[1], controller->target[2]};
-    controller->camera.up = (Vector3){controller->up[0], controller->up[1], controller->up[2]};
-#endif
 }
 
 static void apply_pan(CameraController *controller, float right_amount, float up_amount, float delta_seconds)
@@ -143,6 +200,7 @@ void camera_controller_config_default(CameraControllerConfig *config)
     config->rotation_speed = 1.5f;
     config->zoom_speed = 15.0f;
     config->pan_speed = 10.0f;
+    config->smoothing_half_life_seconds = 0.18f;
 }
 
 void camera_controller_input_clear(CameraControllerInput *input)
@@ -172,6 +230,7 @@ static void apply_config(CameraController *controller, const CameraControllerCon
     controller->camera.projection = CAMERA_PERSPECTIVE;
 #endif
     recalc_position(controller);
+    sync_view(controller);
     controller->initialized = true;
 }
 
@@ -231,7 +290,15 @@ void camera_controller_update(CameraController *controller, const CameraControll
 
     apply_pan(controller, input->pan_right, input->pan_up, delta_seconds);
     recalc_position(controller);
+    apply_smoothing(controller, delta_seconds);
 }
+
+/*
+ * Manual validation checklist:
+ * 1. Orbit the camera rapidly and confirm motion eases into place without stutter.
+ * 2. Trigger "Focus Roots" UI action and observe a smooth glide toward the new anchor point.
+ * 3. Toggle smoothing (set half-life to zero in config) to verify immediate snapping remains available.
+ */
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 const Camera3D *camera_controller_get_camera(const CameraController *controller)

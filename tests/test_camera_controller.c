@@ -114,6 +114,31 @@ TEST(test_camera_controller_pan_shifts_target)
     ASSERT_TRUE(distance_between(config.target, controller.target) > 0.1f);
 }
 
+TEST(test_camera_controller_view_smoothing_converges)
+{
+    CameraControllerConfig config;
+    camera_controller_config_default(&config);
+    config.smoothing_half_life_seconds = 0.3f;
+    CameraController controller;
+    ASSERT_TRUE(camera_controller_init(&controller, &config));
+
+    CameraControllerInput input;
+    camera_controller_input_clear(&input);
+    input.pan_right = 12.0f;
+    camera_controller_update(&controller, &input, 0.016f);
+
+    float initial_delta = fabsf(controller.target[0] - controller.view_target[0]);
+    ASSERT_TRUE(initial_delta > 0.001f);
+
+    camera_controller_input_clear(&input);
+    for (int step = 0; step < 240; ++step)
+    {
+        camera_controller_update(&controller, &input, 0.016f);
+    }
+    float final_delta = fabsf(controller.target[0] - controller.view_target[0]);
+    ASSERT_TRUE(final_delta < 0.05f);
+}
+
 void register_camera_controller_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_camera_controller_init_uses_defaults);
@@ -121,4 +146,5 @@ void register_camera_controller_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_camera_controller_zoom_clamped_to_bounds);
     REGISTER_TEST(registry, test_camera_controller_focus_updates_target_and_radius);
     REGISTER_TEST(registry, test_camera_controller_pan_shifts_target);
+    REGISTER_TEST(registry, test_camera_controller_view_smoothing_converges);
 }
