@@ -390,7 +390,7 @@ PHASE 6: USER INTERFACE (NUKLEAR)
 6.2 Main Menu Bar
   [x] Implement menu_bar_render() function
       [x] File menu (New, Open, Save, Save As, Exit)
-      [ ] Edit menu (Undo, Redo)
+    [x] Edit menu (Undo, Redo)
       [x] View menu (Reset Camera, Layout Options)
       [x] Help menu (About, Documentation)
   [ ] Implement menu actions
@@ -445,16 +445,16 @@ PHASE 6: USER INTERFACE (NUKLEAR)
       [ ] Default filename suggestion
 
 6.6 Search/Filter Panel
-  [ ] Implement search_panel_render() function
-      [ ] Text input for name search
-      [ ] Date range filters
-      [ ] Alive/deceased filter
-      [ ] Search button
-      [ ] Results list
-  [ ] Implement search_execute() function
-      [ ] Search tree by criteria
-      [ ] Highlight matching spheres
-      [ ] Allow selection from results
+  [x] Implement search_panel_render() function
+      [x] Text input for name search
+      [x] Date range filters
+      [x] Alive/deceased filter
+      [x] Search button
+      [x] Results list
+  [x] Implement search_execute() function
+      [x] Search tree by criteria
+      [x] Highlight matching spheres
+      [x] Allow selection from results
 
 6.7 Settings Panel
   [x] Implement settings_panel_render() function

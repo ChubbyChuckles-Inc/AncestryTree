@@ -42,5 +42,6 @@ bool interaction_select_at_cursor(InteractionState *state, const struct LayoutRe
                                   bool allow_deselect_empty);
 
 void interaction_clear_selection(InteractionState *state);
+bool interaction_select_person(InteractionState *state, const struct Person *person);
 
 #endif /* INTERACTION_H */

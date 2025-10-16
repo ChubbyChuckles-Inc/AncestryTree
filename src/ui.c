@@ -4,11 +4,13 @@
 #include "graphics.h"
 #include "layout.h"
 #include "render.h"
+#include "search.h"
 #include "settings.h"
 #include "tree.h"
 
 #include <math.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +24,8 @@
 #include "external/nuklear.h"
 #endif
 
+#define UI_SEARCH_MAX_RESULTS 64U
+
 typedef struct UIInternal
 {
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
@@ -34,9 +38,21 @@ typedef struct UIInternal
     bool show_about_window;
     bool show_help_window;
     bool show_settings_window;
+    bool show_search_panel;
     bool show_exit_prompt;
     char status_message[128];
     float status_timer;
+    char search_query[64];
+    bool search_include_alive;
+    bool search_include_deceased;
+    bool search_use_birth_year_range;
+    int search_birth_year_min;
+    int search_birth_year_max;
+    uint32_t search_results[UI_SEARCH_MAX_RESULTS];
+    size_t search_result_count;
+    int search_selected_index;
+    bool search_dirty;
+    const FamilyTree *search_last_tree;
 #else
     int unused;
 #endif
@@ -50,11 +66,12 @@ static void ui_event_queue_reset(UIEventQueue *queue)
     }
     queue->head = 0U;
     queue->count = 0U;
+    memset(queue->events, 0, sizeof(queue->events));
 }
 
-static bool ui_event_queue_push(UIEventQueue *queue, UIEventType type)
+static bool ui_event_queue_push(UIEventQueue *queue, const UIEvent *event)
 {
-    if (!queue || type == UI_EVENT_NONE)
+    if (!queue || !event || event->type == UI_EVENT_NONE)
     {
         return false;
     }
@@ -63,7 +80,7 @@ static bool ui_event_queue_push(UIEventQueue *queue, UIEventType type)
         return false;
     }
     size_t index = (queue->head + queue->count) % UI_EVENT_QUEUE_CAPACITY;
-    queue->events[index].type = type;
+    queue->events[index] = *event;
     queue->count += 1U;
     return true;
 }
@@ -451,6 +468,70 @@ static bool ui_compute_layout_center(const LayoutResult *layout, float out_cente
     return true;
 }
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+static void ui_search_clear_results(UIInternal *internal)
+{
+    if (!internal)
+    {
+        return;
+    }
+    internal->search_result_count = 0U;
+    internal->search_selected_index = -1;
+    memset(internal->search_results, 0, sizeof(internal->search_results));
+}
+
+static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (!tree)
+    {
+        ui_search_clear_results(internal);
+        internal->search_last_tree = NULL;
+        internal->search_dirty = false;
+        return;
+    }
+
+    const Person *matches[UI_SEARCH_MAX_RESULTS];
+    SearchFilter filter;
+    filter.name_substring = (internal->search_query[0] != '\0') ? internal->search_query : NULL;
+    filter.include_alive = internal->search_include_alive;
+    filter.include_deceased = internal->search_include_deceased;
+    filter.use_birth_year_range = internal->search_use_birth_year_range;
+    filter.birth_year_min = internal->search_birth_year_min;
+    filter.birth_year_max = internal->search_birth_year_max;
+
+    size_t count = search_execute(tree, &filter, matches, UI_SEARCH_MAX_RESULTS);
+    if (count > UI_SEARCH_MAX_RESULTS)
+    {
+        count = UI_SEARCH_MAX_RESULTS;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        const Person *person = matches[index];
+        internal->search_results[index] = person ? person->id : 0U;
+    }
+    if (count < UI_SEARCH_MAX_RESULTS)
+    {
+        memset(&internal->search_results[count], 0,
+               (UI_SEARCH_MAX_RESULTS - count) * sizeof(internal->search_results[0]));
+    }
+    internal->search_result_count = count;
+    if (internal->search_selected_index >= (int)count)
+    {
+        internal->search_selected_index = (count == 0U) ? -1 : (int)(count - 1);
+    }
+    if (count == 0U)
+    {
+        internal->search_selected_index = -1;
+    }
+    internal->search_last_tree = tree;
+    internal->search_dirty = false;
+}
+#endif
+
 static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
 {
     if (!internal || !ui || !internal->show_about_window)
@@ -550,6 +631,227 @@ static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
     if (nk_window_is_closed(ctx, "Quick Help##AncestryTree"))
     {
         internal->show_help_window = false;
+    }
+}
+
+static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+{
+    if (!internal || !ui || !internal->show_search_panel)
+    {
+        return;
+    }
+
+    if (internal->search_last_tree != tree)
+    {
+        internal->search_last_tree = tree;
+        internal->search_dirty = true;
+        internal->search_selected_index = -1;
+        ui_search_clear_results(internal);
+    }
+
+    struct nk_context *ctx = &internal->ctx;
+    float width = fminf(460.0f, (float)ui->width - 40.0f);
+    if (width < 320.0f)
+    {
+        width = 320.0f;
+    }
+    float height = fminf(540.0f, (float)ui->height - 60.0f);
+    if (height < 360.0f)
+    {
+        height = 360.0f;
+    }
+    float x = (float)ui->width - width - 20.0f;
+    if (x < 10.0f)
+    {
+        x = 10.0f;
+    }
+    struct nk_rect bounds = nk_rect(x, 70.0f, width, height);
+
+    if (nk_begin(ctx, "Search##AncestryTree", bounds,
+                 NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_CLOSABLE))
+    {
+        bool request_refresh = false;
+        nk_layout_row_dynamic(ctx, 22.0f, 1);
+        nk_label(ctx, "Locate persons in the holographic tree", NK_TEXT_LEFT);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Name contains", NK_TEXT_LEFT);
+        char previous_query[sizeof(internal->search_query)];
+        memcpy(previous_query, internal->search_query, sizeof(previous_query));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->search_query,
+                                       (int)sizeof(internal->search_query), nk_filter_default);
+        if (strncmp(previous_query, internal->search_query, sizeof(previous_query)) != 0)
+        {
+            request_refresh = true;
+        }
+
+        nk_layout_row_dynamic(ctx, 24.0f, 2);
+        nk_bool include_alive = internal->search_include_alive ? nk_true : nk_false;
+        nk_bool include_deceased = internal->search_include_deceased ? nk_true : nk_false;
+        nk_checkbox_label(ctx, "Include alive", &include_alive);
+        nk_checkbox_label(ctx, "Include deceased", &include_deceased);
+        bool new_include_alive = (include_alive == nk_true);
+        bool new_include_deceased = (include_deceased == nk_true);
+        if (!new_include_alive && !new_include_deceased)
+        {
+            new_include_alive = true;
+            new_include_deceased = true;
+        }
+        if (new_include_alive != internal->search_include_alive ||
+            new_include_deceased != internal->search_include_deceased)
+        {
+            internal->search_include_alive = new_include_alive;
+            internal->search_include_deceased = new_include_deceased;
+            request_refresh = true;
+        }
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_bool range_enabled = internal->search_use_birth_year_range ? nk_true : nk_false;
+        nk_checkbox_label(ctx, "Filter by birth year", &range_enabled);
+        bool new_range = (range_enabled == nk_true);
+        if (new_range != internal->search_use_birth_year_range)
+        {
+            internal->search_use_birth_year_range = new_range;
+            request_refresh = true;
+        }
+
+        if (internal->search_use_birth_year_range)
+        {
+            int min_year = internal->search_birth_year_min;
+            int max_year = internal->search_birth_year_max;
+            nk_layout_row_dynamic(ctx, 24.0f, 2);
+            nk_property_int(ctx, "From", 1200, &min_year, 2500, 1, 5);
+            nk_property_int(ctx, "To", 1200, &max_year, 2500, 1, 5);
+            if (min_year > max_year)
+            {
+                int swap = min_year;
+                min_year = max_year;
+                max_year = swap;
+            }
+            if (min_year != internal->search_birth_year_min || max_year != internal->search_birth_year_max)
+            {
+                internal->search_birth_year_min = min_year;
+                internal->search_birth_year_max = max_year;
+                request_refresh = true;
+            }
+        }
+
+        nk_layout_row_dynamic(ctx, 28.0f, 2);
+        if (nk_button_label(ctx, "Search"))
+        {
+            request_refresh = true;
+        }
+        if (nk_button_label(ctx, "Clear Filters"))
+        {
+            internal->search_query[0] = '\0';
+            internal->search_include_alive = true;
+            internal->search_include_deceased = true;
+            internal->search_use_birth_year_range = false;
+            internal->search_birth_year_min = 1900;
+            internal->search_birth_year_max = 2100;
+            internal->search_selected_index = -1;
+            ui_search_clear_results(internal);
+            request_refresh = true;
+        }
+
+        if (request_refresh)
+        {
+            internal->search_dirty = true;
+        }
+        if (internal->search_dirty)
+        {
+            ui_search_refresh(internal, tree);
+        }
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_labelf(ctx, NK_TEXT_LEFT, "Results: %u", (unsigned int)internal->search_result_count);
+
+        float results_height = height - 230.0f;
+        if (results_height < 160.0f)
+        {
+            results_height = 160.0f;
+        }
+        nk_layout_row_dynamic(ctx, results_height, 1);
+        if (nk_group_begin(ctx, "SearchResultsGroup", NK_WINDOW_BORDER))
+        {
+            for (size_t index = 0U; index < internal->search_result_count; ++index)
+            {
+                uint32_t person_id = internal->search_results[index];
+                Person *person = tree ? family_tree_find_person(tree, person_id) : NULL;
+                char name_buffer[128];
+                if (!person || !person_format_display_name(person, name_buffer, sizeof(name_buffer)))
+                {
+                    (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", person_id);
+                }
+
+                nk_layout_row_dynamic(ctx, 26.0f, 2);
+                nk_bool selected = (internal->search_selected_index == (int)index) ? nk_true : nk_false;
+                nk_selectable_label(ctx, name_buffer, NK_TEXT_LEFT, &selected);
+                int new_selection = (selected == nk_true) ? (int)index : -1;
+                if (new_selection != internal->search_selected_index)
+                {
+                    internal->search_selected_index = new_selection;
+                }
+
+                if (nk_button_label(ctx, "Focus"))
+                {
+                    if (ui_event_enqueue_with_u32(ui, UI_EVENT_FOCUS_PERSON, person_id))
+                    {
+                        internal->search_selected_index = (int)index;
+                        char status[160];
+                        (void)snprintf(status, sizeof(status), "Focus request queued for %s.", name_buffer);
+                        ui_internal_set_status(internal, status);
+                    }
+                    else
+                    {
+                        ui_internal_set_status(internal, "Event queue full; focus request aborted.");
+                    }
+                }
+            }
+            nk_group_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 28.0f, 1);
+        if (nk_button_label(ctx, "Focus Selected"))
+        {
+            if (internal->search_selected_index >= 0 &&
+                (size_t)internal->search_selected_index < internal->search_result_count)
+            {
+                uint32_t person_id = internal->search_results[internal->search_selected_index];
+                Person *person = tree ? family_tree_find_person(tree, person_id) : NULL;
+                char name_buffer[128];
+                if (!person || !person_format_display_name(person, name_buffer, sizeof(name_buffer)))
+                {
+                    (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", person_id);
+                }
+                if (ui_event_enqueue_with_u32(ui, UI_EVENT_FOCUS_PERSON, person_id))
+                {
+                    char status[160];
+                    (void)snprintf(status, sizeof(status), "Focus request queued for %s.", name_buffer);
+                    ui_internal_set_status(internal, status);
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; focus request aborted.");
+                }
+            }
+            else
+            {
+                ui_internal_set_status(internal, "Select a person before focusing.");
+            }
+        }
+
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label(ctx, "Tip: Use Clear Filters to reset and search again.", NK_TEXT_LEFT);
+    }
+    else
+    {
+        internal->show_search_panel = false;
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, "Search##AncestryTree"))
+    {
+        internal->show_search_panel = false;
     }
 }
 
@@ -899,7 +1201,28 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT, nk_vec2(160.0f, 180.0f)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            nk_label(ctx, "Undo/Redo pipeline planned.", NK_TEXT_LEFT);
+            if (nk_menu_item_label(ctx, "Undo", NK_TEXT_LEFT))
+            {
+                if (ui_event_enqueue(ui, UI_EVENT_UNDO))
+                {
+                    ui_internal_set_status(internal, "Undo request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; undo aborted.");
+                }
+            }
+            if (nk_menu_item_label(ctx, "Redo", NK_TEXT_LEFT))
+            {
+                if (ui_event_enqueue(ui, UI_EVENT_REDO))
+                {
+                    ui_internal_set_status(internal, "Redo request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; redo aborted.");
+                }
+            }
             nk_menu_end(ctx);
         }
 
@@ -911,6 +1234,12 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
             if (nk_menu_item_label(ctx, settings_label, NK_TEXT_LEFT))
             {
                 internal->show_settings_window = true;
+            }
+            const char *search_label = internal->show_search_panel ? "Search / Filter... *" : "Search / Filter...";
+            if (nk_menu_item_label(ctx, search_label, NK_TEXT_LEFT))
+            {
+                internal->show_search_panel = true;
+                internal->search_dirty = true;
             }
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (nk_menu_item_label(ctx, "Reset Camera", NK_TEXT_LEFT))
@@ -1171,6 +1500,17 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->font.query = nk_raylib_query_font;
     internal->font.texture = nk_handle_ptr(NULL);
     internal->auto_orbit = false;
+    internal->show_search_panel = false;
+    internal->search_query[0] = '\0';
+    internal->search_include_alive = true;
+    internal->search_include_deceased = true;
+    internal->search_use_birth_year_range = false;
+    internal->search_birth_year_min = 1900;
+    internal->search_birth_year_max = 2100;
+    internal->search_result_count = 0U;
+    internal->search_selected_index = -1;
+    internal->search_dirty = true;
+    internal->search_last_tree = NULL;
 
     if (!nk_init_default(&internal->ctx, &internal->font))
     {
@@ -1439,10 +1779,18 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         return;
     }
+    if (internal->search_last_tree != tree)
+    {
+        internal->search_last_tree = tree;
+        internal->search_dirty = true;
+        ui_search_clear_results(internal);
+        internal->search_selected_index = -1;
+    }
     ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings_dirty);
     ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
     ui_draw_about_window(internal, ui);
     ui_draw_help_window(internal, ui);
+    ui_draw_search_panel(internal, ui, tree);
     ui_draw_settings_window(internal, ui, settings, settings_dirty);
     ui_draw_exit_prompt(internal, ui);
     if (hovered_person)
@@ -1502,7 +1850,22 @@ bool ui_event_enqueue(UIContext *ui, UIEventType type)
     {
         return false;
     }
-    return ui_event_queue_push(&ui->event_queue, type);
+    UIEvent event;
+    event.type = type;
+    event.param_u32 = 0U;
+    return ui_event_queue_push(&ui->event_queue, &event);
+}
+
+bool ui_event_enqueue_with_u32(UIContext *ui, UIEventType type, uint32_t value)
+{
+    if (!ui)
+    {
+        return false;
+    }
+    UIEvent event;
+    event.type = type;
+    event.param_u32 = value;
+    return ui_event_queue_push(&ui->event_queue, &event);
 }
 
 size_t ui_poll_events(UIContext *ui, UIEvent *events, size_t capacity)
@@ -1578,6 +1941,11 @@ bool ui_handle_escape(UIContext *ui)
         internal->show_help_window = false;
         dismissed = true;
     }
+    if (internal->show_search_panel)
+    {
+        internal->show_search_panel = false;
+        dismissed = true;
+    }
     if (internal->show_settings_window)
     {
         internal->show_settings_window = false;
@@ -1601,4 +1969,5 @@ bool ui_handle_escape(UIContext *ui)
  * 5. Launch the Quick Help overlay, review shortcut descriptions, and close it with both the Close button and the Escape key.
  * 6. Select File->Exit and confirm the confirmation dialog responds and closes the application when accepted.
  * 7. Open View->Settings, tweak sensitivities and graphics quality, then save and reload to confirm persistence and runtime application.
+ * 8. Open View->Search / Filter, exercise the name and birth-year filters, and focus a result to verify the camera recenters and the selection highlight updates.
  */

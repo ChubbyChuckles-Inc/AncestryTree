@@ -21,6 +21,8 @@ void register_render_labels_tests(TestRegistry *registry);
 void register_shortcuts_tests(TestRegistry *registry);
 void register_settings_tests(TestRegistry *registry);
 void register_settings_runtime_tests(TestRegistry *registry);
+void register_search_tests(TestRegistry *registry);
+void register_integration_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -47,6 +49,8 @@ int main(void)
     register_shortcuts_tests(&registry);
     register_settings_tests(&registry);
     register_settings_runtime_tests(&registry);
+    register_search_tests(&registry);
+    register_integration_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

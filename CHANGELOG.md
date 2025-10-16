@@ -45,3 +45,7 @@ All notable changes to this project will be documented in this file. The format 
   regression tests guarding the input routing.
 - Settings control panel offering graphics presets, camera sensitivities, color themes, and auto-save cadence with
   disk persistence, runtime application, and dedicated unit coverage for settings runtime helpers.
+- Search and filter panel providing live name queries, alive/deceased toggles, birth-year constraints, and one-click
+  camera focus for selected results, supported by a direct-selection interaction helper.
+- Search execution module with targeted unit tests plus an integration workflow test that exercises create/save/load
+  round-tripping via the persistence layer.

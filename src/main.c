@@ -279,17 +279,18 @@ static void app_on_tree_changed(LayoutResult *layout, InteractionState *interact
     }
 }
 
-static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *file_state, FamilyTree **tree,
+static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                  LayoutResult *layout, InteractionState *interaction_state,
                                  RenderState *render_state, CameraController *camera, AtLogger *logger,
                                  Settings *settings, Settings *persisted_settings, const char *settings_path,
                                  PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision)
 {
-    if (!tree || !layout || !interaction_state || !render_state)
+    if (!event || !tree || !layout || !interaction_state || !render_state)
     {
         return;
     }
 
+    UIEventType type = event->type;
     char error_buffer[256];
     error_buffer[0] = '\0';
 
@@ -495,6 +496,61 @@ static void app_process_ui_event(UIEventType type, UIContext *ui, AppFileState *
 #endif
         app_report_status(ui, logger, "Exit requested.");
         break;
+    case UI_EVENT_FOCUS_PERSON:
+    {
+        uint32_t target_id = event->param_u32;
+        if (target_id == 0U || !*tree)
+        {
+            app_report_error(ui, logger, "Focus request failed; tree unavailable.");
+            break;
+        }
+        Person *target = family_tree_find_person(*tree, target_id);
+        if (!target)
+        {
+            char message[160];
+            (void)snprintf(message, sizeof(message), "Focus failed: person %u not found.", target_id);
+            app_report_error(ui, logger, message);
+            break;
+        }
+        if (interaction_state)
+        {
+            interaction_select_person(interaction_state, target);
+        }
+        bool has_position = false;
+        float focus_position[3] = {0.0f, 0.0f, 0.0f};
+        for (size_t index = 0U; index < layout->count; ++index)
+        {
+            if (layout->nodes[index].person == target)
+            {
+                focus_position[0] = layout->nodes[index].position[0];
+                focus_position[1] = layout->nodes[index].position[1];
+                focus_position[2] = layout->nodes[index].position[2];
+                has_position = true;
+                break;
+            }
+        }
+        if (camera && has_position)
+        {
+            camera_controller_focus(camera, focus_position, camera->config.default_radius);
+        }
+        char name_buffer[128];
+        if (!person_format_display_name(target, name_buffer, sizeof(name_buffer)))
+        {
+            (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", target->id);
+        }
+        char message[192];
+        if (has_position)
+        {
+            (void)snprintf(message, sizeof(message), "Focused on %s.", name_buffer);
+        }
+        else
+        {
+            (void)snprintf(message, sizeof(message),
+                           "Selected %s; focus will update after layout refresh.", name_buffer);
+        }
+        app_report_status(ui, logger, message);
+    }
+    break;
     case UI_EVENT_NONE:
     default:
         break;
@@ -515,7 +571,7 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
     size_t count = ui_poll_events(ui, events, UI_EVENT_QUEUE_CAPACITY);
     for (size_t index = 0U; index < count; ++index)
     {
-        app_process_ui_event(events[index].type, ui, file_state, tree, layout, interaction_state, render_state, camera,
+        app_process_ui_event(&events[index], ui, file_state, tree, layout, interaction_state, render_state, camera,
                              logger, settings, persisted_settings, settings_path, auto_save, settings_applied_revision);
     }
 }
@@ -548,8 +604,11 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
     {
         if (!ui_event_enqueue(ui, result.event))
         {
-            app_process_ui_event(result.event, ui, file_state, tree, layout, interaction_state, render_state, camera,
-                                 logger, settings, persisted_settings, settings_path, auto_save,
+            UIEvent fallback_event;
+            fallback_event.type = result.event;
+            fallback_event.param_u32 = 0U;
+            app_process_ui_event(&fallback_event, ui, file_state, tree, layout, interaction_state, render_state,
+                                 camera, logger, settings, persisted_settings, settings_path, auto_save,
                                  settings_applied_revision);
         }
     }

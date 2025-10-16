@@ -250,6 +250,18 @@ void interaction_clear_selection(InteractionState *state)
     state->selected = NULL;
 }
 
+bool interaction_select_person(InteractionState *state, const Person *person)
+{
+    if (!state)
+    {
+        return false;
+    }
+    const Person *previous = state->selected;
+    state->selected = person;
+    state->hovered = person;
+    return previous != person;
+}
+
 /* Manual validation checklist (requires raylib runtime):
  * 1. Hover spheres in the scene and verify the hover outline follows the cursor.
  * 2. Click different spheres and ensure the selection outline updates accordingly.

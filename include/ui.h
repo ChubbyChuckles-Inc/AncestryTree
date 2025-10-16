@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct FamilyTree FamilyTree;
 typedef struct LayoutResult LayoutResult;
@@ -24,12 +25,14 @@ typedef enum UIEventType
     UI_EVENT_ESCAPE,
     UI_EVENT_REQUEST_EXIT,
     UI_EVENT_SAVE_SETTINGS,
-    UI_EVENT_RELOAD_SETTINGS
+    UI_EVENT_RELOAD_SETTINGS,
+    UI_EVENT_FOCUS_PERSON
 } UIEventType;
 
 typedef struct UIEvent
 {
     UIEventType type;
+    uint32_t param_u32;
 } UIEvent;
 
 #define UI_EVENT_QUEUE_CAPACITY 16U
@@ -63,6 +66,7 @@ void ui_end_frame(UIContext *ui);
 bool ui_is_available(const UIContext *ui);
 bool ui_auto_orbit_enabled(const UIContext *ui);
 bool ui_event_enqueue(UIContext *ui, UIEventType type);
+bool ui_event_enqueue_with_u32(UIContext *ui, UIEventType type, uint32_t value);
 size_t ui_poll_events(UIContext *ui, UIEvent *events, size_t capacity);
 bool ui_notify_status(UIContext *ui, const char *message);
 bool ui_handle_escape(UIContext *ui);
