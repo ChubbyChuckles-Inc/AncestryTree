@@ -121,8 +121,8 @@ PHASE 2: CORE DATA STRUCTURES & MEMORY MANAGEMENT
   [x] Implement tree_destroy() function
       [x] Recursively destroy all persons
       [x] Free all internal structures
-    [x] Implement safe realloc wrappers
-  [ ] Add memory leak detection for debug builds
+        [x] Implement safe realloc wrappers
+    [x] Add memory leak detection for debug builds
 
 2.5 Data Validation
   [x] Implement person_validate() function
@@ -768,22 +768,7 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
       [ ] Calculate relationship between any two persons
       [ ] Display relationship path
 
-11.3 Collaboration
-  [ ] Multi-user support
-      [ ] Concurrent editing
-      [ ] Conflict resolution
-  [ ] Cloud sync (optional)
-      [ ] Sync with cloud storage
-      [ ] Version history
-  [ ] Comments and notes
-      [ ] Attach notes to persons
-      [ ] Discussion threads
-
-11.4 Media Management
-  [ ] Photo restoration tools
-      [ ] Basic filters
-      [ ] Cropping
-      [ ] Red-eye removal
+11.3 Media Management
   [ ] Audio/video support
       [ ] Attach audio recordings
       [ ] Attach video clips
@@ -792,7 +777,7 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
       [ ] Extract text from images
       [ ] Search within documents
 
-11.5 Localization
+11.4 Localization
   [ ] Internationalization framework
       [ ] String externalization
       [ ] Translation files
@@ -802,64 +787,6 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
       [ ] French
       [ ] German
       [ ] Other languages as contributed
-
-================================================================================
-PHASE 12: FINAL TESTING & RELEASE
-================================================================================
-
-12.1 Beta Testing
-  [ ] Recruit beta testers
-  [ ] Create beta release builds
-  [ ] Collect feedback
-      [ ] Bug reports
-      [ ] Feature requests
-      [ ] Usability issues
-  [ ] Triage and prioritize issues
-  [ ] Fix critical bugs
-
-12.2 Security Audit
-  [ ] Review file handling security
-      [ ] Validate all file paths
-      [ ] Prevent directory traversal
-  [ ] Review memory safety
-      [ ] Check all buffer operations
-      [ ] Verify null checks
-  [ ] Review input validation
-      [ ] Sanitize all user inputs
-      [ ] Prevent injection attacks
-
-12.3 Compatibility Testing
-  [ ] Test on Windows 10/11
-  [ ] Test on Ubuntu LTS
-  [ ] Test on Fedora
-  [ ] Test on macOS (Intel and Apple Silicon)
-  [ ] Test with different screen resolutions
-  [ ] Test with different DPI settings
-
-12.4 Performance Testing
-  [ ] Test with small trees (<50 persons)
-  [ ] Test with medium trees (50-500 persons)
-  [ ] Test with large trees (500-5000 persons)
-  [ ] Measure frame rate
-  [ ] Measure memory usage
-  [ ] Measure load/save times
-
-12.5 Release Preparation
-  [ ] Finalize version number (1.0.0)
-  [ ] Update CHANGELOG.md
-  [ ] Update README.md with final screenshots
-  [ ] Create release notes
-  [ ] Tag release in git
-  [ ] Build final release binaries
-  [ ] Create installers (optional)
-      [ ] Windows MSI installer
-      [ ] macOS DMG
-      [ ] Linux AppImage or deb/rpm packages
-  [ ] Publish release on GitHub
-  [ ] Announce release
-      [ ] Social media
-      [ ] Relevant forums/communities
-      [ ] Product Hunt (optional)
 
 ================================================================================
 MAINTENANCE PLAN

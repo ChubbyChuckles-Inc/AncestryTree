@@ -1,4 +1,5 @@
 #include "at_log.h"
+#include "at_memory.h"
 
 #include <errno.h>
 #include <stdarg.h>
@@ -92,7 +93,7 @@ void at_logger_message_v(AtLogger *logger, AtLogLevel level, const char *file, i
     else if ((size_t)required >= sizeof(stack_buffer))
     {
         size_t length = (size_t)required + 1U;
-        message = (char *)malloc(length);
+        message = (char *)AT_MALLOC(length);
         if (message)
         {
             va_list args_retry;
@@ -101,7 +102,7 @@ void at_logger_message_v(AtLogger *logger, AtLogLevel level, const char *file, i
             va_end(args_retry);
             if (written < 0)
             {
-                free(message);
+                AT_FREE(message);
                 message = stack_buffer;
                 (void)snprintf(stack_buffer, sizeof(stack_buffer), "<logging error>");
             }
@@ -130,7 +131,7 @@ void at_logger_message_v(AtLogger *logger, AtLogLevel level, const char *file, i
 
     if (message != stack_buffer)
     {
-        free(message);
+        AT_FREE(message);
     }
 }
 

@@ -1,4 +1,5 @@
 #include "persistence_internal.h"
+#include "at_memory.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -149,7 +150,7 @@ bool persistence_create_backup_if_needed(const char *path, char *error_buffer, s
     size_t path_length = strlen(path);
     const char *suffix = ".bak";
     size_t suffix_length = strlen(suffix);
-    char *backup_path = malloc(path_length + suffix_length + 1U);
+    char *backup_path = (char *)AT_MALLOC(path_length + suffix_length + 1U);
     if (!backup_path)
     {
         fclose(source);
@@ -163,7 +164,7 @@ bool persistence_create_backup_if_needed(const char *path, char *error_buffer, s
     if (dest_result != 0)
     {
         persistence_format_errno(error_buffer, error_buffer_size, "failed to create backup", backup_path);
-        free(backup_path);
+        AT_FREE(backup_path);
         fclose(source);
         return false;
     }
@@ -203,6 +204,6 @@ bool persistence_create_backup_if_needed(const char *path, char *error_buffer, s
         persistence_format_errno(error_buffer, error_buffer_size, "failed to close source", path);
         success = false;
     }
-    free(backup_path);
+    AT_FREE(backup_path);
     return success;
 }

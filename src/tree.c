@@ -30,7 +30,7 @@ static bool ensure_person_capacity(FamilyTree *tree)
 
 FamilyTree *family_tree_create(const char *name)
 {
-    FamilyTree *tree = calloc(1U, sizeof(FamilyTree));
+    FamilyTree *tree = AT_CALLOC(1U, sizeof(FamilyTree));
     if (!tree)
     {
         return NULL;
@@ -57,10 +57,10 @@ void family_tree_destroy(FamilyTree *tree)
     {
         person_destroy(tree->persons[index]);
     }
-    free(tree->persons);
-    free(tree->name);
-    free(tree->creation_date);
-    free(tree);
+    AT_FREE(tree->persons);
+    AT_FREE(tree->name);
+    AT_FREE(tree->creation_date);
+    AT_FREE(tree);
 }
 
 bool family_tree_set_creation_date(FamilyTree *tree, const char *creation_date_iso8601)
@@ -71,7 +71,7 @@ bool family_tree_set_creation_date(FamilyTree *tree, const char *creation_date_i
     }
     if (!creation_date_iso8601)
     {
-        free(tree->creation_date);
+        AT_FREE(tree->creation_date);
         tree->creation_date = NULL;
         return true;
     }
@@ -80,7 +80,7 @@ bool family_tree_set_creation_date(FamilyTree *tree, const char *creation_date_i
     {
         return false;
     }
-    free(tree->creation_date);
+    AT_FREE(tree->creation_date);
     tree->creation_date = copy;
     return true;
 }

@@ -61,3 +61,5 @@ All notable changes to this project will be documented in this file. The format 
   persistent diagnostics.
 - Asset pipeline gains `asset_copy` utility to relocate external media into project-managed imports with unique naming
   and relative-path emission, guarded by automated tests.
+- Debug builds now activate a central allocation tracker with leak diagnostics, runtime stats queries, and new unit
+  tests verifying realloc safety and outstanding allocation reporting.

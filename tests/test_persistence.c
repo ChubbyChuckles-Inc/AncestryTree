@@ -1,6 +1,7 @@
 #include "persistence.h"
 #include "person.h"
 #include "test_framework.h"
+#include "at_memory.h"
 #include "tree.h"
 #include "test_persistence_helpers.h"
 
@@ -29,7 +30,7 @@ TEST(test_persistence_writes_expected_fields)
     fseek(stream, 0L, SEEK_END);
     long size = ftell(stream);
     rewind(stream);
-    char *content = malloc((size_t)size + 1U);
+    char *content = (char *)AT_MALLOC((size_t)size + 1U);
     ASSERT_NOT_NULL(content);
     fread(content, 1U, (size_t)size, stream);
     content[size] = '\0';
@@ -41,7 +42,7 @@ TEST(test_persistence_writes_expected_fields)
     ASSERT_NOT_NULL(strstr(content, "\"birth_date\": \"1815-12-10\""));
     ASSERT_NOT_NULL(strstr(content, "\"version\": \"1.0\""));
 
-    free(content);
+    AT_FREE(content);
     remove(path);
     family_tree_destroy(tree);
 }

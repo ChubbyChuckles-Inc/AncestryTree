@@ -128,9 +128,9 @@ static void person_clear_name(Person *person)
     {
         return;
     }
-    free(person->name.first);
-    free(person->name.middle);
-    free(person->name.last);
+    AT_FREE(person->name.first);
+    AT_FREE(person->name.middle);
+    AT_FREE(person->name.last);
     person->name.first = NULL;
     person->name.middle = NULL;
     person->name.last = NULL;
@@ -142,10 +142,10 @@ static void person_clear_dates(Person *person)
     {
         return;
     }
-    free(person->dates.birth_date);
-    free(person->dates.birth_location);
-    free(person->dates.death_date);
-    free(person->dates.death_location);
+    AT_FREE(person->dates.birth_date);
+    AT_FREE(person->dates.birth_location);
+    AT_FREE(person->dates.death_date);
+    AT_FREE(person->dates.death_location);
     person->dates.birth_date = NULL;
     person->dates.birth_location = NULL;
     person->dates.death_date = NULL;
@@ -158,11 +158,11 @@ static void person_clear_certificates(Person *person)
     {
         return;
     }
-    for (size_t index = 0; index < person->certificate_count; ++index)
+    for (size_t index = 0U; index < person->certificate_count; ++index)
     {
-        free(person->certificate_paths[index]);
+        AT_FREE(person->certificate_paths[index]);
     }
-    free(person->certificate_paths);
+    AT_FREE(person->certificate_paths);
     person->certificate_paths = NULL;
     person->certificate_count = 0U;
     person->certificate_capacity = 0U;
@@ -178,7 +178,7 @@ static void person_clear_timeline(Person *person)
     {
         timeline_entry_reset(&person->timeline_entries[index]);
     }
-    free(person->timeline_entries);
+    AT_FREE(person->timeline_entries);
     person->timeline_entries = NULL;
     person->timeline_count = 0U;
     person->timeline_capacity = 0U;
@@ -192,10 +192,10 @@ static void person_clear_metadata(Person *person)
     }
     for (size_t index = 0; index < person->metadata_count; ++index)
     {
-        free(person->metadata[index].key);
-        free(person->metadata[index].value);
+        AT_FREE(person->metadata[index].key);
+        AT_FREE(person->metadata[index].value);
     }
-    free(person->metadata);
+    AT_FREE(person->metadata);
     person->metadata = NULL;
     person->metadata_count = 0U;
     person->metadata_capacity = 0U;
@@ -209,10 +209,10 @@ static void person_clear_spouses(Person *person)
     }
     for (size_t index = 0; index < person->spouses_count; ++index)
     {
-        free(person->spouses[index].marriage_date);
-        free(person->spouses[index].marriage_location);
+        AT_FREE(person->spouses[index].marriage_date);
+        AT_FREE(person->spouses[index].marriage_location);
     }
-    free(person->spouses);
+    AT_FREE(person->spouses);
     person->spouses = NULL;
     person->spouses_count = 0U;
     person->spouses_capacity = 0U;
@@ -220,7 +220,7 @@ static void person_clear_spouses(Person *person)
 
 Person *person_create(uint32_t id)
 {
-    Person *person = calloc(1U, sizeof(Person));
+    Person *person = AT_CALLOC(1U, sizeof(Person));
     if (!person)
     {
         return NULL;
@@ -241,13 +241,13 @@ void person_destroy(Person *person)
     }
     person_clear_name(person);
     person_clear_dates(person);
-    free(person->profile_image_path);
-    free(person->children);
+    AT_FREE(person->profile_image_path);
+    AT_FREE(person->children);
     person_clear_spouses(person);
     person_clear_certificates(person);
     person_clear_timeline(person);
     person_clear_metadata(person);
-    free(person);
+    AT_FREE(person);
 }
 
 static bool person_assign_string(char **target, const char *value)
@@ -258,7 +258,7 @@ static bool person_assign_string(char **target, const char *value)
     }
     if (!value)
     {
-        free(*target);
+        AT_FREE(*target);
         *target = NULL;
         return true;
     }
@@ -267,7 +267,7 @@ static bool person_assign_string(char **target, const char *value)
     {
         return false;
     }
-    free(*target);
+    AT_FREE(*target);
     *target = copy;
     return true;
 }

@@ -7,6 +7,7 @@
 #include "search.h"
 #include "settings.h"
 #include "tree.h"
+#include "at_memory.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -190,7 +191,7 @@ static float nk_raylib_text_width(nk_handle handle, float height, const char *te
     char *buffer = stack_buffer;
     if (len >= (int)sizeof(stack_buffer))
     {
-        buffer = (char *)malloc((size_t)len + 1U);
+        buffer = (char *)AT_MALLOC((size_t)len + 1U);
         if (!buffer)
         {
             return 0.0f;
@@ -201,7 +202,7 @@ static float nk_raylib_text_width(nk_handle handle, float height, const char *te
     Vector2 size = MeasureTextEx(*font, buffer, height, 0.0f);
     if (buffer != stack_buffer)
     {
-        free(buffer);
+        AT_FREE(buffer);
     }
     return size.x;
 }
@@ -278,7 +279,7 @@ static void ui_clipboard_copy(nk_handle usr, const char *text, int len)
     {
         return;
     }
-    char *buffer = (char *)malloc((size_t)len + 1U);
+    char *buffer = (char *)AT_MALLOC((size_t)len + 1U);
     if (!buffer)
     {
         return;
@@ -286,7 +287,7 @@ static void ui_clipboard_copy(nk_handle usr, const char *text, int len)
     memcpy(buffer, text, (size_t)len);
     buffer[len] = '\0';
     SetClipboardText(buffer);
-    free(buffer);
+    AT_FREE(buffer);
 }
 
 static void ui_clipboard_paste(nk_handle usr, struct nk_text_edit *edit)
@@ -388,7 +389,7 @@ static void ui_internal_render(UIInternal *internal)
             char *buffer = stack_buffer;
             if (length >= (int)sizeof(stack_buffer))
             {
-                buffer = (char *)malloc((size_t)length + 1U);
+                buffer = (char *)AT_MALLOC((size_t)length + 1U);
                 if (!buffer)
                 {
                     break;
@@ -400,7 +401,7 @@ static void ui_internal_render(UIInternal *internal)
                        nk_color_to_raylib(text->foreground));
             if (buffer != stack_buffer)
             {
-                free(buffer);
+                AT_FREE(buffer);
             }
         }
         break;
@@ -1548,7 +1549,7 @@ bool ui_init(UIContext *ui, int width, int height)
     ui->height = height;
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-    UIInternal *internal = (UIInternal *)calloc(1, sizeof(UIInternal));
+    UIInternal *internal = (UIInternal *)AT_CALLOC(1U, sizeof(UIInternal));
     if (!internal)
     {
         return false;
@@ -1579,7 +1580,7 @@ bool ui_init(UIContext *ui, int width, int height)
 
     if (!nk_init_default(&internal->ctx, &internal->font))
     {
-        free(internal);
+        AT_FREE(internal);
         return false;
     }
     nk_style_set_font(&internal->ctx, &internal->font);
@@ -1619,7 +1620,7 @@ void ui_cleanup(UIContext *ui)
     if (internal)
     {
         nk_free(&internal->ctx);
-        free(internal);
+        AT_FREE(internal);
     }
 #endif
     ui->impl = NULL;

@@ -4,6 +4,7 @@
 #include "layout.h"
 #include "settings.h"
 #include "test_framework.h"
+#include "at_memory.h"
 #include "tree.h"
 
 #include <stdlib.h>
@@ -55,7 +56,7 @@ static bool mock_command_undo(AppCommand *command, AppState *state)
 
 static void mock_command_destroy(AppCommand *command)
 {
-    free(command);
+    AT_FREE(command);
 }
 
 static const AppCommandVTable MOCK_COMMAND_VTABLE = {
@@ -66,7 +67,7 @@ static const AppCommandVTable MOCK_COMMAND_VTABLE = {
 
 static AppCommand *mock_command_create(int *value, int delta, bool fail_execute, bool fail_undo)
 {
-    MockCommand *mock = (MockCommand *)malloc(sizeof(MockCommand));
+    MockCommand *mock = (MockCommand *)AT_MALLOC(sizeof(MockCommand));
     if (!mock)
     {
         return NULL;
