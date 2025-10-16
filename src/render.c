@@ -50,6 +50,7 @@ static void render_set_default_config(RenderConfig *config)
     config->show_overlay = true;
     config->show_name_panels = true;
     config->show_profile_images = true;
+    config->name_panel_font_size = 26.0f;
 }
 
 void render_state_init(RenderState *state)
@@ -98,6 +99,10 @@ bool render_config_validate(const RenderConfig *config)
         return false;
     }
     if (!(config->connection_radius >= 0.0f))
+    {
+        return false;
+    }
+    if (!(config->name_panel_font_size >= 1.0f))
     {
         return false;
     }
@@ -369,8 +374,22 @@ static void render_draw_label(RenderState *state, const LayoutNode *node, const 
     {
         return;
     }
+    float request_font = state->config.name_panel_font_size;
+    if (request_font < 1.0f)
+    {
+        request_font = 26.0f;
+    }
+    if (is_selected)
+    {
+        request_font *= 1.18f;
+    }
+    else if (is_hovered)
+    {
+        request_font *= 1.08f;
+    }
+
     RenderLabelInfo info;
-    if (!render_labels_acquire(state->label_system, person, state->config.show_profile_images, &info) ||
+    if (!render_labels_acquire(state->label_system, person, state->config.show_profile_images, request_font, &info) ||
         !info.valid)
     {
         return;
@@ -391,15 +410,6 @@ static void render_draw_label(RenderState *state, const LayoutNode *node, const 
     {
         scale_factor = 0.48f;
     }
-    if (is_selected)
-    {
-        scale_factor *= 1.18f;
-    }
-    else if (is_hovered)
-    {
-        scale_factor *= 1.08f;
-    }
-
     Vector2 size = {info.width_pixels * scale_factor, info.height_pixels * scale_factor};
     Color tint = WHITE;
     tint.a = (unsigned char)(is_selected ? 255 : (is_hovered ? 244 : 232));
@@ -441,6 +451,7 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.show_overlay = config->show_overlay;
         state->config.show_name_panels = config->show_name_panels;
         state->config.show_profile_images = config->show_profile_images;
+        state->config.name_panel_font_size = config->name_panel_font_size;
     }
 
     if (!render_config_validate(&state->config))
@@ -491,6 +502,11 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         }
     }
     state->label_system_ready = (state->label_system != NULL) && window_ready;
+    if (state->label_system_ready)
+    {
+        render_labels_set_base_font_size(state->label_system, state->config.name_panel_font_size);
+        state->label_system_font_size_applied = state->config.name_panel_font_size;
+    }
 #endif
 
     state->initialized = true;
@@ -745,6 +761,14 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
     if (state->label_system)
     {
         state->label_system_ready = IsWindowReady();
+        if (state->label_system_ready)
+        {
+            if (fabsf(state->label_system_font_size_applied - state->config.name_panel_font_size) > 0.05f)
+            {
+                render_labels_set_base_font_size(state->label_system, state->config.name_panel_font_size);
+                state->label_system_font_size_applied = state->config.name_panel_font_size;
+            }
+        }
     }
 
     if (state->label_system_ready && state->label_system)

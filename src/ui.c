@@ -625,6 +625,14 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal,
                                            new_profiles ? "Portraits enabled in name panels." : "Portraits hidden from name panels.");
                 }
+
+                float font_control = render_config->name_panel_font_size;
+                nk_property_float(ctx, "Name panel font", 16.0f, &font_control, 64.0f, 1.0f, 0.2f);
+                if (fabsf(font_control - render_config->name_panel_font_size) > 0.05f)
+                {
+                    render_config->name_panel_font_size = font_control;
+                    ui_internal_set_status(internal, "Name panel font size updated.");
+                }
             }
             if (nk_menu_item_label(ctx, internal->auto_orbit ? "Disable Auto Orbit" : "Enable Auto Orbit",
                                    NK_TEXT_LEFT))

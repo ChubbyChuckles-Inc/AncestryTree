@@ -232,7 +232,7 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [x] Apply color based on alive status
       [x] Apply glow shader for alive persons
       [x] Handle selected/hover states
-  [ ] Create glow shader (GLSL)
+    [x] Create glow shader (GLSL)
       [x] Vertex shader for sphere
       [x] Fragment shader with bloom effect
       [x] Adjustable glow intensity
@@ -241,19 +241,19 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [ ] Minimize state changes
 
 4.5 3D Name Panels
-  [ ] Implement panel_render() function
-      [ ] Create 3D quad facing camera (billboard)
-      [ ] Render person name as texture
-      [ ] Display profile image if available
-      [ ] Position in front of sphere
-  [ ] Implement text_to_texture() function
-      [ ] Render text to render texture
-      [ ] Cache textures for performance
-      [ ] Support multiple font sizes
-  [ ] Implement image_load_resize() function
-      [ ] Load profile images
-      [ ] Resize to standard dimensions
-      [ ] Generate mipmaps
+  [x] Implement panel_render() function
+      [x] Create 3D quad facing camera (billboard)
+      [x] Render person name as texture
+      [x] Display profile image if available
+      [x] Position in front of sphere
+  [x] Implement text_to_texture() function
+      [x] Render text to render texture
+      [x] Cache textures for performance
+      [x] Support multiple font sizes
+  [x] Implement image_load_resize() function
+      [x] Load profile images
+      [x] Resize to standard dimensions
+      [x] Generate mipmaps
 
 4.6 Tree Layout Algorithm
   [x] Implement layout_calculate() in src/layout.c

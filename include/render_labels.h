@@ -16,10 +16,12 @@ typedef struct RenderLabelInfo
     Texture2D texture;
     float width_pixels;
     float height_pixels;
+    float font_size;
 #else
     int placeholder_texture_id;
     float width_pixels;
     float height_pixels;
+    float font_size;
 #endif
     bool valid;
 } RenderLabelInfo;
@@ -32,9 +34,11 @@ typedef struct RenderLabelEntry
     Texture2D texture;
     float width_pixels;
     float height_pixels;
+    float font_size;
     bool in_use;
 #else
     unsigned int person_id;
+    float font_size;
     bool in_use;
 #endif
 } RenderLabelEntry;
@@ -45,7 +49,7 @@ typedef struct RenderLabelSystem
     RenderLabelEntry *entries;
     size_t count;
     size_t capacity;
-    float font_size;
+    float base_font_size;
     Color text_color;
     Color background_color_top;
     Color background_color_bottom;
@@ -54,6 +58,7 @@ typedef struct RenderLabelSystem
     RenderLabelEntry *entries;
     size_t count;
     size_t capacity;
+    float base_font_size;
 #endif
 } RenderLabelSystem;
 
@@ -61,7 +66,8 @@ bool render_labels_init(RenderLabelSystem *system);
 void render_labels_shutdown(RenderLabelSystem *system);
 void render_labels_begin_frame(RenderLabelSystem *system);
 void render_labels_end_frame(RenderLabelSystem *system);
+void render_labels_set_base_font_size(RenderLabelSystem *system, float font_size);
 bool render_labels_acquire(RenderLabelSystem *system, const struct Person *person, bool include_profile,
-                           RenderLabelInfo *out_info);
+                           float font_size, RenderLabelInfo *out_info);
 
 #endif /* RENDER_LABELS_H */

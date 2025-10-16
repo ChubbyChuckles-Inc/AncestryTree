@@ -38,6 +38,7 @@ typedef struct RenderConfig
     bool show_overlay;
     bool show_name_panels;
     bool show_profile_images;
+    float name_panel_font_size;
 } RenderConfig;
 
 typedef struct RenderConnectionSegment
@@ -63,6 +64,7 @@ typedef struct RenderState
     RenderTexture2D scene_target;
     struct RenderLabelSystem *label_system;
     bool label_system_ready;
+    float label_system_font_size_applied;
 #endif
 } RenderState;
 

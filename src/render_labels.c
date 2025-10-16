@@ -32,6 +32,7 @@ static bool render_labels_reset(RenderLabelSystem *system)
         entry->signature[0] = '\0';
         entry->width_pixels = 0.0f;
         entry->height_pixels = 0.0f;
+        entry->font_size = 0.0f;
     }
 #endif
     return true;
@@ -45,7 +46,7 @@ bool render_labels_init(RenderLabelSystem *system)
     }
     memset(system, 0, sizeof(*system));
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    system->font_size = 24.0f;
+    system->base_font_size = 26.0f;
     system->text_color = (Color){236, 248, 255, 255};
     system->background_color_top = (Color){20, 32, 52, 228};
     system->background_color_bottom = (Color){6, 12, 24, 228};
@@ -82,6 +83,7 @@ static bool render_labels_ensure_capacity(RenderLabelSystem *system)
         entries[index].texture.height = 0;
         entries[index].width_pixels = 0.0f;
         entries[index].height_pixels = 0.0f;
+        entries[index].font_size = 0.0f;
         entries[index].in_use = false;
     }
     system->entries = entries;
@@ -102,6 +104,7 @@ void render_labels_shutdown(RenderLabelSystem *system)
     system->entries = NULL;
     system->count = 0U;
     system->capacity = 0U;
+    system->base_font_size = 26.0f;
 #endif
 }
 
@@ -143,6 +146,20 @@ void render_labels_end_frame(RenderLabelSystem *system)
 }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+static float render_labels_clamp_font_size(float value)
+{
+    float clamped = value;
+    if (clamped < 16.0f)
+    {
+        clamped = 16.0f;
+    }
+    if (clamped > 72.0f)
+    {
+        clamped = 72.0f;
+    }
+    return clamped;
+}
+
 static Color render_labels_lerp_color(Color a, Color b, float t)
 {
     if (t < 0.0f)
@@ -176,7 +193,7 @@ static void render_labels_draw_gradient(Image *image, int width, int height, Col
 }
 
 static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEntry *entry, const Person *person,
-                                        bool include_profile)
+                                        bool include_profile, float requested_font_size)
 {
     char name_buffer[192];
     if (!person_format_display_name(person, name_buffer, sizeof(name_buffer)))
@@ -184,10 +201,11 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
         (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", person ? person->id : 0U);
     }
 
+    float font_size = render_labels_clamp_font_size(requested_font_size);
     Font font = GetFontDefault();
-    float spacing = system->font_size * 0.08f;
-    Vector2 text_size = MeasureTextEx(font, name_buffer, system->font_size, spacing);
-    int padding = (int)(system->font_size * 0.6f);
+    float spacing = font_size * 0.08f;
+    Vector2 text_size = MeasureTextEx(font, name_buffer, font_size, spacing);
+    int padding = (int)(font_size * 0.6f);
     int portrait_pixels = 0;
     Image profile_image = {0};
     bool profile_loaded = false;
@@ -199,7 +217,7 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
             profile_image = LoadImage(person->profile_image_path);
             if (profile_image.data != NULL)
             {
-                portrait_pixels = (int)(system->font_size * 2.0f);
+                portrait_pixels = (int)(font_size * 2.0f);
                 if (portrait_pixels < 48)
                 {
                     portrait_pixels = 48;
@@ -243,7 +261,7 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
 
     Vector2 text_position = {(float)(padding + portrait_pixels + (portrait_pixels > 0 ? padding / 2 : 0)),
                              (float)(padding + (content_height - text_height) / 2)};
-    ImageDrawTextEx(&canvas, font, name_buffer, text_position, system->font_size, spacing, system->text_color);
+    ImageDrawTextEx(&canvas, font, name_buffer, text_position, font_size, spacing, system->text_color);
 
     Texture2D texture = LoadTextureFromImage(canvas);
     UnloadImage(canvas);
@@ -251,16 +269,18 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
     {
         return false;
     }
+    GenTextureMipmaps(&texture);
     SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
     entry->texture = texture;
     entry->width_pixels = (float)texture.width;
     entry->height_pixels = (float)texture.height;
+    entry->font_size = font_size;
     return true;
 }
 #endif
 
 bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool include_profile,
-                           RenderLabelInfo *out_info)
+                           float requested_font_size, RenderLabelInfo *out_info)
 {
     if (!system || !person || !out_info)
     {
@@ -269,8 +289,12 @@ bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool
     memset(out_info, 0, sizeof(*out_info));
 #if !defined(ANCESTRYTREE_HAVE_RAYLIB)
     (void)include_profile;
+    (void)requested_font_size;
     return false;
 #else
+    float font_size = (requested_font_size > 0.0f) ? requested_font_size : system->base_font_size;
+    font_size = render_labels_clamp_font_size(font_size);
+
     char signature[256];
     char name_buffer[192];
     if (!person_format_display_name(person, name_buffer, sizeof(name_buffer)))
@@ -278,18 +302,20 @@ bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool
         (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", person->id);
     }
     const char *profile_path = (include_profile && person->profile_image_path) ? person->profile_image_path : "";
-    (void)snprintf(signature, sizeof(signature), "%s|%s", name_buffer, profile_path);
+    (void)snprintf(signature, sizeof(signature), "%0.2f|%s|%s", font_size, name_buffer, profile_path);
 
     RenderLabelEntry *available_entry = NULL;
     for (size_t index = 0U; index < system->count; ++index)
     {
         RenderLabelEntry *entry = &system->entries[index];
-        if (entry->person_id == person->id && strcmp(entry->signature, signature) == 0 && entry->texture.id != 0)
+        if (entry->person_id == person->id && entry->texture.id != 0 &&
+            strcmp(entry->signature, signature) == 0 && fabsf(entry->font_size - font_size) < 0.05f)
         {
             entry->in_use = true;
             out_info->texture = entry->texture;
             out_info->width_pixels = entry->width_pixels;
             out_info->height_pixels = entry->height_pixels;
+            out_info->font_size = entry->font_size;
             out_info->valid = true;
             return true;
         }
@@ -308,13 +334,14 @@ bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool
         available_entry = &system->entries[system->count++];
     }
 
-    if (!render_labels_build_texture(system, available_entry, person, include_profile))
+    if (!render_labels_build_texture(system, available_entry, person, include_profile, font_size))
     {
         available_entry->person_id = 0U;
         available_entry->signature[0] = '\0';
         available_entry->texture.id = 0;
         available_entry->width_pixels = 0.0f;
         available_entry->height_pixels = 0.0f;
+        available_entry->font_size = 0.0f;
         available_entry->in_use = false;
         return false;
     }
@@ -326,7 +353,27 @@ bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool
     out_info->texture = available_entry->texture;
     out_info->width_pixels = available_entry->width_pixels;
     out_info->height_pixels = available_entry->height_pixels;
+    out_info->font_size = available_entry->font_size;
     out_info->valid = true;
     return true;
+#endif
+}
+
+void render_labels_set_base_font_size(RenderLabelSystem *system, float font_size)
+{
+    if (!system)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    float clamped = render_labels_clamp_font_size((font_size > 0.0f) ? font_size : system->base_font_size);
+    if (fabsf(system->base_font_size - clamped) < 0.05f)
+    {
+        return;
+    }
+    system->base_font_size = clamped;
+    (void)render_labels_reset(system);
+#else
+    (void)font_size;
 #endif
 }

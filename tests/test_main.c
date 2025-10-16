@@ -17,12 +17,13 @@ void register_camera_controller_tests(TestRegistry *registry);
 void register_path_utils_tests(TestRegistry *registry);
 void register_render_tests(TestRegistry *registry);
 void register_interaction_tests(TestRegistry *registry);
+void register_render_labels_tests(TestRegistry *registry);
 
 int main(void)
 {
-    TestCase cases[64];
+    TestCase cases[72];
     TestRegistry registry;
-    test_registry_init(&registry, cases, 64);
+    test_registry_init(&registry, cases, 72);
 
     register_string_tests(&registry);
     register_memory_tests(&registry);
@@ -38,6 +39,7 @@ int main(void)
     register_camera_controller_tests(&registry);
     register_path_utils_tests(&registry);
     register_render_tests(&registry);
+    register_render_labels_tests(&registry);
     register_interaction_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
