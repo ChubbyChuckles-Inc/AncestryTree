@@ -300,6 +300,11 @@ bool expansion_is_active(const ExpansionState *state)
     return state && state->active;
 }
 
+bool expansion_is_reversing(const ExpansionState *state)
+{
+    return state && state->reversing;
+}
+
 bool expansion_is_in_detail_mode(const ExpansionState *state)
 {
     return state && state->detail_mode;

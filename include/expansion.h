@@ -41,6 +41,7 @@ bool expansion_update(ExpansionState *state, float delta_seconds, struct CameraC
 void expansion_complete(ExpansionState *state);
 void expansion_reverse(ExpansionState *state, struct CameraController *camera);
 bool expansion_is_active(const ExpansionState *state);
+bool expansion_is_reversing(const ExpansionState *state);
 bool expansion_is_in_detail_mode(const ExpansionState *state);
 float expansion_primary_scale(const ExpansionState *state);
 float expansion_inactive_scale(const ExpansionState *state);

@@ -7,7 +7,10 @@
 #include "search.h"
 #include "settings.h"
 #include "tree.h"
+#include "person.h"
 #include "at_memory.h"
+#include "detail_view.h"
+#include "expansion.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -26,6 +29,15 @@
 #endif
 
 #define UI_SEARCH_MAX_RESULTS 64U
+#define UI_POINTER_REGION_MAX 32U
+
+typedef struct UIPointerRegion
+{
+    float x;
+    float y;
+    float width;
+    float height;
+} UIPointerRegion;
 
 typedef struct UIInternal
 {
@@ -57,6 +69,9 @@ typedef struct UIInternal
     int search_selected_index;
     bool search_dirty;
     const FamilyTree *search_last_tree;
+    DetailViewState detail_view;
+    UIPointerRegion pointer_regions[UI_POINTER_REGION_MAX];
+    size_t pointer_region_count;
 #else
     int unused;
 #endif
@@ -106,6 +121,36 @@ static const UIInternal *ui_internal_const_cast(const UIContext *ui)
         return NULL;
     }
     return (const UIInternal *)ui->impl;
+}
+
+static void ui_internal_reset_pointer_regions(UIInternal *internal)
+{
+    if (!internal)
+    {
+        return;
+    }
+    internal->pointer_region_count = 0U;
+}
+
+static void ui_internal_add_pointer_region(UIInternal *internal, float x, float y, float width, float height)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (width <= 0.0f || height <= 0.0f)
+    {
+        return;
+    }
+    if (internal->pointer_region_count >= UI_POINTER_REGION_MAX)
+    {
+        return;
+    }
+    UIPointerRegion *region = &internal->pointer_regions[internal->pointer_region_count++];
+    region->x = x;
+    region->y = y;
+    region->width = width;
+    region->height = height;
 }
 #endif
 
@@ -561,6 +606,7 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
     float height = 240.0f;
     float x = ((float)ui->width - width) * 0.5f;
     struct nk_rect bounds = nk_rect(x, 64.0f, width, height);
+    ui_internal_add_pointer_region(internal, bounds.x, bounds.y, bounds.w, bounds.h);
     if (nk_begin(ctx, "About##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
     {
@@ -606,6 +652,7 @@ static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
     float height = fminf(320.0f, (float)ui->height * 0.75f);
     float x = ((float)ui->width - width) * 0.5f;
     struct nk_rect bounds = nk_rect(x, 80.0f, width, height);
+    ui_internal_add_pointer_region(internal, bounds.x, bounds.y, bounds.w, bounds.h);
     if (nk_begin(ctx, "Quick Help##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
     {
@@ -684,6 +731,7 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         x = 10.0f;
     }
     struct nk_rect bounds = nk_rect(x, 70.0f, width, height);
+    ui_internal_add_pointer_region(internal, bounds.x, bounds.y, bounds.w, bounds.h);
 
     if (nk_begin(ctx, "Search##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_CLOSABLE))
@@ -886,6 +934,7 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         width = 280.0f;
     }
     struct nk_rect bounds = nk_rect((float)ui->width - width - 20.0f, 60.0f, width, 460.0f);
+    ui_internal_add_pointer_region(internal, bounds.x, bounds.y, bounds.w, bounds.h);
     if (nk_begin(ctx, "Settings##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_CLOSABLE))
     {
@@ -1112,6 +1161,7 @@ static void ui_draw_exit_prompt(UIInternal *internal, UIContext *ui)
     float x = ((float)ui->width - width) * 0.5f;
     float y = ((float)ui->height - height) * 0.5f;
     struct nk_rect bounds = nk_rect(x, y, width, height);
+    ui_internal_add_pointer_region(internal, bounds.x, bounds.y, bounds.w, bounds.h);
     if (nk_begin(ctx, "Exit##Prompt", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
     {
@@ -1161,6 +1211,7 @@ static void ui_draw_error_dialog(UIInternal *internal, UIContext *ui)
     float x = ((float)ui->width - width) * 0.5f;
     float y = ((float)ui->height - height) * 0.5f;
     struct nk_rect bounds = nk_rect(x, y, width, height);
+    ui_internal_add_pointer_region(internal, bounds.x, bounds.y, bounds.w, bounds.h);
     if (nk_begin(ctx, window_title, bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
     {
@@ -1192,12 +1243,14 @@ static void ui_draw_error_dialog(UIInternal *internal, UIContext *ui)
 }
 
 static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
-                             CameraController *camera, RenderConfig *render_config, bool settings_dirty)
+                             CameraController *camera, RenderConfig *render_config, bool settings_dirty,
+                             const Person *selected_person, bool detail_active)
 {
     if (!internal || !ui)
     {
         return;
     }
+    ui_internal_add_pointer_region(internal, 0.0f, 0.0f, (float)ui->width, 40.0f);
     struct nk_context *ctx = &internal->ctx;
     struct nk_rect bar_rect = nk_rect(0.0f, 0.0f, (float)ui->width, 30.0f);
     if (nk_begin(ctx, "MenuBar", bar_rect, NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND))
@@ -1303,6 +1356,35 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
             {
                 internal->show_search_panel = true;
                 internal->search_dirty = true;
+            }
+            if (nk_menu_item_label(ctx, "Open Detail View", NK_TEXT_LEFT))
+            {
+                if (detail_active)
+                {
+                    ui_internal_set_status(internal, "Detail view already active.");
+                }
+                else if (!selected_person)
+                {
+                    ui_internal_set_status(internal, "Select a person before opening detail view.");
+                }
+                else
+                {
+                    if (ui_event_enqueue_with_u32(ui, UI_EVENT_ENTER_DETAIL_VIEW, selected_person->id))
+                    {
+                        char name_buffer[128];
+                        if (!person_format_display_name(selected_person, name_buffer, sizeof(name_buffer)))
+                        {
+                            (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", selected_person->id);
+                        }
+                        char status[192];
+                        (void)snprintf(status, sizeof(status), "Detail view requested for %s.", name_buffer);
+                        ui_internal_set_status(internal, status);
+                    }
+                    else
+                    {
+                        ui_internal_set_status(internal, "Event queue full; detail view aborted.");
+                    }
+                }
             }
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (nk_menu_item_label(ctx, "Reset Camera", NK_TEXT_LEFT))
@@ -1577,6 +1659,7 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->search_selected_index = -1;
     internal->search_dirty = true;
     internal->search_last_tree = NULL;
+    internal->pointer_region_count = 0U;
 
     if (!nk_init_default(&internal->ctx, &internal->font))
     {
@@ -1587,6 +1670,13 @@ bool ui_init(UIContext *ui, int width, int height)
     ui_apply_default_style(&internal->ctx);
     internal->ctx.clip.copy = ui_clipboard_copy;
     internal->ctx.clip.paste = ui_clipboard_paste;
+
+    if (!detail_view_init(&internal->detail_view))
+    {
+        nk_free(&internal->ctx);
+        AT_FREE(internal);
+        return false;
+    }
 
     ui->impl = internal;
     ui->available = true;
@@ -1619,6 +1709,7 @@ void ui_cleanup(UIContext *ui)
     UIInternal *internal = ui_internal_cast(ui);
     if (internal)
     {
+        detail_view_cleanup(&internal->detail_view);
         nk_free(&internal->ctx);
         AT_FREE(internal);
     }
@@ -1734,6 +1825,7 @@ static void ui_draw_hover_tooltip(UIInternal *internal, UIContext *ui, const Per
     }
 
     struct nk_rect bounds = nk_rect(x, y, width, height);
+    ui_internal_add_pointer_region(internal, bounds.x, bounds.y, bounds.w, bounds.h);
     if (nk_begin(ctx, "Tooltip##Person", bounds,
                  NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND))
     {
@@ -1767,6 +1859,7 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
                                const Person *hovered_person)
 {
     struct nk_context *ctx = &internal->ctx;
+    ui_internal_add_pointer_region(internal, 18.0f, 20.0f, 320.0f, 220.0f);
     if (nk_begin(ctx, "HUD", nk_rect(18.0f, 20.0f, 320.0f, 220.0f),
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE))
     {
@@ -1833,7 +1926,8 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
 
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
                      float fps, const Person *selected_person, const Person *hovered_person,
-                     RenderConfig *render_config, Settings *settings, bool settings_dirty)
+                     RenderConfig *render_config, Settings *settings, bool settings_dirty,
+                     const ExpansionState *expansion)
 {
     if (!ui || !ui->available)
     {
@@ -1845,6 +1939,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         return;
     }
+    ui_internal_reset_pointer_regions(internal);
     if (internal->search_last_tree != tree)
     {
         internal->search_last_tree = tree;
@@ -1852,15 +1947,43 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
         ui_search_clear_results(internal);
         internal->search_selected_index = -1;
     }
-    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings_dirty);
-    ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
+    bool detail_requested = false;
+    const Person *detail_person = NULL;
+    if (expansion && expansion_is_active(expansion) && !expansion_is_reversing(expansion))
+    {
+        detail_requested = true;
+        detail_person = expansion->person;
+    }
+    if (detail_requested)
+    {
+        ui_internal_add_pointer_region(internal, 0.0f, 0.0f, (float)ui->width, (float)ui->height);
+    }
+
+    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings_dirty, selected_person,
+                     detail_requested);
+    if (!detail_requested)
+    {
+        ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
+    }
     ui_draw_about_window(internal, ui);
     ui_draw_help_window(internal, ui);
     ui_draw_search_panel(internal, ui, tree);
     ui_draw_settings_window(internal, ui, settings, settings_dirty);
     ui_draw_exit_prompt(internal, ui);
     ui_draw_error_dialog(internal, ui);
-    if (hovered_person)
+    if (detail_person)
+    {
+        bool exit_requested = false;
+        if (detail_view_render(&internal->detail_view, &internal->ctx, detail_person, ui->width, ui->height,
+                               &exit_requested))
+        {
+            if (exit_requested)
+            {
+                (void)ui_event_enqueue(ui, UI_EVENT_EXIT_DETAIL_VIEW);
+            }
+        }
+    }
+    else if (hovered_person)
     {
         ui_draw_hover_tooltip(internal, ui, hovered_person);
     }
@@ -1895,6 +2018,52 @@ void ui_end_frame(UIContext *ui)
 bool ui_is_available(const UIContext *ui)
 {
     return ui ? ui->available : false;
+}
+
+bool ui_pointer_blocks_interaction(const UIContext *ui)
+{
+    if (!ui)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    if (!ui->available)
+    {
+        return false;
+    }
+    const UIInternal *internal = ui_internal_const_cast(ui);
+    if (!internal)
+    {
+        return false;
+    }
+    Vector2 mouse = GetMousePosition();
+    for (size_t index = 0U; index < internal->pointer_region_count; ++index)
+    {
+        const UIPointerRegion *region = &internal->pointer_regions[index];
+        float max_x = region->x + region->width;
+        float max_y = region->y + region->height;
+        if (mouse.x >= region->x && mouse.x <= max_x && mouse.y >= region->y && mouse.y <= max_y)
+        {
+            return true;
+        }
+    }
+    const struct nk_context *ctx = &internal->ctx;
+    if (nk_window_is_any_hovered(ctx) == nk_true)
+    {
+        return true;
+    }
+    if (nk_item_is_any_active(ctx) == nk_true)
+    {
+        return true;
+    }
+    if (ctx->input.mouse.grab != 0 || ctx->input.mouse.grabbed != 0)
+    {
+        return true;
+    }
+    return false;
+#else
+    return false;
+#endif
 }
 
 bool ui_auto_orbit_enabled(const UIContext *ui)

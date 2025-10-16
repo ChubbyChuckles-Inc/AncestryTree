@@ -290,7 +290,7 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [x] Return closest intersected person
   [x] Implement sphere_select() function
       [x] Handle mouse click on sphere
-      [ ] Trigger expansion animation
+      [x] Trigger expansion animation
       [x] Update application state
   [x] Implement sphere_hover() function
       [x] Detect mouse hover
@@ -314,39 +314,39 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
       [x] Fade out other spheres
   [x] Implement expansion_complete() function
       [x] Switch to detail view mode
-      [ ] Show detail UI panels
+      [x] Show detail UI panels
   [x] Implement expansion_reverse() function
       [x] Animate sphere back to tree
       [x] Return camera to tree view
       [x] Fade in other spheres
 
 5.2 Detail View Rendering
-  [ ] Implement detail_view_init() function
-      [ ] Create layout for detail panels
-      [ ] Load high-res images
-      [ ] Prepare timeline visualization
-  [ ] Implement detail_view_render() function
-      [ ] Render expanded sphere (immersive)
-      [ ] Render person name and dates (large text)
-      [ ] Render profile image gallery
-      [ ] Render certificates grid
-      [ ] Render timeline
-      [ ] Render back button
-  [ ] Implement detail_view_cleanup() function
+  [x] Implement detail_view_init() function
+      [x] Create layout for detail panels
+      [x] Load high-res images
+      [x] Prepare timeline visualization
+  [x] Implement detail_view_render() function
+      [x] Render expanded sphere (immersive)
+      [x] Render person name and dates (large text)
+      [x] Render profile image gallery
+      [x] Render certificates grid
+      [x] Render timeline
+      [x] Render back button
+  [x] Implement detail_view_cleanup() function
 
 5.3 Image Gallery
-  [ ] Implement gallery_init() function
-      [ ] Load all images for person
-      [ ] Create thumbnails
-      [ ] Set up scrollable grid
-  [ ] Implement gallery_render() function
-      [ ] Display images in grid layout
-      [ ] Handle image selection
-      [ ] Support zoom on selected image
-  [ ] Implement image_viewer() function
-      [ ] Full screen image display
-      [ ] Zoom and pan controls
-      [ ] Next/previous navigation
+  [x] Implement gallery_init() function
+      [x] Load all images for person
+      [x] Create thumbnails
+      [x] Set up scrollable grid
+  [x] Implement gallery_render() function
+      [x] Display images in grid layout
+      [x] Handle image selection
+      [x] Support zoom on selected image
+  [x] Implement image_viewer() function
+      [x] Full screen image display
+      [x] Zoom and pan controls
+      [x] Next/previous navigation
 
 5.4 Certificate Display
   [ ] Implement certificate_render() function
@@ -359,19 +359,19 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
       [ ] Annotation support (future)
 
 5.5 Timeline Visualization
-  [ ] Implement timeline_init() function
-      [ ] Load all timeline entries
-      [ ] Calculate layout positions
-      [ ] Generate timeline texture
-  [ ] Implement timeline_render() function
-      [ ] Draw horizontal timeline
-      [ ] Plot events at correct positions
-      [ ] Draw event markers with dates
-      [ ] Draw event descriptions
-      [ ] Support scrolling for long timelines
-  [ ] Implement timeline_event_hover() function
-      [ ] Show detailed popup on hover
-      [ ] Display associated images
+  [x] Implement timeline_init() function
+      [x] Load all timeline entries
+      [x] Calculate layout positions
+      [x] Generate timeline texture
+  [x] Implement timeline_render() function
+      [x] Draw horizontal timeline
+      [x] Plot events at correct positions
+      [x] Draw event markers with dates
+      [x] Draw event descriptions
+      [x] Support scrolling for long timelines
+  [x] Implement timeline_event_hover() function
+      [x] Show detailed popup on hover
+      [x] Display associated images
 
 ================================================================================
 PHASE 6: USER INTERFACE (NUKLEAR)

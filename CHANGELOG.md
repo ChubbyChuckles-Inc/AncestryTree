@@ -9,6 +9,14 @@ All notable changes to this project will be documented in this file. The format 
 - Sphere expansion pipeline that animates the focused person into holographic detail view, eases the camera toward the
   target, fades/scales surrounding nodes, and exposes AppState helpers plus dedicated unit tests for start/update/reverse
   flows.
+- Interactive detail view overlay presenting profile metadata, certificate previews, and timeline entries with
+  Nuklear-driven layout, optional texture previews, and an in-UI exit control synchronized with the expansion workflow.
+- View menu action that opens the detail view for the selected person, queueing the expansion workflow when the user
+  prefers menu-driven interaction over direct scene gestures.
+- Detail view media gallery that aggregates profile, certificate, and timeline assets with zoomable previews,
+  thumbnail navigation, and wrap-around controls.
+- Interactive timeline visualization inside the detail view that plots events along a normalized axis with hover
+  tooltips, reinforcing historical context without leaving the holographic overlay.
 - Initial repository scaffolding and documentation.
 - Core unit tests for person and family tree modules covering relationships, metadata, and validation.
 - ISO-8601 date utilities with strict validation for people and timeline entries, plus timeline unit coverage.

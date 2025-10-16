@@ -574,15 +574,102 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         camera_controller_reset(camera);
         app_report_status(ui, logger, "Camera reset to default orbit.");
         break;
+    case UI_EVENT_ENTER_DETAIL_VIEW:
+    {
+        if (!app_state)
+        {
+            app_report_error(ui, logger, "Detail view unavailable; application state not configured.");
+            break;
+        }
+        if (!tree || !*tree)
+        {
+            app_report_error(ui, logger, "Detail view request failed; tree unavailable.");
+            break;
+        }
+        uint32_t person_id = event->param_u32;
+        if (person_id == 0U)
+        {
+            app_report_error(ui, logger, "Detail view request invalid; selection missing.");
+            break;
+        }
+        Person *target = family_tree_find_person(*tree, person_id);
+        if (!target)
+        {
+            char message[192];
+            (void)snprintf(message, sizeof(message), "Detail view failed: person %u not found.", person_id);
+            app_report_error(ui, logger, message);
+            break;
+        }
+        if (!app_state_begin_detail_view(app_state, target))
+        {
+            char name_buffer[128];
+            if (!person_format_display_name(target, name_buffer, sizeof(name_buffer)))
+            {
+                (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", target->id);
+            }
+            char message[192];
+            (void)snprintf(message, sizeof(message), "Unable to open detail view for %s.", name_buffer);
+            app_report_error(ui, logger, message);
+            break;
+        }
+        char name_buffer[128];
+        if (!person_format_display_name(target, name_buffer, sizeof(name_buffer)))
+        {
+            (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", target->id);
+        }
+        char message[192];
+        (void)snprintf(message, sizeof(message), "Entering detail view for %s.", name_buffer);
+        app_report_status(ui, logger, message);
+    }
+    break;
+    case UI_EVENT_EXIT_DETAIL_VIEW:
+        if (app_state)
+        {
+            app_state_request_detail_exit(app_state);
+            app_report_status(ui, logger, "Detail view closing.");
+        }
+        break;
     case UI_EVENT_ESCAPE:
     {
+        bool detail_closed = false;
+        if (app_state)
+        {
+            const ExpansionState *exp = app_state_get_expansion(app_state);
+            if (exp && expansion_is_active(exp))
+            {
+                app_state_request_detail_exit(app_state);
+                detail_closed = true;
+            }
+        }
+
         const Person *selected_before = interaction_get_selected(interaction_state);
-        if (selected_before)
+        bool selection_cleared = false;
+        if (!detail_closed && selected_before)
         {
             interaction_clear_selection(interaction_state);
+            selection_cleared = true;
         }
         bool dismissed = ui_handle_escape(ui);
-        if (dismissed && selected_before)
+        if (detail_closed)
+        {
+            if (dismissed && selection_cleared)
+            {
+                app_report_status(ui, logger, "Detail view closed; selection cleared and dialogs dismissed.");
+            }
+            else if (dismissed)
+            {
+                app_report_status(ui, logger, "Detail view closed and dialogs dismissed.");
+            }
+            else if (selection_cleared)
+            {
+                app_report_status(ui, logger, "Detail view closed and selection cleared.");
+            }
+            else
+            {
+                app_report_status(ui, logger, "Detail view closed.");
+            }
+        }
+        else if (dismissed && selection_cleared)
         {
             app_report_status(ui, logger, "Selection cleared and dialogs dismissed.");
         }
@@ -590,7 +677,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         {
             app_report_status(ui, logger, "Dialogs dismissed.");
         }
-        else if (selected_before)
+        else if (selection_cleared)
         {
             app_report_status(ui, logger, "Selection cleared.");
         }
@@ -1281,9 +1368,15 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     EventProcessContext event_context;
     event_context.graphics_state = &graphics_state;
     event_context.ui = ui_ready ? &ui : NULL;
+    event_context.pointer_blocked = false;
+    event_context.mouse_left_pressed = false;
+    event_context.shift_down = false;
+    event_context.mouse_x = 0.0f;
+    event_context.mouse_y = 0.0f;
     event_context.interaction_state = &interaction_state;
     event_context.layout = &layout;
     event_context.camera = &camera_controller;
+    event_context.app_state = &app_state;
     event_context.render_state = &render_state;
     event_context.render_ready = render_ready;
     event_context.render_error_buffer = render_error;
@@ -1304,6 +1397,16 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         queue_payload.ui = event_context.ui;
         shortcut_payload.auto_save = auto_save_ready ? &auto_save : NULL;
         queue_payload.auto_save = auto_save_ready ? &auto_save : NULL;
+
+        Vector2 mouse = GetMousePosition();
+        event_context.mouse_x = mouse.x;
+        event_context.mouse_y = mouse.y;
+        event_context.mouse_left_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        bool shift_left = IsKeyDown(KEY_LEFT_SHIFT);
+        bool shift_right = IsKeyDown(KEY_RIGHT_SHIFT);
+        event_context.shift_down = shift_left || shift_right;
+        event_context.pointer_blocked =
+            (event_context.ui && ui_pointer_blocks_interaction(event_context.ui));
 
         event_process(&event_context, EVENT_PROCESS_PHASE_PRE_FRAME, delta_seconds);
 
@@ -1334,7 +1437,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         if (ui_frame_started)
         {
             ui_draw_overlay(&ui, tree, &layout, &camera_controller, (float)GetFPS(), selected_person, hovered_person,
-                            &render_state.config, &settings, settings_dirty);
+                            &render_state.config, &settings, settings_dirty, expansion);
             ui_end_frame(&ui);
         }
 

@@ -1,4 +1,5 @@
 #include "event.h"
+#include "app.h"
 
 #include <stddef.h>
 
@@ -69,13 +70,18 @@ void event_process(EventProcessContext *context, EventProcessPhase phase, float 
 
         if (context->interaction_state && context->layout && context->camera)
         {
-            Vector2 mouse = GetMousePosition();
-            interaction_update_hover(context->interaction_state, context->layout, context->camera, mouse.x, mouse.y);
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            float mouse_x = context->mouse_x;
+            float mouse_y = context->mouse_y;
+            InteractionState *interaction = context->interaction_state;
+            interaction_update_hover(interaction, context->layout, context->camera, mouse_x, mouse_y);
+            if (context->mouse_left_pressed)
             {
-                bool keep_selection = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-                interaction_select_at_cursor(context->interaction_state, context->layout, context->camera, mouse.x,
-                                             mouse.y, !keep_selection);
+                bool keep_selection = context->shift_down;
+                if (!context->pointer_blocked)
+                {
+                    interaction_select_at_cursor(interaction, context->layout, context->camera, mouse_x, mouse_y,
+                                                 !keep_selection);
+                }
             }
         }
 #endif

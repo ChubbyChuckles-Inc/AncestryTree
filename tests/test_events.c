@@ -1,6 +1,7 @@
 #include "test_framework.h"
 
 #include "event.h"
+#include "person.h"
 
 #include <string.h>
 
@@ -69,4 +70,43 @@ TEST(test_events_queue_handler_invoked)
 
     ASSERT_EQ(0, counters.shortcut_calls);
     ASSERT_EQ(1, counters.queue_calls);
+}
+
+TEST(test_events_pointer_block_prevents_selection_clear)
+{
+    CameraControllerConfig camera_config;
+    camera_controller_config_default(&camera_config);
+    CameraController camera;
+    ASSERT_TRUE(camera_controller_init(&camera, &camera_config));
+
+    LayoutResult layout;
+    memset(&layout, 0, sizeof(layout));
+
+    InteractionState interaction;
+    interaction_state_init(&interaction);
+
+    Person person;
+    memset(&person, 0, sizeof(person));
+    person.id = 42U;
+    ASSERT_TRUE(interaction_select_person(&interaction, &person));
+
+    EventProcessContext context;
+    memset(&context, 0, sizeof(context));
+    context.camera = &camera;
+    context.layout = &layout;
+    context.interaction_state = &interaction;
+    context.mouse_x = 0.0f;
+    context.mouse_y = 0.0f;
+    context.shift_down = false;
+
+    context.pointer_blocked = false;
+    context.mouse_left_pressed = true;
+    event_process(&context, EVENT_PROCESS_PHASE_PRE_FRAME, 0.016f);
+    ASSERT_NULL(interaction_get_selected(&interaction));
+
+    ASSERT_TRUE(interaction_select_person(&interaction, &person));
+    context.pointer_blocked = true;
+    context.mouse_left_pressed = true;
+    event_process(&context, EVENT_PROCESS_PHASE_PRE_FRAME, 0.016f);
+    ASSERT_EQ(&person, interaction_get_selected(&interaction));
 }

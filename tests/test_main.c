@@ -29,12 +29,15 @@ void register_app_state_tests(TestRegistry *registry);
 void register_error_tests(TestRegistry *registry);
 void register_assets_tests(TestRegistry *registry);
 void register_cli_tests(TestRegistry *registry);
+void register_detail_gallery_tests(TestRegistry *registry);
+void register_detail_timeline_tests(TestRegistry *registry);
+void register_detail_view_tests(TestRegistry *registry);
 
 int main(void)
 {
     TestRegistry registry;
-    TestCase cases[128];
-    test_registry_init(&registry, cases, 128);
+    TestCase cases[192];
+    test_registry_init(&registry, cases, (int)(sizeof(cases) / sizeof(cases[0])));
 
     register_string_tests(&registry);
     register_memory_tests(&registry);
@@ -63,6 +66,9 @@ int main(void)
     register_error_tests(&registry);
     register_assets_tests(&registry);
     register_cli_tests(&registry);
+    register_detail_gallery_tests(&registry);
+    register_detail_timeline_tests(&registry);
+    register_detail_view_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

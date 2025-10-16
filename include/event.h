@@ -12,6 +12,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+struct AppState;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -30,9 +32,15 @@ extern "C"
     {
         GraphicsState *graphics_state;
         UIContext *ui;
+        bool pointer_blocked;
+        bool mouse_left_pressed;
+        bool shift_down;
+        float mouse_x;
+        float mouse_y;
         InteractionState *interaction_state;
         LayoutResult *layout;
         CameraController *camera;
+        struct AppState *app_state;
         RenderState *render_state;
         bool render_ready;
         char *render_error_buffer;
