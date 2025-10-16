@@ -34,3 +34,7 @@ All notable changes to this project will be documented in this file. The format 
 - Batched sphere rendering that groups alive and deceased nodes to minimize shader state changes, validated by new batching planner unit tests.
 - Connection rendering upgrades with antialiased lines and optional bezier-style curves for parent/child links, plus
   configuration validation tests ensuring style ranges remain safe.
+- Nuklear view menu toggles now expose smooth line rendering and straight/Bezier connection styling so testers can
+  evaluate holographic link aesthetics live.
+- Persistence regression suite now exercises corrupted files, missing asset references, and escaped string decoding,
+  guarding JSON edge cases with new targeted unit tests.

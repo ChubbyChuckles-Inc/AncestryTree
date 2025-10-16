@@ -87,6 +87,19 @@ static const UIInternal *ui_internal_const_cast(const UIContext *ui)
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
 
+static const char *ui_connection_style_label(RenderConnectionStyle style)
+{
+    switch (style)
+    {
+    case RENDER_CONNECTION_STYLE_STRAIGHT:
+        return "Straight";
+    case RENDER_CONNECTION_STYLE_BEZIER:
+        return "Bezier";
+    default:
+        return "Unknown";
+    }
+}
+
 static float nk_raylib_text_width(nk_handle handle, float height, const char *text, int len)
 {
     const Font *font = (const Font *)handle.ptr;
@@ -624,6 +637,59 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     render_config->show_profile_images = new_profiles;
                     ui_internal_set_status(internal,
                                            new_profiles ? "Portraits enabled in name panels." : "Portraits hidden from name panels.");
+                }
+
+                nk_bool smooth_connections = render_config->connection_antialiasing ? nk_true : nk_false;
+                nk_checkbox_label(ctx, "Smooth connection lines", &smooth_connections);
+                bool new_smoothing = (smooth_connections == nk_true);
+                if (new_smoothing != render_config->connection_antialiasing)
+                {
+                    render_config->connection_antialiasing = new_smoothing;
+                    ui_internal_set_status(internal, new_smoothing ? "Smooth line rendering enabled." : "Smooth line rendering disabled.");
+                }
+
+                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_label(ctx, "Parent connection style", NK_TEXT_LEFT);
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_begin_label(ctx, ui_connection_style_label(render_config->connection_style_parent_child),
+                                         nk_vec2(180.0f, 70.0f)))
+                {
+                    nk_layout_row_dynamic(ctx, 20.0f, 1);
+                    if (nk_combo_item_label(ctx, "Straight", NK_TEXT_LEFT) &&
+                        render_config->connection_style_parent_child != RENDER_CONNECTION_STYLE_STRAIGHT)
+                    {
+                        render_config->connection_style_parent_child = RENDER_CONNECTION_STYLE_STRAIGHT;
+                        ui_internal_set_status(internal, "Parent connections set to straight segments.");
+                    }
+                    if (nk_combo_item_label(ctx, "Bezier", NK_TEXT_LEFT) &&
+                        render_config->connection_style_parent_child != RENDER_CONNECTION_STYLE_BEZIER)
+                    {
+                        render_config->connection_style_parent_child = RENDER_CONNECTION_STYLE_BEZIER;
+                        ui_internal_set_status(internal, "Parent connections set to bezier curves.");
+                    }
+                    nk_combo_end(ctx);
+                }
+
+                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_label(ctx, "Spouse connection style", NK_TEXT_LEFT);
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_begin_label(ctx, ui_connection_style_label(render_config->connection_style_spouse),
+                                         nk_vec2(180.0f, 70.0f)))
+                {
+                    nk_layout_row_dynamic(ctx, 20.0f, 1);
+                    if (nk_combo_item_label(ctx, "Straight", NK_TEXT_LEFT) &&
+                        render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_STRAIGHT)
+                    {
+                        render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_STRAIGHT;
+                        ui_internal_set_status(internal, "Spouse connections set to straight segments.");
+                    }
+                    if (nk_combo_item_label(ctx, "Bezier", NK_TEXT_LEFT) &&
+                        render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_BEZIER)
+                    {
+                        render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_BEZIER;
+                        ui_internal_set_status(internal, "Spouse connections set to bezier curves.");
+                    }
+                    nk_combo_end(ctx);
                 }
 
                 float font_control = render_config->name_panel_font_size;

@@ -11,5 +11,6 @@ void test_temp_file_path(char *buffer, size_t buffer_size, const char *suffix);
 const char *test_resolve_asset_path(const char *relative_path);
 bool test_file_exists(const char *path);
 bool test_delete_file(const char *path);
+bool test_write_text_file(const char *path, const char *content);
 
 #endif /* TEST_PERSISTENCE_HELPERS_H */

@@ -586,13 +586,13 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
       [x] Test tree_validate()
 
 8.3 Persistence Tests
-  [ ] Create tests/test_persistence.c
-      [ ] Test tree_save() with valid data
-      [ ] Test tree_load() with valid file
-      [ ] Test tree_load() with corrupted file
-      [ ] Test tree_load() with missing assets
-      [ ] Test JSON parsing edge cases
-      [ ] Test round-trip save/load
+    [x] Create tests/test_persistence.c
+            [x] Test tree_save() with valid data
+            [x] Test tree_load() with valid file
+            [x] Test tree_load() with corrupted file
+            [x] Test tree_load() with missing assets
+            [x] Test JSON parsing edge cases
+            [x] Test round-trip save/load
 
 8.4 Layout Algorithm Tests
   [ ] Create tests/test_layout.c
@@ -606,7 +606,7 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
 8.5 Utility Function Tests
     [x] Test string manipulation functions (tests/test_string.c)
     [x] Test date parsing functions (tests/test_date.c)
-    [ ] Test file path functions
+    [x] Test file path functions
     [x] Test memory management wrappers (tests/test_memory.c)
 
 8.6 Integration Tests

@@ -90,6 +90,31 @@ bool test_delete_file(const char *path)
     return remove(path) == 0;
 }
 
+bool test_write_text_file(const char *path, const char *content)
+{
+    if (!path || !content)
+    {
+        return false;
+    }
+#if defined(_MSC_VER)
+    FILE *stream = NULL;
+    if (fopen_s(&stream, path, "wb") != 0)
+    {
+        return false;
+    }
+#else
+    FILE *stream = fopen(path, "wb");
+    if (!stream)
+    {
+        return false;
+    }
+#endif
+    size_t length = strlen(content);
+    size_t written = fwrite(content, 1U, length, stream);
+    fclose(stream);
+    return written == length;
+}
+
 const char *test_resolve_asset_path(const char *relative_path)
 {
     static char resolved[260];

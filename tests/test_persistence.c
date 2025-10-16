@@ -19,7 +19,12 @@ TEST(test_persistence_writes_expected_fields)
 
     ASSERT_TRUE(persistence_tree_save(tree, path, buffer, sizeof(buffer)));
 
+#if defined(_MSC_VER)
+    FILE *stream = NULL;
+    ASSERT_EQ(fopen_s(&stream, path, "rb"), 0);
+#else
     FILE *stream = fopen(path, "rb");
+#endif
     ASSERT_NOT_NULL(stream);
     fseek(stream, 0L, SEEK_END);
     long size = ftell(stream);
@@ -77,9 +82,143 @@ TEST(test_persistence_roundtrip_load_save)
     family_tree_destroy(tree);
 }
 
+TEST(test_persistence_load_corrupted_file_reports_error)
+{
+    char buffer[256];
+    char path[TEMP_PATH_BUFFER_SIZE];
+    test_temp_file_path(path, sizeof(path), "corrupt.json");
+    ASSERT_TRUE(test_write_text_file(path, "{this is not valid json"));
+
+    FamilyTree *tree = persistence_tree_load(path, buffer, sizeof(buffer));
+    ASSERT_NULL(tree);
+    ASSERT_TRUE(strlen(buffer) > 0U);
+
+    test_delete_file(path);
+}
+
+TEST(test_persistence_load_handles_missing_asset_paths)
+{
+    static const char *json_content =
+        "{\n"
+        "  \"metadata\": {\n"
+        "    \"version\": \"1.0\",\n"
+        "    \"name\": \"Missing Asset Tree\",\n"
+        "    \"creation_date\": \"2025-10-16\",\n"
+        "    \"root_ids\": [1]\n"
+        "  },\n"
+        "  \"persons\": [\n"
+        "    {\n"
+        "      \"id\": 1,\n"
+        "      \"name\": {\n"
+        "        \"first\": \"Test\",\n"
+        "        \"middle\": \"\",\n"
+        "        \"last\": \"Person\"\n"
+        "      },\n"
+        "      \"dates\": {\n"
+        "        \"birth_date\": \"2000-01-01\",\n"
+        "        \"birth_location\": \"Nowhere\",\n"
+        "        \"death_date\": null,\n"
+        "        \"death_location\": null\n"
+        "      },\n"
+        "      \"is_alive\": true,\n"
+        "      \"parents\": [null, null],\n"
+        "      \"children\": [],\n"
+        "      \"spouses\": [],\n"
+        "      \"certificates\": [\"assets/missing/cert.png\"],\n"
+        "      \"profile_image\": \"assets/missing/profile.png\",\n"
+        "      \"timeline\": [],\n"
+        "      \"metadata\": {}\n"
+        "    }\n"
+        "  ]\n"
+        "}\n";
+
+    char path[TEMP_PATH_BUFFER_SIZE];
+    test_temp_file_path(path, sizeof(path), "missing_assets.json");
+    ASSERT_TRUE(test_write_text_file(path, json_content));
+
+    char buffer[256];
+    FamilyTree *tree = persistence_tree_load(path, buffer, sizeof(buffer));
+    ASSERT_NOT_NULL(tree);
+    Person *person = family_tree_find_person(tree, 1U);
+    ASSERT_NOT_NULL(person);
+    ASSERT_EQ(person->certificate_count, 1U);
+    ASSERT_STREQ(person->certificate_paths[0], "assets/missing/cert.png");
+    ASSERT_NOT_NULL(person->profile_image_path);
+    ASSERT_STREQ(person->profile_image_path, "assets/missing/profile.png");
+
+    family_tree_destroy(tree);
+    test_delete_file(path);
+}
+
+TEST(test_persistence_load_parses_escaped_characters)
+{
+    static const char *json_content =
+        "{\n"
+        "  \"metadata\": {\n"
+        "    \"version\": \"1.0\",\n"
+        "    \"name\": \"Escaped Timeline Tree\",\n"
+        "    \"creation_date\": \"2025-10-16\",\n"
+        "    \"root_ids\": [1]\n"
+        "  },\n"
+        "  \"persons\": [\n"
+        "    {\n"
+        "      \"id\": 1,\n"
+        "      \"name\": {\n"
+        "        \"first\": \"Edge\",\n"
+        "        \"middle\": \"\",\n"
+        "        \"last\": \"Case\"\n"
+        "      },\n"
+        "      \"dates\": {\n"
+        "        \"birth_date\": \"1990-05-05\",\n"
+        "        \"birth_location\": \"Somewhere\",\n"
+        "        \"death_date\": null,\n"
+        "        \"death_location\": null\n"
+        "      },\n"
+        "      \"is_alive\": true,\n"
+        "      \"parents\": [null, null],\n"
+        "      \"children\": [],\n"
+        "      \"spouses\": [],\n"
+        "      \"certificates\": [],\n"
+        "      \"profile_image\": \"\",\n"
+        "      \"timeline\": [\n"
+        "        {\n"
+        "          \"type\": \"custom\",\n"
+        "          \"date\": \"2020\",\n"
+        "          \"description\": \"Line one\\n\\\"Quoted\\\" detail\",\n"
+        "          \"location\": \"Virtual\",\n"
+        "          \"media\": []\n"
+        "        }\n"
+        "      ],\n"
+        "      \"metadata\": {}\n"
+        "    }\n"
+        "  ]\n"
+        "}\n";
+
+    char path[TEMP_PATH_BUFFER_SIZE];
+    test_temp_file_path(path, sizeof(path), "escaped.json");
+    ASSERT_TRUE(test_write_text_file(path, json_content));
+
+    char buffer[256];
+    FamilyTree *tree = persistence_tree_load(path, buffer, sizeof(buffer));
+    ASSERT_NOT_NULL(tree);
+    Person *person = family_tree_find_person(tree, 1U);
+    ASSERT_NOT_NULL(person);
+    ASSERT_EQ(person->timeline_count, 1U);
+    ASSERT_NOT_NULL(person->timeline_entries);
+    const TimelineEntry *entry = &person->timeline_entries[0];
+    ASSERT_STREQ(entry->description, "Line one\n\"Quoted\" detail");
+    ASSERT_STREQ(entry->location, "Virtual");
+
+    family_tree_destroy(tree);
+    test_delete_file(path);
+}
+
 void register_persistence_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_persistence_writes_expected_fields);
     REGISTER_TEST(registry, test_persistence_handles_invalid_path);
     REGISTER_TEST(registry, test_persistence_roundtrip_load_save);
+    REGISTER_TEST(registry, test_persistence_load_corrupted_file_reports_error);
+    REGISTER_TEST(registry, test_persistence_load_handles_missing_asset_paths);
+    REGISTER_TEST(registry, test_persistence_load_parses_escaped_characters);
 }
