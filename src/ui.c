@@ -639,6 +639,12 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                                            new_profiles ? "Portraits enabled in name panels." : "Portraits hidden from name panels.");
                 }
 
+                /* Manual validation checklist:
+                 * 1. Toggle "Smooth connection lines" and confirm relationship links switch between crisp and
+                 *    antialiased rendering without artifacts.
+                 * 2. Switch parent/spouse connection styles and ensure the renderer updates immediately (straight vs.
+                 *    bezier curves) while hover/selection highlights remain correct.
+                 */
                 nk_bool smooth_connections = render_config->connection_antialiasing ? nk_true : nk_false;
                 nk_checkbox_label(ctx, "Smooth connection lines", &smooth_connections);
                 bool new_smoothing = (smooth_connections == nk_true);

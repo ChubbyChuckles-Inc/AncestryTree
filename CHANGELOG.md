@@ -38,3 +38,5 @@ All notable changes to this project will be documented in this file. The format 
   evaluate holographic link aesthetics live.
 - Persistence regression suite now exercises corrupted files, missing asset references, and escaped string decoding,
   guarding JSON edge cases with new targeted unit tests.
+- Layout test coverage now verifies single-person, small family, large sibling groups, multi-generation stacks, and
+  complex relationship graphs to enforce non-overlapping holographic placement.

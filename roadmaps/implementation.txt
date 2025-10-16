@@ -595,13 +595,13 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
             [x] Test round-trip save/load
 
 8.4 Layout Algorithm Tests
-  [ ] Create tests/test_layout.c
-      [ ] Test layout with single person
-      [ ] Test layout with small family
-      [ ] Test layout with large family
-      [ ] Test layout with multiple generations
-      [ ] Test layout with complex relationships
-      [ ] Test non-overlapping constraint
+    [x] Create tests/test_layout.c
+            [x] Test layout with single person
+            [x] Test layout with small family
+            [x] Test layout with large family
+            [x] Test layout with multiple generations
+            [x] Test layout with complex relationships
+            [x] Test non-overlapping constraint
 
 8.5 Utility Function Tests
     [x] Test string manipulation functions (tests/test_string.c)

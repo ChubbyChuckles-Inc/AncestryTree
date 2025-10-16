@@ -5,6 +5,7 @@
 #include "tree.h"
 
 #include <math.h>
+#include <stdlib.h>
 
 static bool position_is_finite(const float position[3])
 {
@@ -89,8 +90,263 @@ static FamilyTree *layout_create_spouse_tree(void)
     person_set_birth(sam, "1981-06-01", "Earth");
 
     person_add_spouse(alex, sam);
-    family_tree_add_person(tree, alex);
-    family_tree_add_person(tree, sam);
+    if (!family_tree_add_person(tree, alex))
+    {
+        person_destroy(alex);
+        person_destroy(sam);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    if (!family_tree_add_person(tree, sam))
+    {
+        person_destroy(sam);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+
+    return tree;
+}
+
+static FamilyTree *layout_create_single_person_tree(void)
+{
+    FamilyTree *tree = family_tree_create("Solo");
+    if (!tree)
+    {
+        return NULL;
+    }
+    Person *solo = person_create(201U);
+    if (!solo)
+    {
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    person_set_name(solo, "Solo", NULL, "Node");
+    person_set_birth(solo, "2000-01-01", "Nowhere");
+    if (!family_tree_add_person(tree, solo))
+    {
+        person_destroy(solo);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    return tree;
+}
+
+static FamilyTree *layout_create_small_family_tree(void)
+{
+    FamilyTree *tree = family_tree_create("Small Family");
+    if (!tree)
+    {
+        return NULL;
+    }
+    Person *parent = person_create(210U);
+    Person *left_child = person_create(211U);
+    Person *right_child = person_create(212U);
+    if (!parent || !left_child || !right_child)
+    {
+        person_destroy(parent);
+        person_destroy(left_child);
+        person_destroy(right_child);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+
+    person_set_name(parent, "Parent", NULL, "Node");
+    person_set_name(left_child, "Left", NULL, "Node");
+    person_set_name(right_child, "Right", NULL, "Node");
+    person_set_birth(parent, "1985-01-01", "Base");
+    person_set_birth(left_child, "2010-01-01", "Base");
+    person_set_birth(right_child, "2012-01-01", "Base");
+
+    person_add_child(parent, left_child);
+    person_add_child(parent, right_child);
+
+    if (!family_tree_add_person(tree, parent))
+    {
+        person_destroy(left_child);
+        person_destroy(right_child);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    if (!family_tree_add_person(tree, left_child))
+    {
+        person_destroy(left_child);
+        person_destroy(right_child);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    if (!family_tree_add_person(tree, right_child))
+    {
+        person_destroy(right_child);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+
+    return tree;
+}
+
+static FamilyTree *layout_create_generation_tree(size_t generations, size_t branching)
+{
+    FamilyTree *tree = family_tree_create("Generations");
+    if (!tree)
+    {
+        return NULL;
+    }
+    Person *current_parent = person_create(300U);
+    if (!current_parent)
+    {
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    person_set_name(current_parent, "Root", NULL, "Ancestor");
+    person_set_birth(current_parent, "1900-01-01", "Origin");
+    if (!family_tree_add_person(tree, current_parent))
+    {
+        person_destroy(current_parent);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+
+    uint32_t next_id = 301U;
+    Person **previous_generation = (Person **)calloc(branching, sizeof(Person *));
+    if (!previous_generation)
+    {
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    previous_generation[0] = current_parent;
+    size_t previous_count = 1U;
+
+    for (size_t generation = 1U; generation < generations; ++generation)
+    {
+        size_t new_count = previous_count * branching;
+        Person **next_generation = (Person **)calloc(new_count, sizeof(Person *));
+        if (!next_generation)
+        {
+            free(previous_generation);
+            family_tree_destroy(tree);
+            return NULL;
+        }
+        size_t cursor = 0U;
+        for (size_t parent_index = 0U; parent_index < previous_count; ++parent_index)
+        {
+            Person *parent = previous_generation[parent_index];
+            if (!parent)
+            {
+                continue;
+            }
+            for (size_t child_index = 0U; child_index < branching; ++child_index)
+            {
+                Person *child = person_create(next_id++);
+                if (!child)
+                {
+                    free(next_generation);
+                    free(previous_generation);
+                    family_tree_destroy(tree);
+                    return NULL;
+                }
+                person_set_name(child, "Child", NULL, "Generation");
+                person_set_birth(child, "1950-01-01", "Somewhere");
+                person_add_child(parent, child);
+                if (!family_tree_add_person(tree, child))
+                {
+                    person_destroy(child);
+                    free(next_generation);
+                    free(previous_generation);
+                    family_tree_destroy(tree);
+                    return NULL;
+                }
+                next_generation[cursor++] = child;
+            }
+        }
+        free(previous_generation);
+        previous_generation = next_generation;
+        previous_count = cursor;
+    }
+
+    free(previous_generation);
+    return tree;
+}
+
+static FamilyTree *layout_create_complex_tree(void)
+{
+    FamilyTree *tree = family_tree_create("Complex");
+    if (!tree)
+    {
+        return NULL;
+    }
+    Person *parent_a = person_create(400U);
+    Person *parent_b = person_create(401U);
+    Person *parent_c = person_create(402U);
+    Person *child_one = person_create(403U);
+    Person *child_two = person_create(404U);
+    if (!parent_a || !parent_b || !parent_c || !child_one || !child_two)
+    {
+        person_destroy(parent_a);
+        person_destroy(parent_b);
+        person_destroy(parent_c);
+        person_destroy(child_one);
+        person_destroy(child_two);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+
+    person_set_name(parent_a, "Alex", NULL, "Alpha");
+    person_set_name(parent_b, "Blair", NULL, "Alpha");
+    person_set_name(parent_c, "Casey", NULL, "Beta");
+    person_set_name(child_one, "Drew", NULL, "Alpha");
+    person_set_name(child_two, "Evan", NULL, "Alpha");
+    person_set_birth(parent_a, "1970-01-01", "Colony");
+    person_set_birth(parent_b, "1972-02-02", "Colony");
+    person_set_birth(parent_c, "1975-03-03", "Colony");
+    person_set_birth(child_one, "1996-01-01", "Colony");
+    person_set_birth(child_two, "1998-01-01", "Colony");
+
+    person_add_spouse(parent_a, parent_b);
+    person_add_spouse(parent_b, parent_c);
+    person_add_child(parent_a, child_one);
+    person_add_child(parent_b, child_one);
+    person_add_child(parent_b, child_two);
+    person_add_child(parent_c, child_two);
+
+    if (!family_tree_add_person(tree, parent_a))
+    {
+        person_destroy(parent_b);
+        person_destroy(parent_c);
+        person_destroy(child_one);
+        person_destroy(child_two);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    if (!family_tree_add_person(tree, parent_b))
+    {
+        person_destroy(parent_b);
+        person_destroy(parent_c);
+        person_destroy(child_one);
+        person_destroy(child_two);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    if (!family_tree_add_person(tree, parent_c))
+    {
+        person_destroy(parent_c);
+        person_destroy(child_one);
+        person_destroy(child_two);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    if (!family_tree_add_person(tree, child_one))
+    {
+        person_destroy(child_one);
+        person_destroy(child_two);
+        family_tree_destroy(tree);
+        return NULL;
+    }
+    if (!family_tree_add_person(tree, child_two))
+    {
+        person_destroy(child_two);
+        family_tree_destroy(tree);
+        return NULL;
+    }
 
     return tree;
 }
@@ -113,6 +369,52 @@ TEST(test_layout_root_centered)
         }
     }
     ASSERT_TRUE(found_root);
+
+    layout_result_destroy(&result);
+    family_tree_destroy(tree);
+}
+
+TEST(test_layout_small_family_balanced_around_parent)
+{
+    FamilyTree *tree = layout_create_small_family_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult result = layout_calculate(tree);
+    ASSERT_EQ(result.count, tree->person_count);
+
+    const LayoutNode *parent_node = NULL;
+    const LayoutNode *left_node = NULL;
+    const LayoutNode *right_node = NULL;
+    for (size_t index = 0U; index < result.count; ++index)
+    {
+        const Person *person = result.nodes[index].person;
+        if (!person)
+        {
+            continue;
+        }
+        if (person->id == 210U)
+        {
+            parent_node = &result.nodes[index];
+        }
+        else if (person->id == 211U)
+        {
+            left_node = &result.nodes[index];
+        }
+        else if (person->id == 212U)
+        {
+            right_node = &result.nodes[index];
+        }
+    }
+
+    ASSERT_NOT_NULL(parent_node);
+    ASSERT_NOT_NULL(left_node);
+    ASSERT_NOT_NULL(right_node);
+    ASSERT_TRUE(left_node->position[1] < parent_node->position[1]);
+    ASSERT_TRUE(right_node->position[1] < parent_node->position[1]);
+
+    float average_horizontal = 0.5f * (left_node->position[0] + right_node->position[0]);
+    ASSERT_FLOAT_NEAR(average_horizontal, parent_node->position[0], 0.001f);
+    ASSERT_TRUE(fabsf(left_node->position[0] - right_node->position[0]) >= 1.0f);
 
     layout_result_destroy(&result);
     family_tree_destroy(tree);
@@ -154,10 +456,102 @@ TEST(test_layout_spouses_positioned_side_by_side)
     family_tree_destroy(tree);
 }
 
+TEST(test_layout_single_person_stays_at_origin)
+{
+    FamilyTree *tree = layout_create_single_person_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult result = layout_calculate(tree);
+    ASSERT_EQ(result.count, 1U);
+    ASSERT_FLOAT_NEAR(result.nodes[0].position[0], 0.0f, 0.0001f);
+    ASSERT_FLOAT_NEAR(result.nodes[0].position[1], 0.0f, 0.0001f);
+    ASSERT_FLOAT_NEAR(result.nodes[0].position[2], 0.0f, 0.0001f);
+
+    layout_result_destroy(&result);
+    family_tree_destroy(tree);
+}
+
+TEST(test_layout_multiple_generations_stack_levels)
+{
+    FamilyTree *tree = layout_create_generation_tree(3U, 2U);
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult result = layout_calculate(tree);
+    ASSERT_EQ(result.count, tree->person_count);
+
+    float highest_level = -INFINITY;
+    float lowest_level = INFINITY;
+    for (size_t index = 0U; index < result.count; ++index)
+    {
+        float level = result.nodes[index].position[1];
+        if (level > highest_level)
+        {
+            highest_level = level;
+        }
+        if (level < lowest_level)
+        {
+            lowest_level = level;
+        }
+    }
+    ASSERT_TRUE(isfinite(highest_level));
+    ASSERT_TRUE(isfinite(lowest_level));
+    ASSERT_TRUE(highest_level > lowest_level);
+
+    layout_result_destroy(&result);
+    family_tree_destroy(tree);
+}
+
+TEST(test_layout_large_family_has_unique_horizontal_spacing)
+{
+    FamilyTree *tree = layout_create_generation_tree(2U, 5U);
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult result = layout_calculate(tree);
+    ASSERT_EQ(result.count, tree->person_count);
+
+    for (size_t parent_index = 0U; parent_index < result.count; ++parent_index)
+    {
+        const LayoutNode *node_a = &result.nodes[parent_index];
+        for (size_t child_index = parent_index + 1U; child_index < result.count; ++child_index)
+        {
+            const LayoutNode *node_b = &result.nodes[child_index];
+            if (fabsf(node_a->position[1] - node_b->position[1]) < 0.0001f)
+            {
+                ASSERT_TRUE(fabsf(node_a->position[0] - node_b->position[0]) >= 1.0f);
+            }
+        }
+    }
+
+    layout_result_destroy(&result);
+    family_tree_destroy(tree);
+}
+
+TEST(test_layout_complex_relationships_remain_finite)
+{
+    FamilyTree *tree = layout_create_complex_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult result = layout_calculate(tree);
+    ASSERT_EQ(result.count, tree->person_count);
+
+    for (size_t index = 0U; index < result.count; ++index)
+    {
+        ASSERT_TRUE(position_is_finite(result.nodes[index].position));
+    }
+
+    layout_result_destroy(&result);
+    family_tree_destroy(tree);
+}
+
 void register_layout_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_layout_assigns_positions_for_all_persons);
     REGISTER_TEST(registry, test_layout_descendants_positioned_on_lower_levels);
     REGISTER_TEST(registry, test_layout_root_centered);
+    REGISTER_TEST(registry, test_layout_small_family_balanced_around_parent);
     REGISTER_TEST(registry, test_layout_spouses_positioned_side_by_side);
+    REGISTER_TEST(registry, test_layout_single_person_stays_at_origin);
+    REGISTER_TEST(registry, test_layout_multiple_generations_stack_levels);
+    REGISTER_TEST(registry, test_layout_large_family_has_unique_horizontal_spacing);
+    REGISTER_TEST(registry, test_layout_complex_relationships_remain_finite);
 }
