@@ -7,6 +7,7 @@
 #include "person.h"
 #include "settings.h"
 #include "tree.h"
+#include "timeline.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -97,6 +98,37 @@ extern "C"
         bool clear_death;
     } AppPersonEditData;
 
+#define APP_PERSON_CREATE_MAX_CERTIFICATES 8U
+#define APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES 8U
+
+    typedef struct AppPersonCreateTimelineEntry
+    {
+        TimelineEventType type;
+        const char *date;
+        const char *description;
+        const char *location;
+    } AppPersonCreateTimelineEntry;
+
+    typedef struct AppPersonCreateData
+    {
+        const char *first;
+        const char *middle;
+        const char *last;
+        const char *birth_date;
+        const char *birth_location;
+        bool is_alive;
+        const char *death_date;
+        const char *death_location;
+        const char *profile_image_path;
+        const char *certificate_paths[APP_PERSON_CREATE_MAX_CERTIFICATES];
+        size_t certificate_count;
+        AppPersonCreateTimelineEntry timeline_entries[APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES];
+        size_t timeline_count;
+        uint32_t father_id;
+        uint32_t mother_id;
+        uint32_t spouse_id;
+    } AppPersonCreateData;
+
     void app_state_init(AppState *state);
     bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layout, InteractionState *interaction,
                              CameraController *camera, Settings *settings, Settings *persisted_settings);
@@ -112,6 +144,8 @@ extern "C"
     bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_buffer, size_t error_buffer_size);
     bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonEditData *edit_data,
                                char *error_buffer, size_t error_buffer_size);
+    bool app_state_create_person(AppState *state, const AppPersonCreateData *data, uint32_t *out_person_id,
+                                 char *error_buffer, size_t error_buffer_size);
 
     bool app_state_is_tree_dirty(const AppState *state);
     bool app_state_is_history_empty(const AppState *state);

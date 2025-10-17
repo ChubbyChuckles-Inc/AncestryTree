@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "timeline.h"
+
 typedef struct FamilyTree FamilyTree;
 typedef struct LayoutResult LayoutResult;
 typedef struct CameraController CameraController;
@@ -53,6 +55,37 @@ typedef struct UIContext
     UIEventQueue event_queue;
 } UIContext;
 
+#define UI_ADD_PERSON_MAX_CERTIFICATES 8U
+#define UI_ADD_PERSON_MAX_TIMELINE_ENTRIES 8U
+
+typedef struct UIAddPersonTimelineItem
+{
+    TimelineEventType type;
+    char date[32];
+    char description[128];
+    char location[96];
+} UIAddPersonTimelineItem;
+
+typedef struct UIAddPersonRequest
+{
+    char first[64];
+    char middle[64];
+    char last[64];
+    char birth_date[32];
+    char birth_location[96];
+    bool is_alive;
+    char death_date[32];
+    char death_location[96];
+    char profile_image_path[128];
+    char certificate_paths[UI_ADD_PERSON_MAX_CERTIFICATES][128];
+    size_t certificate_count;
+    UIAddPersonTimelineItem timeline_entries[UI_ADD_PERSON_MAX_TIMELINE_ENTRIES];
+    size_t timeline_count;
+    uint32_t father_id;
+    uint32_t mother_id;
+    uint32_t spouse_id;
+} UIAddPersonRequest;
+
 bool ui_init(UIContext *ui, int width, int height);
 void ui_resize(UIContext *ui, int width, int height);
 void ui_cleanup(UIContext *ui);
@@ -71,5 +104,11 @@ size_t ui_poll_events(UIContext *ui, UIEvent *events, size_t capacity);
 bool ui_notify_status(UIContext *ui, const char *message);
 bool ui_handle_escape(UIContext *ui);
 bool ui_show_error_dialog(UIContext *ui, const char *title, const char *message);
+bool ui_consume_add_person_request(UIContext *ui, UIAddPersonRequest *out_request);
+
+/* Manual validation checklist (requires raylib + Nuklear):
+ * 1. Open the "Add Person" panel from the Edit menu and populate name, birth, parents, spouse, and timeline.
+ * 2. Verify Save queues a request and the detail view reflects the new holographic node.
+ */
 
 #endif /* UI_H */

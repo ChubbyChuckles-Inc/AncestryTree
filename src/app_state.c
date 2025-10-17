@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 static LayoutAlgorithm app_state_resolve_algorithm_from_settings(const Settings *settings);
 
@@ -117,6 +118,18 @@ bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layou
     state->layout_transition_duration = 0.0f;
     state->active_layout_algorithm = app_state_resolve_algorithm_from_settings(settings);
     return true;
+}
+
+static void app_state_write_error(char *error_buffer, size_t error_buffer_size, const char *message)
+{
+    if (!message)
+    {
+        return;
+    }
+    if (error_buffer && error_buffer_size > 0U)
+    {
+        (void)snprintf(error_buffer, error_buffer_size, "%s", message);
+    }
 }
 
 void app_state_shutdown(AppState *state)
@@ -473,6 +486,231 @@ bool app_state_add_person(AppState *state, Person *person, char *error_buffer, s
     }
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
+    return true;
+}
+
+static uint32_t app_state_next_person_id(const AppState *state)
+{
+    if (!state || !state->tree || !*state->tree)
+    {
+        return 1U;
+    }
+    const FamilyTree *tree = *state->tree;
+    uint32_t max_id = 0U;
+    for (size_t index = 0U; index < tree->person_count; ++index)
+    {
+        const Person *person = tree->persons[index];
+        if (!person)
+        {
+            continue;
+        }
+        if (person->id > max_id)
+        {
+            max_id = person->id;
+        }
+    }
+    if (max_id >= UINT32_MAX)
+    {
+        return 0U;
+    }
+    return max_id + 1U;
+}
+
+bool app_state_create_person(AppState *state, const AppPersonCreateData *data, uint32_t *out_person_id,
+                             char *error_buffer, size_t error_buffer_size)
+{
+    if (!state || !state->tree || !state->layout || !data)
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "Invalid arguments for person creation");
+        return false;
+    }
+
+    if (!data->first || data->first[0] == '\0' || !data->last || data->last[0] == '\0')
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "First and last name are required");
+        return false;
+    }
+    if (!data->birth_date || data->birth_date[0] == '\0')
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "Birth date is required");
+        return false;
+    }
+    if (data->is_alive && data->death_date && data->death_date[0] != '\0')
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "Alive persons cannot have a death date");
+        return false;
+    }
+    if (!data->is_alive && (!data->death_date || data->death_date[0] == '\0'))
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "Deceased persons require a death date");
+        return false;
+    }
+    if (data->certificate_count > APP_PERSON_CREATE_MAX_CERTIFICATES ||
+        data->timeline_count > APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES)
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "Person creation limits exceeded");
+        return false;
+    }
+
+    uint32_t new_id = app_state_next_person_id(state);
+    if (new_id == 0U)
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "No identifiers available for new person");
+        return false;
+    }
+
+    Person *person = person_create(new_id);
+    if (!person)
+    {
+        app_state_write_error(error_buffer, error_buffer_size, "Failed to allocate person");
+        return false;
+    }
+
+    const char *middle_name = (data->middle && data->middle[0] != '\0') ? data->middle : NULL;
+    if (!person_set_name(person, data->first, middle_name, data->last))
+    {
+        person_destroy(person);
+        app_state_write_error(error_buffer, error_buffer_size, "Unable to assign person name");
+        return false;
+    }
+    if (!person_set_birth(person, data->birth_date, data->birth_location))
+    {
+        person_destroy(person);
+        app_state_write_error(error_buffer, error_buffer_size, "Invalid birth information");
+        return false;
+    }
+    if (!data->is_alive)
+    {
+        if (!person_set_death(person, data->death_date, data->death_location))
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Invalid death information");
+            return false;
+        }
+    }
+    else
+    {
+        (void)person_set_death(person, NULL, NULL);
+        person->is_alive = true;
+    }
+
+    if (data->profile_image_path && data->profile_image_path[0] != '\0')
+    {
+        char *profile_copy = at_string_dup(data->profile_image_path);
+        if (!profile_copy)
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Failed to assign profile image path");
+            return false;
+        }
+        person->profile_image_path = profile_copy;
+    }
+
+    for (size_t index = 0U; index < data->certificate_count; ++index)
+    {
+        const char *certificate = data->certificate_paths[index];
+        if (!certificate || certificate[0] == '\0' || !person_add_certificate(person, certificate))
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Invalid certificate path");
+            return false;
+        }
+    }
+
+    for (size_t index = 0U; index < data->timeline_count; ++index)
+    {
+        const AppPersonCreateTimelineEntry *entry_data = &data->timeline_entries[index];
+        if (!entry_data->description || entry_data->description[0] == '\0')
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Timeline entries require a description");
+            return false;
+        }
+        TimelineEntry entry;
+        timeline_entry_init(&entry, entry_data->type);
+        bool entry_ok = true;
+        if (entry_data->date && entry_data->date[0] != '\0')
+        {
+            entry_ok = timeline_entry_set_date(&entry, entry_data->date);
+        }
+        if (entry_ok && entry_data->description && entry_data->description[0] != '\0')
+        {
+            entry_ok = timeline_entry_set_description(&entry, entry_data->description);
+        }
+        if (entry_ok && entry_data->location && entry_data->location[0] != '\0')
+        {
+            entry_ok = timeline_entry_set_location(&entry, entry_data->location);
+        }
+        if (entry_ok)
+        {
+            entry_ok = person_add_timeline_entry(person, &entry);
+        }
+        timeline_entry_reset(&entry);
+        if (!entry_ok)
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Failed to record timeline entry");
+            return false;
+        }
+    }
+
+    FamilyTree *tree = *state->tree;
+    if (!tree)
+    {
+        person_destroy(person);
+        app_state_write_error(error_buffer, error_buffer_size, "Tree unavailable for person creation");
+        return false;
+    }
+
+    if (data->father_id != 0U)
+    {
+        Person *father = family_tree_find_person(tree, data->father_id);
+        if (!father || !person_set_parent(person, father, PERSON_PARENT_FATHER) ||
+            !person_add_child(father, person))
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Invalid father selection");
+            return false;
+        }
+    }
+    if (data->mother_id != 0U)
+    {
+        Person *mother = family_tree_find_person(tree, data->mother_id);
+        if (!mother || !person_set_parent(person, mother, PERSON_PARENT_MOTHER) ||
+            !person_add_child(mother, person))
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Invalid mother selection");
+            return false;
+        }
+    }
+    if (data->spouse_id != 0U)
+    {
+        Person *spouse = family_tree_find_person(tree, data->spouse_id);
+        if (!spouse || !person_add_spouse(person, spouse))
+        {
+            person_destroy(person);
+            app_state_write_error(error_buffer, error_buffer_size, "Invalid spouse selection");
+            return false;
+        }
+    }
+
+    AppCommand *command = app_command_create_add_person(person);
+    if (!command)
+    {
+        person_destroy(person);
+        app_state_write_error(error_buffer, error_buffer_size, "Failed to create add-person command");
+        return false;
+    }
+    if (!app_state_push_command(state, command, error_buffer, error_buffer_size))
+    {
+        return false;
+    }
+
+    if (out_person_id)
+    {
+        *out_person_id = new_id;
+    }
     return true;
 }
 

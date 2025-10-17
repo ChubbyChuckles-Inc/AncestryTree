@@ -8,6 +8,8 @@
 #include "settings.h"
 #include "tree.h"
 #include "at_memory.h"
+#include "at_date.h"
+#include "timeline.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -40,6 +42,7 @@ typedef struct UIInternal
     bool show_help_window;
     bool show_settings_window;
     bool show_search_panel;
+    bool show_add_person_panel;
     bool show_exit_prompt;
     bool show_error_dialog;
     char status_message[128];
@@ -57,6 +60,18 @@ typedef struct UIInternal
     int search_selected_index;
     bool search_dirty;
     const FamilyTree *search_last_tree;
+    UIAddPersonRequest add_person_request;
+    bool add_person_request_pending;
+    struct
+    {
+        UIAddPersonRequest draft;
+        TimelineEventType new_timeline_type;
+        char new_timeline_date[32];
+        char new_timeline_description[128];
+        char new_timeline_location[96];
+        char new_certificate_path[128];
+        char error_message[192];
+    } add_person_form;
 #else
     int unused;
 #endif
@@ -110,6 +125,160 @@ static const UIInternal *ui_internal_const_cast(const UIContext *ui)
 #endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+
+static void ui_add_person_form_reset(UIInternal *internal)
+{
+    if (!internal)
+    {
+        return;
+    }
+    memset(&internal->add_person_form.draft, 0, sizeof(UIAddPersonRequest));
+    internal->add_person_form.draft.is_alive = true;
+    internal->add_person_form.new_timeline_type = TIMELINE_EVENT_CUSTOM;
+    internal->add_person_form.new_timeline_date[0] = '\0';
+    internal->add_person_form.new_timeline_description[0] = '\0';
+    internal->add_person_form.new_timeline_location[0] = '\0';
+    internal->add_person_form.new_certificate_path[0] = '\0';
+    internal->add_person_form.error_message[0] = '\0';
+}
+
+static void ui_add_person_set_error(UIInternal *internal, const char *message)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (message)
+    {
+        (void)snprintf(internal->add_person_form.error_message,
+                       sizeof(internal->add_person_form.error_message), "%s", message);
+    }
+    else
+    {
+        internal->add_person_form.error_message[0] = '\0';
+    }
+}
+
+static const char *ui_timeline_type_label(TimelineEventType type)
+{
+    switch (type)
+    {
+    case TIMELINE_EVENT_BIRTH:
+        return "Birth";
+    case TIMELINE_EVENT_MARRIAGE:
+        return "Marriage";
+    case TIMELINE_EVENT_DEATH:
+        return "Death";
+    case TIMELINE_EVENT_CUSTOM:
+    default:
+        return "Custom";
+    }
+}
+
+static void ui_add_person_remove_timeline_entry(UIAddPersonRequest *request, size_t index)
+{
+    if (!request || index >= request->timeline_count)
+    {
+        return;
+    }
+    for (size_t shift = index + 1U; shift < request->timeline_count; ++shift)
+    {
+        request->timeline_entries[shift - 1U] = request->timeline_entries[shift];
+    }
+    request->timeline_count -= 1U;
+}
+
+static void ui_add_person_remove_certificate(UIAddPersonRequest *request, size_t index)
+{
+    if (!request || index >= request->certificate_count)
+    {
+        return;
+    }
+    for (size_t shift = index + 1U; shift < request->certificate_count; ++shift)
+    {
+        memcpy(request->certificate_paths[shift - 1U], request->certificate_paths[shift],
+               sizeof(request->certificate_paths[shift]));
+    }
+    request->certificate_count -= 1U;
+}
+
+static bool ui_add_person_validate(UIInternal *internal, const FamilyTree *tree, char *message,
+                                   size_t message_capacity)
+{
+    if (!internal)
+    {
+        return false;
+    }
+    UIAddPersonRequest *draft = &internal->add_person_form.draft;
+    if (draft->first[0] == '\0' || draft->last[0] == '\0')
+    {
+        (void)snprintf(message, message_capacity, "First and last names are required.");
+        return false;
+    }
+    if (draft->birth_date[0] == '\0' || !at_date_is_valid_iso8601(draft->birth_date))
+    {
+        (void)snprintf(message, message_capacity, "Enter a valid birth date (YYYY-MM-DD).");
+        return false;
+    }
+    if (draft->is_alive)
+    {
+        if (draft->death_date[0] != '\0')
+        {
+            (void)snprintf(message, message_capacity, "Alive persons must not have a death date.");
+            return false;
+        }
+        draft->death_location[0] = '\0';
+    }
+    else
+    {
+        if (draft->death_date[0] == '\0' || !at_date_is_valid_iso8601(draft->death_date))
+        {
+            (void)snprintf(message, message_capacity, "Enter a valid death date (YYYY-MM-DD).");
+            return false;
+        }
+    }
+    for (size_t index = 0U; index < draft->timeline_count; ++index)
+    {
+        UIAddPersonTimelineItem *item = &draft->timeline_entries[index];
+        if (item->description[0] == '\0')
+        {
+            (void)snprintf(message, message_capacity, "Timeline entries require a description.");
+            return false;
+        }
+        if (item->date[0] != '\0' && !at_date_is_valid_iso8601(item->date))
+        {
+            (void)snprintf(message, message_capacity, "Timeline entry %zu has an invalid date.", index + 1U);
+            return false;
+        }
+    }
+    for (size_t index = 0U; index < draft->certificate_count; ++index)
+    {
+        if (draft->certificate_paths[index][0] == '\0')
+        {
+            (void)snprintf(message, message_capacity, "Certificate paths cannot be empty.");
+            return false;
+        }
+    }
+    if (tree)
+    {
+        if (draft->father_id != 0U && !family_tree_find_person(tree, draft->father_id))
+        {
+            (void)snprintf(message, message_capacity, "Father reference is invalid.");
+            return false;
+        }
+        if (draft->mother_id != 0U && !family_tree_find_person(tree, draft->mother_id))
+        {
+            (void)snprintf(message, message_capacity, "Mother reference is invalid.");
+            return false;
+        }
+        if (draft->spouse_id != 0U && !family_tree_find_person(tree, draft->spouse_id))
+        {
+            (void)snprintf(message, message_capacity, "Spouse reference is invalid.");
+            return false;
+        }
+    }
+    return true;
+}
 
 static const char *ui_connection_style_label(RenderConnectionStyle style)
 {
@@ -1287,6 +1456,15 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal, "Event queue full; redo aborted.");
                 }
             }
+            nk_layout_row_dynamic(ctx, 6.0f, 1);
+            nk_spacing(ctx, 1);
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_menu_item_label(ctx, "Add Person...", NK_TEXT_LEFT))
+            {
+                internal->show_add_person_panel = true;
+                ui_add_person_form_reset(internal);
+                ui_add_person_set_error(internal, NULL);
+            }
             nk_menu_end(ctx);
         }
 
@@ -1578,6 +1756,10 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->search_selected_index = -1;
     internal->search_dirty = true;
     internal->search_last_tree = NULL;
+    internal->show_add_person_panel = false;
+    internal->add_person_request_pending = false;
+    memset(&internal->add_person_request, 0, sizeof(UIAddPersonRequest));
+    ui_add_person_form_reset(internal);
 
     if (!nk_init_default(&internal->ctx, &internal->font))
     {
@@ -1832,6 +2014,488 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
     nk_end(ctx);
 }
 
+static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+{
+    if (!internal || !ui || !internal->show_add_person_panel)
+    {
+        return;
+    }
+    struct nk_context *ctx = &internal->ctx;
+    float width = 420.0f;
+    float height = (float)ui->height - 80.0f;
+    if (height < 360.0f)
+    {
+        height = 360.0f;
+    }
+    float x = (float)ui->width - width - 24.0f;
+    if (x < 18.0f)
+    {
+        x = 18.0f;
+    }
+    struct nk_rect bounds = nk_rect(x, 48.0f, width, height);
+    if (nk_begin(ctx, "Add Person##Panel", bounds,
+                 NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_TITLE | NK_WINDOW_SCROLL_AUTO_HIDE))
+    {
+        UIAddPersonRequest *draft = &internal->add_person_form.draft;
+        nk_layout_row_dynamic(ctx, 26.0f, 1);
+        nk_label(ctx, "Create Holographic Profile", NK_TEXT_LEFT);
+
+        if (internal->add_person_form.error_message[0] != '\0')
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            nk_label_colored(ctx, internal->add_person_form.error_message, NK_TEXT_LEFT, nk_rgb(230, 80, 80));
+        }
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "First", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int first_len = (int)strnlen(draft->first, sizeof(draft->first));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->first, &first_len, sizeof(draft->first),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Middle", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int middle_len = (int)strnlen(draft->middle, sizeof(draft->middle));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->middle, &middle_len, sizeof(draft->middle),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Last", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int last_len = (int)strnlen(draft->last, sizeof(draft->last));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->last, &last_len, sizeof(draft->last),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Birth Date", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int birth_len = (int)strnlen(draft->birth_date, sizeof(draft->birth_date));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_date, &birth_len, sizeof(draft->birth_date),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Birthplace", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int birth_loc_len = (int)strnlen(draft->birth_location, sizeof(draft->birth_location));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_location, &birth_loc_len,
+                                       sizeof(draft->birth_location), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_bool alive = draft->is_alive ? nk_true : nk_false;
+        alive = nk_check_label(ctx, "Is currently alive", alive);
+        draft->is_alive = (alive == nk_true);
+
+        if (!draft->is_alive)
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Death Date", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            int death_len = (int)strnlen(draft->death_date, sizeof(draft->death_date));
+            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_date, &death_len,
+                                           sizeof(draft->death_date), nk_filter_default);
+            nk_layout_row_end(ctx);
+
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Death Place", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            int death_loc_len = (int)strnlen(draft->death_location, sizeof(draft->death_location));
+            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_location, &death_loc_len,
+                                           sizeof(draft->death_location), nk_filter_default);
+            nk_layout_row_end(ctx);
+        }
+        else
+        {
+            draft->death_date[0] = '\0';
+            draft->death_location[0] = '\0';
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Relationships", NK_TEXT_LEFT);
+
+        char label_buffer[160];
+        char name_buffer[128];
+        const char *father_label = "None";
+        if (draft->father_id != 0U && tree)
+        {
+            Person *father = family_tree_find_person(tree, draft->father_id);
+            if (father)
+            {
+                ui_compose_person_name(father, name_buffer, sizeof(name_buffer));
+                snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, father->id);
+                father_label = label_buffer;
+            }
+            else
+            {
+                snprintf(label_buffer, sizeof(label_buffer), "Missing (#%u)", draft->father_id);
+                father_label = label_buffer;
+            }
+        }
+        if (nk_group_begin(ctx, "FatherGroup", NK_WINDOW_NO_SCROLLBAR))
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Father", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            if (nk_combo_begin_label(ctx, father_label, nk_vec2(260.0f, 260.0f)))
+            {
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                {
+                    draft->father_id = 0U;
+                }
+                if (tree)
+                {
+                    for (size_t index = 0U; index < tree->person_count; ++index)
+                    {
+                        Person *candidate = tree->persons[index];
+                        if (!candidate)
+                        {
+                            continue;
+                        }
+                        ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
+                        snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, candidate->id);
+                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        {
+                            draft->father_id = candidate->id;
+                        }
+                    }
+                }
+                nk_combo_end(ctx);
+            }
+            nk_layout_row_end(ctx);
+            nk_group_end(ctx);
+        }
+
+        const char *mother_label = "None";
+        if (draft->mother_id != 0U && tree)
+        {
+            Person *mother = family_tree_find_person(tree, draft->mother_id);
+            if (mother)
+            {
+                ui_compose_person_name(mother, name_buffer, sizeof(name_buffer));
+                snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, mother->id);
+                mother_label = label_buffer;
+            }
+            else
+            {
+                snprintf(label_buffer, sizeof(label_buffer), "Missing (#%u)", draft->mother_id);
+                mother_label = label_buffer;
+            }
+        }
+        if (nk_group_begin(ctx, "MotherGroup", NK_WINDOW_NO_SCROLLBAR))
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Mother", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            if (nk_combo_begin_label(ctx, mother_label, nk_vec2(260.0f, 260.0f)))
+            {
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                {
+                    draft->mother_id = 0U;
+                }
+                if (tree)
+                {
+                    for (size_t index = 0U; index < tree->person_count; ++index)
+                    {
+                        Person *candidate = tree->persons[index];
+                        if (!candidate)
+                        {
+                            continue;
+                        }
+                        ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
+                        snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, candidate->id);
+                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        {
+                            draft->mother_id = candidate->id;
+                        }
+                    }
+                }
+                nk_combo_end(ctx);
+            }
+            nk_layout_row_end(ctx);
+            nk_group_end(ctx);
+        }
+
+        const char *spouse_label = "None";
+        if (draft->spouse_id != 0U && tree)
+        {
+            Person *spouse = family_tree_find_person(tree, draft->spouse_id);
+            if (spouse)
+            {
+                ui_compose_person_name(spouse, name_buffer, sizeof(name_buffer));
+                snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, spouse->id);
+                spouse_label = label_buffer;
+            }
+            else
+            {
+                snprintf(label_buffer, sizeof(label_buffer), "Missing (#%u)", draft->spouse_id);
+                spouse_label = label_buffer;
+            }
+        }
+        if (nk_group_begin(ctx, "SpouseGroup", NK_WINDOW_NO_SCROLLBAR))
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Spouse", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            if (nk_combo_begin_label(ctx, spouse_label, nk_vec2(260.0f, 260.0f)))
+            {
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                {
+                    draft->spouse_id = 0U;
+                }
+                if (tree)
+                {
+                    for (size_t index = 0U; index < tree->person_count; ++index)
+                    {
+                        Person *candidate = tree->persons[index];
+                        if (!candidate)
+                        {
+                            continue;
+                        }
+                        ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
+                        snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, candidate->id);
+                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        {
+                            draft->spouse_id = candidate->id;
+                        }
+                    }
+                }
+                nk_combo_end(ctx);
+            }
+            nk_layout_row_end(ctx);
+            nk_group_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Timeline Entries", NK_TEXT_LEFT);
+
+        for (size_t index = 0U; index < draft->timeline_count; ++index)
+        {
+            UIAddPersonTimelineItem *item = &draft->timeline_entries[index];
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            nk_labelf(ctx, NK_TEXT_LEFT, "%s — %s", ui_timeline_type_label(item->type), item->description);
+            nk_layout_row_begin(ctx, NK_STATIC, 20.0f, 3);
+            nk_layout_row_push(ctx, width - 140.0f);
+            nk_label(ctx, item->date[0] != '\0' ? item->date : "(no date)", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 140.0f);
+            nk_label(ctx, item->location[0] != '\0' ? item->location : "", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, 60.0f);
+            if (nk_button_label(ctx, "Remove"))
+            {
+                ui_add_person_remove_timeline_entry(draft, index);
+                --index;
+            }
+            nk_layout_row_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 4.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "New Timeline Entry", NK_TEXT_LEFT);
+
+        const char *entry_type_label = ui_timeline_type_label(internal->add_person_form.new_timeline_type);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Type", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        if (nk_combo_begin_label(ctx, entry_type_label, nk_vec2(220.0f, 160.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_combo_item_label(ctx, "Birth", NK_TEXT_LEFT))
+            {
+                internal->add_person_form.new_timeline_type = TIMELINE_EVENT_BIRTH;
+            }
+            if (nk_combo_item_label(ctx, "Marriage", NK_TEXT_LEFT))
+            {
+                internal->add_person_form.new_timeline_type = TIMELINE_EVENT_MARRIAGE;
+            }
+            if (nk_combo_item_label(ctx, "Death", NK_TEXT_LEFT))
+            {
+                internal->add_person_form.new_timeline_type = TIMELINE_EVENT_DEATH;
+            }
+            if (nk_combo_item_label(ctx, "Custom", NK_TEXT_LEFT))
+            {
+                internal->add_person_form.new_timeline_type = TIMELINE_EVENT_CUSTOM;
+            }
+            nk_combo_end(ctx);
+        }
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Date", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int new_date_len = (int)strnlen(internal->add_person_form.new_timeline_date,
+                                        sizeof(internal->add_person_form.new_timeline_date));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_date,
+                                       &new_date_len, sizeof(internal->add_person_form.new_timeline_date),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 60.0f, 1);
+        int new_desc_len = (int)strnlen(internal->add_person_form.new_timeline_description,
+                                        sizeof(internal->add_person_form.new_timeline_description));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_BOX, internal->add_person_form.new_timeline_description,
+                                       &new_desc_len, sizeof(internal->add_person_form.new_timeline_description),
+                                       nk_filter_default);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Location", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int new_loc_len = (int)strnlen(internal->add_person_form.new_timeline_location,
+                                       sizeof(internal->add_person_form.new_timeline_location));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_location,
+                                       &new_loc_len, sizeof(internal->add_person_form.new_timeline_location),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_button_label(ctx, "Add Entry"))
+        {
+            if (draft->timeline_count >= UI_ADD_PERSON_MAX_TIMELINE_ENTRIES)
+            {
+                ui_add_person_set_error(internal, "Maximum timeline entries reached.");
+            }
+            else if (internal->add_person_form.new_timeline_description[0] == '\0')
+            {
+                ui_add_person_set_error(internal, "Provide a description for the timeline entry.");
+            }
+            else if (internal->add_person_form.new_timeline_date[0] != '\0' &&
+                     !at_date_is_valid_iso8601(internal->add_person_form.new_timeline_date))
+            {
+                ui_add_person_set_error(internal, "Timeline entry date must be YYYY-MM-DD format.");
+            }
+            else
+            {
+                size_t slot = draft->timeline_count;
+                UIAddPersonTimelineItem *item = &draft->timeline_entries[slot];
+                item->type = internal->add_person_form.new_timeline_type;
+                (void)snprintf(item->date, sizeof(item->date), "%s", internal->add_person_form.new_timeline_date);
+                (void)snprintf(item->description, sizeof(item->description), "%s",
+                               internal->add_person_form.new_timeline_description);
+                (void)snprintf(item->location, sizeof(item->location), "%s",
+                               internal->add_person_form.new_timeline_location);
+                draft->timeline_count += 1U;
+                internal->add_person_form.new_timeline_date[0] = '\0';
+                internal->add_person_form.new_timeline_description[0] = '\0';
+                internal->add_person_form.new_timeline_location[0] = '\0';
+                ui_add_person_set_error(internal, NULL);
+            }
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Certificates", NK_TEXT_LEFT);
+        for (size_t index = 0U; index < draft->certificate_count; ++index)
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, width - 120.0f);
+            nk_label(ctx, draft->certificate_paths[index], NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, 60.0f);
+            if (nk_button_label(ctx, "Remove"))
+            {
+                ui_add_person_remove_certificate(draft, index);
+                --index;
+            }
+            nk_layout_row_end(ctx);
+        }
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, width - 120.0f);
+        int cert_len = (int)strnlen(internal->add_person_form.new_certificate_path,
+                                    sizeof(internal->add_person_form.new_certificate_path));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->add_person_form.new_certificate_path, &cert_len,
+                                       sizeof(internal->add_person_form.new_certificate_path), nk_filter_default);
+        nk_layout_row_push(ctx, 60.0f);
+        if (nk_button_label(ctx, "Add"))
+        {
+            if (internal->add_person_form.new_certificate_path[0] == '\0')
+            {
+                ui_add_person_set_error(internal, "Certificate path cannot be empty.");
+            }
+            else if (draft->certificate_count >= UI_ADD_PERSON_MAX_CERTIFICATES)
+            {
+                ui_add_person_set_error(internal, "Certificate limit reached.");
+            }
+            else
+            {
+                size_t slot = draft->certificate_count;
+                (void)snprintf(draft->certificate_paths[slot], sizeof(draft->certificate_paths[slot]), "%s",
+                               internal->add_person_form.new_certificate_path);
+                draft->certificate_count += 1U;
+                internal->add_person_form.new_certificate_path[0] = '\0';
+                ui_add_person_set_error(internal, NULL);
+            }
+        }
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Profile Image", NK_TEXT_LEFT);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
+        nk_layout_row_push(ctx, width - 40.0f);
+        int profile_len = (int)strnlen(draft->profile_image_path, sizeof(draft->profile_image_path));
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->profile_image_path, &profile_len,
+                                       sizeof(draft->profile_image_path), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 30.0f, 2);
+        if (nk_button_label(ctx, "Save"))
+        {
+            char message[192];
+            message[0] = '\0';
+            if (ui_add_person_validate(internal, tree, message, sizeof(message)))
+            {
+                internal->add_person_request = *draft;
+                internal->add_person_request_pending = true;
+                internal->show_add_person_panel = false;
+                ui_add_person_set_error(internal, NULL);
+                ui_internal_set_status(internal, "Add-person request queued.");
+                ui_add_person_form_reset(internal);
+            }
+            else
+            {
+                ui_add_person_set_error(internal, message);
+            }
+        }
+        if (nk_button_label(ctx, "Cancel"))
+        {
+            internal->show_add_person_panel = false;
+            ui_add_person_form_reset(internal);
+        }
+    }
+    nk_end(ctx);
+}
+
 #endif /* ANCESTRYTREE_HAVE_RAYLIB && ANCESTRYTREE_HAVE_NUKLEAR */
 
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
@@ -1860,6 +2524,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     ui_draw_about_window(internal, ui);
     ui_draw_help_window(internal, ui);
     ui_draw_search_panel(internal, ui, tree);
+    ui_draw_add_person_panel(internal, ui, tree);
     ui_draw_settings_window(internal, ui, settings, settings_dirty);
     ui_draw_exit_prompt(internal, ui);
     ui_draw_error_dialog(internal, ui);
@@ -2042,6 +2707,12 @@ bool ui_handle_escape(UIContext *ui)
         internal->show_search_panel = false;
         dismissed = true;
     }
+    if (internal->show_add_person_panel)
+    {
+        internal->show_add_person_panel = false;
+        ui_add_person_form_reset(internal);
+        dismissed = true;
+    }
     if (internal->show_settings_window)
     {
         internal->show_settings_window = false;
@@ -2053,6 +2724,29 @@ bool ui_handle_escape(UIContext *ui)
     }
     return dismissed;
 #else
+    return false;
+#endif
+}
+
+bool ui_consume_add_person_request(UIContext *ui, UIAddPersonRequest *out_request)
+{
+    if (!ui || !out_request)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal || !internal->add_person_request_pending)
+    {
+        return false;
+    }
+    *out_request = internal->add_person_request;
+    memset(&internal->add_person_request, 0, sizeof(UIAddPersonRequest));
+    internal->add_person_request_pending = false;
+    return true;
+#else
+    (void)ui;
+    (void)out_request;
     return false;
 #endif
 }
