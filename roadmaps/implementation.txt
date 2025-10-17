@@ -302,40 +302,40 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
 ================================================================================
 
 5.1 Expansion Animation
-  [ ] Implement expansion_start() in src/expansion.c
-      [ ] Store initial sphere transform and camera state
-      [ ] Calculate interior-room target by inverting sphere normals and scaling to envelop the user
-      [ ] Anchor the user at the room center while preserving world orientation
-      [ ] Set animation duration and easing curve for a smooth wraparound effect
-  [ ] Implement expansion_update() function
-      [ ] Interpolate interior radius and material transition to form the room around the user
-      [ ] Keep camera inside the expanding room without clipping other geometry
-      [ ] Gradually dim tree lighting while introducing interior room lighting cues
-      [ ] Fade out external tree spheres as the room seals
-  [ ] Implement expansion_complete() function
-      [ ] Lock into detail view mode with inside-the-sphere camera constraints
-      [ ] Activate immersive timeline stream and image panel subsystems
-      [ ] Initialize return path data for reversal
-  [ ] Implement expansion_reverse() function
-      [ ] Animate the room collapsing back into the original sphere without camera pops
-      [ ] Restore tree lighting, visibility, and camera controls
-      [ ] Re-enable standard interaction cues
+  [x] Implement expansion_start() in src/expansion.c
+      [x] Store initial sphere transform and camera state
+      [x] Calculate interior-room target by inverting sphere normals and scaling to envelop the user
+      [x] Anchor the user at the room center while preserving world orientation
+      [x] Set animation duration and easing curve for a smooth wraparound effect
+  [x] Implement expansion_update() function
+      [x] Interpolate interior radius and material transition to form the room around the user
+      [x] Keep camera inside the expanding room without clipping other geometry
+      [x] Gradually dim tree lighting while introducing interior room lighting cues
+      [x] Fade out external tree spheres as the room seals
+  [x] Implement expansion_complete() function
+      [x] Lock into detail view mode with inside-the-sphere camera constraints
+      [x] Activate immersive timeline stream and image panel subsystems
+      [x] Initialize return path data for reversal
+  [x] Implement expansion_reverse() function
+      [x] Animate the room collapsing back into the original sphere without camera pops
+      [x] Restore tree lighting, visibility, and camera controls
+      [x] Re-enable standard interaction cues
 
 5.2 Detail View Rendering
-  [ ] Implement detail_view_init() function
-      [ ] Generate interior room mesh and materials sized to the expanded sphere
-      [ ] Spawn circular timeline track encircling the user with streaming data nodes
-      [ ] Load high-res imagery and metadata required for 3D panels
-      [ ] Configure volumetric cone lighting rigs for hovering media
-  [ ] Implement detail_view_render() function
-      [ ] Render the room interior with inverted normals and ambient accents
-      [ ] Draw animated circular timeline elements orbiting around the user at readable distance
-      [ ] Render person name, dates, and key facts as floating HUD elements that do not occlude images
-      [ ] Blend cone lights and volumetric effects to highlight suspended panels
-      [ ] Render back/close affordances that fit the immersive layout
-  [ ] Implement detail_view_cleanup() function
-      [ ] Tear down room-specific meshes, timeline buffers, and lighting rigs
-      [ ] Release streamed media assets and restore standard UI state
+  [x] Implement detail_view_init() function
+      [x] Generate interior room mesh and materials sized to the expanded sphere
+      [x] Spawn circular timeline track encircling the user with streaming data nodes
+      [x] Load high-res imagery and metadata required for 3D panels
+      [x] Configure volumetric cone lighting rigs for hovering media
+  [x] Implement detail_view_render() function
+      [x] Render the room interior with inverted normals and ambient accents
+      [x] Draw animated circular timeline elements orbiting around the user at readable distance
+      [x] Render person name, dates, and key facts as floating HUD elements that do not occlude images
+      [x] Blend cone lights and volumetric effects to highlight suspended panels
+      [x] Render back/close affordances that fit the immersive layout
+  [x] Implement detail_view_cleanup() function
+      [x] Tear down room-specific meshes, timeline buffers, and lighting rigs
+      [x] Release streamed media assets and restore standard UI state
 
 5.3 Immersive Image Panels
   [ ] Implement image_panel_layout_init() function

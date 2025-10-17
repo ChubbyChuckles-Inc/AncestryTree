@@ -53,32 +53,6 @@ static void vector_copy(float destination[3], const float source[3])
     destination[2] = source[2];
 }
 
-static void vector_subtract(const float a[3], const float b[3], float out[3])
-{
-    out[0] = a[0] - b[0];
-    out[1] = a[1] - b[1];
-    out[2] = a[2] - b[2];
-}
-
-static float vector_length(const float v[3])
-{
-    return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-}
-
-static void vector_scale(float v[3], float scale)
-{
-    v[0] *= scale;
-    v[1] *= scale;
-    v[2] *= scale;
-}
-
-static void vector_add(float v[3], const float addition[3])
-{
-    v[0] += addition[0];
-    v[1] += addition[1];
-    v[2] += addition[2];
-}
-
 static void vector_lerp(const float a[3], const float b[3], float t, float out[3])
 {
     out[0] = a[0] + (b[0] - a[0]) * t;

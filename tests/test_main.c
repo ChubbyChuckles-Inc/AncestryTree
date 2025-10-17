@@ -18,6 +18,8 @@ void register_camera_controller_tests(TestRegistry *registry);
 void register_path_utils_tests(TestRegistry *registry);
 void register_render_tests(TestRegistry *registry);
 void register_interaction_tests(TestRegistry *registry);
+void register_detail_view_tests(TestRegistry *registry);
+void register_expansion_tests(TestRegistry *registry);
 void register_render_labels_tests(TestRegistry *registry);
 void register_shortcuts_tests(TestRegistry *registry);
 void register_settings_tests(TestRegistry *registry);
@@ -32,8 +34,8 @@ void register_cli_tests(TestRegistry *registry);
 int main(void)
 {
     TestRegistry registry;
-    TestCase cases[128];
-    test_registry_init(&registry, cases, 128);
+    TestCase cases[192];
+    test_registry_init(&registry, cases, 192);
 
     register_string_tests(&registry);
     register_memory_tests(&registry);
@@ -52,6 +54,8 @@ int main(void)
     register_render_tests(&registry);
     register_render_labels_tests(&registry);
     register_interaction_tests(&registry);
+    register_detail_view_tests(&registry);
+    register_expansion_tests(&registry);
     register_app_state_tests(&registry);
     register_shortcuts_tests(&registry);
     register_settings_tests(&registry);

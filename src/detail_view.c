@@ -1,4 +1,3 @@
-typedef struct DetailViewTimelineSlot
 #include "detail_view.h"
 
 #include "expansion.h"
@@ -6,6 +5,7 @@ typedef struct DetailViewTimelineSlot
 
 #include <assert.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,7 +15,7 @@ typedef struct DetailViewTimelineSlot
 
 #define DETAIL_VIEW_ROTATION_SMOOTHING 5.0f
 
-    static float detail_clamp01(float value)
+static float detail_clamp01(float value)
 {
     if (value < 0.0f)
     {
@@ -67,6 +67,7 @@ static void detail_normalize3(float v[3])
     }
 }
 
+typedef struct DetailViewTimelineSlot
 {
     float base_angle;
     float height;
@@ -74,8 +75,7 @@ static void detail_normalize3(float v[3])
     float pulse_speed;
     float pulse_offset;
     float anchor[3];
-}
-DetailViewTimelineSlot;
+} DetailViewTimelineSlot;
 
 typedef struct DetailViewPanelSlot
 {
@@ -298,6 +298,20 @@ bool detail_view_set_content(DetailViewSystem *system, const DetailViewContent *
     return true;
 }
 
+bool detail_view_content_ready(const DetailViewSystem *system)
+{
+    return system && system->initialized && system->content_ready;
+}
+
+const DetailViewContent *detail_view_get_content(const DetailViewSystem *system)
+{
+    if (!system || !system->initialized)
+    {
+        return NULL;
+    }
+    return &system->content;
+}
+
 bool detail_view_get_timeline_info(const DetailViewSystem *system, size_t index, DetailViewTimelineInfo *out_info)
 {
     if (!system || !out_info)
@@ -334,6 +348,24 @@ bool detail_view_get_panel_info(const DetailViewSystem *system, size_t index, De
     out_info->normal[2] = slot->normal[2];
     out_info->scale = slot->scale;
     return true;
+}
+
+float detail_view_get_timeline_phase(const DetailViewSystem *system)
+{
+    if (!system || !system->initialized)
+    {
+        return 0.0f;
+    }
+    return detail_clamp01(system->timeline_phase);
+}
+
+float detail_view_get_panel_phase(const DetailViewSystem *system)
+{
+    if (!system || !system->initialized)
+    {
+        return 0.0f;
+    }
+    return detail_clamp01(system->panel_phase);
 }
 
 void detail_view_update(DetailViewSystem *system, float delta_seconds, const struct ExpansionState *expansion,
@@ -382,6 +414,13 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
 #include <raylib.h>
 #include <raymath.h>
 #include <rlgl.h>
+
+/*
+ * Manual validation checklist:
+ * 1. Trigger a sphere expansion and confirm the holographic room spawns with orbiting timeline nodes.
+ * 2. Observe that tree lighting dims while interior cones brighten as the detail view activates.
+ * 3. Reverse the expansion and ensure the room collapses smoothly without camera pops or lingering overlays.
+ */
 
 static void detail_view_draw_overlay(const DetailViewSystem *system, float activation)
 {

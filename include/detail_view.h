@@ -43,8 +43,12 @@ bool detail_view_init(DetailViewSystem *system);
 void detail_view_cleanup(DetailViewSystem *system);
 void detail_view_reset(DetailViewSystem *system);
 bool detail_view_set_content(DetailViewSystem *system, const DetailViewContent *content);
+bool detail_view_content_ready(const DetailViewSystem *system);
+const DetailViewContent *detail_view_get_content(const DetailViewSystem *system);
 bool detail_view_get_timeline_info(const DetailViewSystem *system, size_t index, DetailViewTimelineInfo *out_info);
 bool detail_view_get_panel_info(const DetailViewSystem *system, size_t index, DetailViewPanelInfo *out_info);
+float detail_view_get_timeline_phase(const DetailViewSystem *system);
+float detail_view_get_panel_phase(const DetailViewSystem *system);
 void detail_view_update(DetailViewSystem *system, float delta_seconds, const struct ExpansionState *expansion,
                         float timeline_phase, float panel_phase);
 void detail_view_render(const DetailViewSystem *system, const struct ExpansionState *expansion,
