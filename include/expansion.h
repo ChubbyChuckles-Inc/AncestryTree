@@ -16,6 +16,8 @@ typedef struct ExpansionState
     const struct Person *person;
     float elapsed;
     float duration;
+    float baseline_radius;
+    float detail_radius;
     float origin_position[3];
     float detail_position[3];
     float current_position[3];
@@ -32,6 +34,12 @@ typedef struct ExpansionState
     float fade_source;
     float fade_target;
     float fade_current;
+    float tree_light_source;
+    float tree_light_target;
+    float tree_light_current;
+    float room_light_source;
+    float room_light_target;
+    float room_light_current;
 } ExpansionState;
 
 void expansion_state_reset(ExpansionState *state);
@@ -46,6 +54,8 @@ bool expansion_is_in_detail_mode(const ExpansionState *state);
 float expansion_primary_scale(const ExpansionState *state);
 float expansion_inactive_scale(const ExpansionState *state);
 float expansion_inactive_opacity(const ExpansionState *state);
+float expansion_tree_light_factor(const ExpansionState *state);
+float expansion_room_light_factor(const ExpansionState *state);
 void expansion_current_position(const ExpansionState *state, float out_position[3]);
 
 #endif /* EXPANSION_H */
