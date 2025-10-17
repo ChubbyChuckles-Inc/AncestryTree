@@ -1,9 +1,11 @@
 #include "detail_view.h"
 
 #include "expansion.h"
+#include "image_panel.h"
 #include "render.h"
 
 #include <assert.h>
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,25 +48,18 @@ static void detail_copy_string(char *destination, size_t destination_size, const
 #endif
 }
 
-static void detail_normalize3(float v[3])
+static float detail_wrap_angle(float angle)
 {
-    if (!v)
+    const float full_turn = (float)(2.0 * M_PI);
+    while (angle < 0.0f)
     {
-        return;
+        angle += full_turn;
     }
-    float length = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    if (length > 0.0001f)
+    while (angle >= full_turn)
     {
-        v[0] /= length;
-        v[1] /= length;
-        v[2] /= length;
+        angle -= full_turn;
     }
-    else
-    {
-        v[0] = 0.0f;
-        v[1] = 0.0f;
-        v[2] = 1.0f;
-    }
+    return angle;
 }
 
 typedef struct DetailViewTimelineSlot
@@ -76,17 +71,6 @@ typedef struct DetailViewTimelineSlot
     float pulse_offset;
     float anchor[3];
 } DetailViewTimelineSlot;
-
-typedef struct DetailViewPanelSlot
-{
-    float base_angle;
-    float height;
-    float scale;
-    float sway_speed;
-    float sway_offset;
-    float anchor[3];
-    float normal[3];
-} DetailViewPanelSlot;
 
 struct DetailViewSystem
 {
@@ -103,8 +87,11 @@ struct DetailViewSystem
     float base_panel_radius;
     DetailViewTimelineSlot timeline[DETAIL_VIEW_MAX_TIMELINE_SLOTS];
     size_t timeline_count;
-    DetailViewPanelSlot panels[DETAIL_VIEW_MAX_PANEL_SLOTS];
+    ImagePanelSystem *panel_system;
+    float panel_angles[DETAIL_VIEW_MAX_PANEL_SLOTS];
     size_t panel_count;
+    size_t panel_focus_index;
+    bool panel_focus_locked;
 };
 
 static void detail_view_default_content(DetailViewContent *content)
@@ -133,6 +120,8 @@ static void detail_view_reset_state(DetailViewSystem *system)
     system->panel_phase = 0.0f;
     system->timeline_target_phase = 0.0f;
     system->panel_target_phase = 0.0f;
+    system->panel_focus_index = 0U;
+    system->panel_focus_locked = false;
 }
 
 static void detail_view_configure_slots(DetailViewSystem *system)
@@ -164,28 +153,45 @@ static void detail_view_configure_slots(DetailViewSystem *system)
         slot->anchor[2] = sinf(slot->base_angle) * slot->radius;
     }
 
-    system->panel_count = 5U;
-    if (system->panel_count > DETAIL_VIEW_MAX_PANEL_SLOTS)
+    if (system->panel_system)
     {
-        system->panel_count = DETAIL_VIEW_MAX_PANEL_SLOTS;
+        ImagePanelLayoutParams params;
+        memset(&params, 0, sizeof(params));
+        params.desired_count = 6U;
+        params.cone_inner_radius = 0.54f;
+        params.cone_outer_radius = 0.68f;
+        params.min_height = 0.28f;
+        params.max_height = 0.72f;
+        params.min_angle_radians = 0.58f;
+        params.timeline_radius = system->base_timeline_radius;
+        params.timeline_height = 0.0f;
+        params.timeline_clear_margin = 0.12f;
+
+        if (!image_panel_layout_init(system->panel_system, &params))
+        {
+            image_panel_reset(system->panel_system);
+            system->panel_count = 0U;
+        }
+        else
+        {
+            system->panel_count = image_panel_count(system->panel_system);
+            for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS; ++index)
+            {
+                ImagePanelAnchor anchor;
+                if (image_panel_get_anchor(system->panel_system, index, &anchor))
+                {
+                    system->panel_angles[index] = anchor.angle;
+                }
+                else
+                {
+                    system->panel_angles[index] = 0.0f;
+                }
+            }
+        }
     }
-    const float panel_step = (float)(2.0 * M_PI / (double)system->panel_count);
-    for (size_t index = 0; index < system->panel_count; ++index)
+    else
     {
-        DetailViewPanelSlot *slot = &system->panels[index];
-        slot->base_angle = panel_step * (float)index + 0.25f;
-        slot->height = 0.58f - 0.18f * (float)(index % 3U);
-        slot->scale = 1.12f + 0.16f * (float)(index % 2U);
-        slot->sway_speed = 0.65f + 0.08f * (float)(index % 4U);
-        slot->sway_offset = (float)index * 0.43f;
-        slot->anchor[0] = cosf(slot->base_angle);
-        slot->anchor[1] = slot->height;
-        slot->anchor[2] = sinf(slot->base_angle);
-        float normal[3] = {-slot->anchor[0], -slot->anchor[1], -slot->anchor[2]};
-        detail_normalize3(normal);
-        slot->normal[0] = normal[0];
-        slot->normal[1] = normal[1];
-        slot->normal[2] = normal[2];
+        system->panel_count = 0U;
     }
 }
 
@@ -196,8 +202,15 @@ DetailViewSystem *detail_view_create(void)
     {
         return NULL;
     }
+    system->panel_system = image_panel_create();
+    if (!system->panel_system)
+    {
+        free(system);
+        return NULL;
+    }
     if (!detail_view_init(system))
     {
+        image_panel_destroy(system->panel_system);
         free(system);
         return NULL;
     }
@@ -211,6 +224,7 @@ void detail_view_destroy(DetailViewSystem *system)
         return;
     }
     detail_view_cleanup(system);
+    image_panel_destroy(system->panel_system);
     free(system);
 }
 
@@ -220,7 +234,17 @@ bool detail_view_init(DetailViewSystem *system)
     {
         return false;
     }
+    ImagePanelSystem *panel_system = system->panel_system;
     memset(system, 0, sizeof(*system));
+    system->panel_system = panel_system;
+    if (!system->panel_system)
+    {
+        system->panel_system = image_panel_create();
+    }
+    if (!system->panel_system)
+    {
+        return false;
+    }
     detail_view_configure_slots(system);
     detail_view_default_content(&system->content);
     system->content_ready = true;
@@ -239,7 +263,13 @@ void detail_view_cleanup(DetailViewSystem *system)
     system->content_ready = false;
     system->timeline_count = 0U;
     system->panel_count = 0U;
+    system->panel_focus_index = 0U;
+    system->panel_focus_locked = false;
     detail_view_reset_state(system);
+    if (system->panel_system)
+    {
+        image_panel_reset(system->panel_system);
+    }
 }
 
 void detail_view_reset(DetailViewSystem *system)
@@ -331,22 +361,22 @@ bool detail_view_get_timeline_info(const DetailViewSystem *system, size_t index,
 
 bool detail_view_get_panel_info(const DetailViewSystem *system, size_t index, DetailViewPanelInfo *out_info)
 {
-    if (!system || !out_info)
+    if (!system || !out_info || !system->panel_system)
     {
         return false;
     }
-    if (index >= system->panel_count)
+    ImagePanelAnchor anchor;
+    if (!image_panel_get_anchor(system->panel_system, index, &anchor))
     {
         return false;
     }
-    const DetailViewPanelSlot *slot = &system->panels[index];
-    out_info->position[0] = slot->anchor[0];
-    out_info->position[1] = slot->anchor[1];
-    out_info->position[2] = slot->anchor[2];
-    out_info->normal[0] = slot->normal[0];
-    out_info->normal[1] = slot->normal[1];
-    out_info->normal[2] = slot->normal[2];
-    out_info->scale = slot->scale;
+    out_info->position[0] = anchor.position[0];
+    out_info->position[1] = anchor.position[1];
+    out_info->position[2] = anchor.position[2];
+    out_info->normal[0] = anchor.normal[0];
+    out_info->normal[1] = anchor.normal[1];
+    out_info->normal[2] = anchor.normal[2];
+    out_info->scale = anchor.width;
     return true;
 }
 
@@ -407,6 +437,39 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
     else if (system->rotation < -full_rotation)
     {
         system->rotation = fmodf(system->rotation, full_rotation);
+    }
+
+    if (system->panel_system && system->panel_count > 0U)
+    {
+        float view_angle = detail_wrap_angle(system->rotation * 0.55f);
+        float best_difference = FLT_MAX;
+        size_t best_index = system->panel_focus_index;
+        for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS; ++index)
+        {
+            float panel_angle = system->panel_angles[index];
+            float diff = fabsf(view_angle - panel_angle);
+            if (diff > (float)M_PI)
+            {
+                diff = (float)(2.0 * M_PI) - diff;
+            }
+            if (diff < best_difference)
+            {
+                best_difference = diff;
+                best_index = index;
+            }
+        }
+        system->panel_focus_index = best_index;
+        bool lock_focus = system->panel_phase > 0.75f;
+        system->panel_focus_locked = lock_focus;
+        image_panel_interaction(system->panel_system, safe_delta, system->panel_focus_index, lock_focus);
+        for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS; ++index)
+        {
+            ImagePanelAnchor anchor;
+            if (image_panel_get_anchor(system->panel_system, index, &anchor))
+            {
+                system->panel_angles[index] = anchor.angle;
+            }
+        }
     }
 }
 
@@ -535,42 +598,7 @@ void detail_view_render(const DetailViewSystem *system, const struct ExpansionSt
         }
     }
 
-    float panel_radius = room_radius * system->base_panel_radius;
-    float panel_height_scale = room_radius * 0.65f;
-    float panel_base_scale = room_radius * 0.3f;
-    Color panel_face = {200, 228, 255, (unsigned char)(95 + (int)(panel_activation * 135.0f))};
-    Color panel_wire = {90, 160, 255, panel_face.a};
-    Color cone_light = {140, 210, 255, (unsigned char)(60 + (int)(panel_activation * 150.0f))};
-
-    for (size_t index = 0; index < system->panel_count; ++index)
-    {
-        const DetailViewPanelSlot *slot = &system->panels[index];
-        float angle = slot->base_angle + system->rotation * 0.55f;
-        float sin_angle = sinf(angle);
-        float cos_angle = cosf(angle);
-
-        Vector3 panel_center = {
-            origin.x + cos_angle * panel_radius,
-            origin.y + slot->height * panel_height_scale,
-            origin.z + sin_angle * panel_radius};
-
-        Vector3 cone_base = {panel_center.x, origin.y - room_radius * 0.42f, panel_center.z};
-        float cone_height = Vector3Distance(cone_base, panel_center);
-        float cone_radius = fmaxf(0.05f * panel_activation * room_radius * 0.16f, 0.0f);
-        DrawCylinder(cone_base, cone_radius, 0.0f, cone_height, 18, cone_light);
-
-        float sway = sinf(system->pulse_time * slot->sway_speed + slot->sway_offset) * 12.0f;
-        float panel_scale = slot->scale * (0.65f + 0.35f * panel_activation) * panel_base_scale;
-
-        rlPushMatrix();
-        rlTranslatef(panel_center.x, panel_center.y, panel_center.z);
-        rlRotatef((float)(angle * (180.0 / M_PI)) + 90.0f + sway, 0.0f, 1.0f, 0.0f);
-        rlRotatef(-12.0f, 1.0f, 0.0f, 0.0f);
-        Vector3 panel_size = {panel_scale, panel_scale * 0.56f, panel_scale * 0.08f};
-        DrawCubeV((Vector3){0.0f, 0.0f, 0.0f}, panel_size, panel_face);
-        DrawCubeWiresV((Vector3){0.0f, 0.0f, 0.0f}, panel_size, panel_wire);
-        rlPopMatrix();
-    }
+    image_panel_render(system->panel_system, panel_activation, origin_array, room_radius);
 
     Color exit_ring = {255, 200, 140, (unsigned char)(70 + (int)(panel_activation * 150.0f))};
     Vector2 exit_center = {origin.x, origin.z};

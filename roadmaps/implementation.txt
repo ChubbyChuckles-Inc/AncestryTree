@@ -338,18 +338,18 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
       [x] Release streamed media assets and restore standard UI state
 
 5.3 Immersive Image Panels
-  [ ] Implement image_panel_layout_init() function
-      [ ] Evenly distribute image anchor points on a conical frustum around the user with minimum angular separation
-      [ ] Precompute sightline checks to prevent panels from obstructing each other or intersecting the timeline stream
-      [ ] Align panel normals to face the user’s viewpoint while respecting cone alignment
-  [ ] Implement image_panel_render() function
-      [ ] Render images on floating 3D panels with subtle motion and cone-of-light illumination from below
-      [ ] Adjust panel height and scale dynamically for visibility regardless of user orientation
-      [ ] Apply depth-based fading or repositioning when occlusion is detected
-  [ ] Implement image_panel_interaction() function
-      [ ] Allow focus/zoom on a selected panel without breaking even distribution
-      [ ] Maintain unobstructed timeline visibility during interactions
-      [ ] Provide smooth transitions when panels rearrange to stay visible
+  [x] Implement image_panel_layout_init() function
+      [x] Evenly distribute image anchor points on a conical frustum around the user with minimum angular separation
+      [x] Precompute sightline checks to prevent panels from obstructing each other or intersecting the timeline stream
+      [x] Align panel normals to face the user’s viewpoint while respecting cone alignment
+  [x] Implement image_panel_render() function
+      [x] Render images on floating 3D panels with subtle motion and cone-of-light illumination from below
+      [x] Adjust panel height and scale dynamically for visibility regardless of user orientation
+      [x] Apply depth-based fading or repositioning when occlusion is detected
+  [x] Implement image_panel_interaction() function
+      [x] Allow focus/zoom on a selected panel without breaking even distribution
+      [x] Maintain unobstructed timeline visibility during interactions
+      [x] Provide smooth transitions when panels rearrange to stay visible
 
 5.4 Certificate Display
   [ ] Implement certificate_render() function
