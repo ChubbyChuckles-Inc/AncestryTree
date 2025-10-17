@@ -352,28 +352,28 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
       [x] Provide smooth transitions when panels rearrange to stay visible
 
 5.4 Certificate Display
-  [ ] Implement certificate_render() function
-      [ ] Display birth certificate
-      [ ] Display marriage certificate(s)
-      [ ] Display death certificate
-      [ ] Support image and PDF formats
-  [ ] Implement certificate_zoom() function
-      [ ] High resolution viewing
+  [x] Implement certificate_render() function
+      [x] Display birth certificate
+      [x] Display marriage certificate(s)
+      [x] Display death certificate
+      [x] Support image and PDF formats
+  [x] Implement certificate_zoom() function
+      [x] High resolution viewing
       [ ] Annotation support (future)
 
 5.5 Timeline Visualization
-  [ ] Implement timeline_init() function
-      [ ] Load all timeline entries
-      [ ] Calculate layout positions
-      [ ] Generate timeline texture
-  [ ] Implement timeline_render() function
-      [ ] Draw horizontal timeline
-      [ ] Plot events at correct positions
-      [ ] Draw event markers with dates
-      [ ] Draw event descriptions
+  [x] Implement timeline_init() function
+      [x] Load all timeline entries
+      [x] Calculate layout positions
+      [x] Generate timeline texture
+  [x] Implement timeline_render() function
+      [x] Draw horizontal timeline
+      [x] Plot events at correct positions
+      [x] Draw event markers with dates
+      [x] Draw event descriptions
       [ ] Support scrolling for long timelines
-  [ ] Implement timeline_event_hover() function
-      [ ] Show detailed popup on hover
+  [x] Implement timeline_event_hover() function
+      [x] Show detailed popup on hover
       [ ] Display associated images
 
 ================================================================================

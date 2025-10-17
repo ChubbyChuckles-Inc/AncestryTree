@@ -7,6 +7,7 @@
 #include "layout.h"
 #include "event.h"
 #include "detail_view.h"
+#include "detail_content_builder.h"
 #include "expansion.h"
 #include "path_utils.h"
 #include "persistence.h"
@@ -123,83 +124,6 @@ static void app_copy_string(char *destination, size_t capacity, const char *sour
 #else
     (void)snprintf(destination, capacity, "%s", source);
 #endif
-}
-
-static void app_build_detail_view_content(const Person *person, DetailViewContent *out_content)
-{
-    if (!out_content)
-    {
-        return;
-    }
-    memset(out_content, 0, sizeof(*out_content));
-    if (!person)
-    {
-        return;
-    }
-
-    char name_buffer[sizeof(out_content->name)];
-    if (!person_format_display_name(person, name_buffer, sizeof(name_buffer)))
-    {
-        (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", person->id);
-    }
-    app_copy_string(out_content->name, sizeof(out_content->name), name_buffer);
-
-    const char *birth = (person->dates.birth_date && person->dates.birth_date[0] != '\0')
-                            ? person->dates.birth_date
-                            : NULL;
-    const char *death = (person->dates.death_date && person->dates.death_date[0] != '\0')
-                            ? person->dates.death_date
-                            : NULL;
-
-    if (birth && death)
-    {
-        (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "%s — %s", birth, death);
-    }
-    else if (birth)
-    {
-        if (person->is_alive)
-        {
-            (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "%s — Present", birth);
-        }
-        else
-        {
-            (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "Born %s", birth);
-        }
-    }
-    else if (death)
-    {
-        (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "Died %s", death);
-    }
-    else
-    {
-        app_copy_string(out_content->lifespan, sizeof(out_content->lifespan), "Timeline unavailable");
-    }
-
-    size_t fact_index = 0U;
-    if (person->dates.birth_location && person->dates.birth_location[0] != '\0' &&
-        fact_index < DETAIL_VIEW_MAX_FACTS)
-    {
-        (void)snprintf(out_content->facts[fact_index], sizeof(out_content->facts[fact_index]),
-                       "Birthplace: %s", person->dates.birth_location);
-        fact_index += 1U;
-    }
-
-    if (person->dates.death_location && person->dates.death_location[0] != '\0' &&
-        fact_index < DETAIL_VIEW_MAX_FACTS)
-    {
-        (void)snprintf(out_content->facts[fact_index], sizeof(out_content->facts[fact_index]),
-                       "Resting Place: %s", person->dates.death_location);
-        fact_index += 1U;
-    }
-
-    if (fact_index < DETAIL_VIEW_MAX_FACTS)
-    {
-        app_copy_string(out_content->facts[fact_index], sizeof(out_content->facts[fact_index]),
-                        person->is_alive ? "Status: Living" : "Status: Deceased");
-        fact_index += 1U;
-    }
-
-    out_content->fact_count = fact_index;
 }
 
 static void app_file_state_clear(AppFileState *state)
@@ -881,6 +805,8 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
     state.key_space_pressed = IsKeyPressed(KEY_SPACE);
     state.key_escape_pressed = IsKeyPressed(KEY_ESCAPE);
     bool key_enter_pressed = IsKeyPressed(KEY_ENTER);
+    bool key_c_pressed = IsKeyPressed(KEY_C);
+    bool key_x_pressed = IsKeyPressed(KEY_X);
     bool key_backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
 
     ShortcutResult result;
@@ -898,14 +824,22 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
         }
     }
 
+    bool in_detail_mode = app_state && app_state->interaction_mode == APP_INTERACTION_MODE_DETAIL_VIEW;
+
     if (key_enter_pressed && interaction_state && expansion && detail_view && layout && layout->count > 0U)
     {
         const Person *selected = interaction_get_selected(interaction_state);
         if (selected && !expansion_is_active(expansion))
         {
             DetailViewContent content;
-            app_build_detail_view_content(selected, &content);
-            if (!detail_view_set_content(detail_view, &content))
+            if (!detail_view_content_build(selected, &content))
+            {
+                if (logger)
+                {
+                    AT_LOG(logger, AT_LOG_WARN, "Failed to build detail view content for selection %u.", selected->id);
+                }
+            }
+            else if (!detail_view_set_content(detail_view, &content))
             {
                 if (logger)
                 {
@@ -937,6 +871,14 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
                 }
             }
         }
+    }
+    else if (in_detail_mode && key_c_pressed && detail_view)
+    {
+        detail_view_focus_next_certificate(detail_view);
+    }
+    else if (in_detail_mode && key_x_pressed && detail_view)
+    {
+        detail_view_clear_certificate_zoom(detail_view);
     }
     else if (key_backspace_pressed && expansion && expansion_is_active(expansion))
     {

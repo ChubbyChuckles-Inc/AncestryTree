@@ -1,8 +1,10 @@
 #include "detail_view.h"
 
+#include "certificate_render.h"
 #include "expansion.h"
 #include "image_panel.h"
 #include "render.h"
+#include "timeline_viewer.h"
 
 #include <assert.h>
 #include <float.h>
@@ -16,6 +18,12 @@
 #endif
 
 #define DETAIL_VIEW_ROTATION_SMOOTHING 5.0f
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+#include <raylib.h>
+#include <raymath.h>
+#include <rlgl.h>
+#endif
 
 static float detail_clamp01(float value)
 {
@@ -94,6 +102,9 @@ struct DetailViewSystem
     size_t panel_count;
     size_t panel_focus_index;
     bool panel_focus_locked;
+    CertificateRenderState certificate_state;
+    TimelineViewState timeline_state;
+    int timeline_hover_index;
 };
 
 static void detail_view_default_content(DetailViewContent *content)
@@ -108,6 +119,9 @@ static void detail_view_default_content(DetailViewContent *content)
     detail_copy_string(content->facts[0], sizeof(content->facts[0]),
                        "Choose an ancestor to explore their holographic records.");
     content->fact_count = 1U;
+    content->certificate_count = 0U;
+    content->certificate_focus_index = 0U;
+    content->timeline_event_count = 0U;
 }
 
 static void detail_view_reset_state(DetailViewSystem *system)
@@ -126,6 +140,9 @@ static void detail_view_reset_state(DetailViewSystem *system)
     system->panel_target_phase = 0.0f;
     system->panel_focus_index = 0U;
     system->panel_focus_locked = false;
+    certificate_reset(&system->certificate_state);
+    timeline_reset(&system->timeline_state);
+    system->timeline_hover_index = -1;
 }
 
 static void detail_view_configure_slots(DetailViewSystem *system)
@@ -253,6 +270,7 @@ bool detail_view_init(DetailViewSystem *system)
     detail_view_default_content(&system->content);
     system->content_ready = true;
     detail_view_reset_state(system);
+    timeline_init(&system->timeline_state, &system->content);
     system->initialized = true;
     return true;
 }
@@ -289,6 +307,11 @@ void detail_view_reset(DetailViewSystem *system)
     }
     detail_view_configure_slots(system);
     detail_view_reset_state(system);
+    timeline_init(&system->timeline_state, &system->content);
+    if (system && system->content.certificate_count > 0U)
+    {
+        certificate_zoom(&system->certificate_state, system->content.certificate_focus_index, true);
+    }
 }
 
 bool detail_view_set_content(DetailViewSystem *system, const DetailViewContent *content)
@@ -327,8 +350,39 @@ bool detail_view_set_content(DetailViewSystem *system, const DetailViewContent *
     }
     sanitized.fact_count = fact_limit;
 
+    size_t certificate_limit = content->certificate_count;
+    if (certificate_limit > DETAIL_VIEW_MAX_CERTIFICATES)
+    {
+        certificate_limit = DETAIL_VIEW_MAX_CERTIFICATES;
+    }
+    for (size_t index = 0; index < certificate_limit; ++index)
+    {
+        sanitized.certificates[index] = content->certificates[index];
+    }
+    sanitized.certificate_count = certificate_limit;
+    sanitized.certificate_focus_index = (certificate_limit > 0U) ? (content->certificate_focus_index % certificate_limit)
+                                                                 : 0U;
+
+    size_t timeline_limit = content->timeline_event_count;
+    if (timeline_limit > DETAIL_VIEW_MAX_TIMELINE_EVENTS)
+    {
+        timeline_limit = DETAIL_VIEW_MAX_TIMELINE_EVENTS;
+    }
+    for (size_t index = 0; index < timeline_limit; ++index)
+    {
+        sanitized.timeline_events[index] = content->timeline_events[index];
+    }
+    sanitized.timeline_event_count = timeline_limit;
+
     system->content = sanitized;
     system->content_ready = true;
+    certificate_reset(&system->certificate_state);
+    if (system->content.certificate_count > 0U)
+    {
+        certificate_zoom(&system->certificate_state, system->content.certificate_focus_index, true);
+    }
+    timeline_init(&system->timeline_state, &system->content);
+    system->timeline_hover_index = -1;
     return true;
 }
 
@@ -344,6 +398,26 @@ const DetailViewContent *detail_view_get_content(const DetailViewSystem *system)
         return NULL;
     }
     return &system->content;
+}
+
+void detail_view_focus_next_certificate(DetailViewSystem *system)
+{
+    if (!system || !system->initialized || system->content.certificate_count == 0U)
+    {
+        return;
+    }
+    system->content.certificate_focus_index =
+        (system->content.certificate_focus_index + 1U) % system->content.certificate_count;
+    certificate_zoom(&system->certificate_state, system->content.certificate_focus_index, true);
+}
+
+void detail_view_clear_certificate_zoom(DetailViewSystem *system)
+{
+    if (!system || !system->initialized)
+    {
+        return;
+    }
+    certificate_zoom(&system->certificate_state, system->content.certificate_focus_index, false);
 }
 
 bool detail_view_get_timeline_info(const DetailViewSystem *system, size_t index, DetailViewTimelineInfo *out_info)
@@ -489,13 +563,28 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
             }
         }
     }
+
+    certificate_update(&system->certificate_state, safe_delta, system->detail_phase, system->content.certificate_count,
+                       system->content.certificate_focus_index);
+    timeline_update(&system->timeline_state, safe_delta, system->timeline_phase);
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (system->content.timeline_event_count > 0U)
+    {
+        Vector2 cursor = GetMousePosition();
+        system->timeline_hover_index = timeline_event_hover(&system->timeline_state, (int)cursor.x, (int)cursor.y,
+                                                            GetScreenWidth(), GetScreenHeight(), &system->content);
+    }
+    else
+    {
+        system->timeline_hover_index = -1;
+    }
+#else
+    system->timeline_hover_index = -1;
+#endif
 }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-#include <raylib.h>
-#include <raymath.h>
-#include <rlgl.h>
-
 /*
  * Manual validation checklist:
  * 1. Trigger a sphere expansion and confirm the holographic room spawns with orbiting timeline nodes.
@@ -535,7 +624,58 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
         fact_y += 26;
     }
 
-    DrawText("Press Backspace to exit detail view", margin, screen_height - margin, 18, hint_color);
+    int info_y = fact_y + 12;
+    if (system->content.certificate_count > 0U)
+    {
+        size_t focus = system->content.certificate_focus_index % system->content.certificate_count;
+        const DetailViewCertificate *certificate = &system->content.certificates[focus];
+        DrawText("Active Document", margin, info_y, 20, hint_color);
+        info_y += 24;
+        DrawText(certificate->heading, margin, info_y, 22, subtitle_color);
+        info_y += 24;
+        const char *summary = certificate->summary[0] != '\0' ? certificate->summary : "Summary unavailable.";
+        DrawText(summary, margin, info_y, 18, subtitle_color);
+        info_y += 22;
+        if (certificate->has_media_asset)
+        {
+            const char *media_label = certificate->is_pdf ? "Source: PDF archive" : certificate->media_path;
+            DrawText(media_label, margin, info_y, 16, hint_color);
+            info_y += 18;
+        }
+    }
+    else
+    {
+        DrawText("No certificates on record. Upload documents to populate this hologram.", margin, info_y, 18,
+                 hint_color);
+        info_y += 22;
+    }
+
+    timeline_render(&system->timeline_state, alpha, screen_width, screen_height, &system->content);
+
+    int tooltip_y = screen_height - margin - (screen_height < 720 ? 192 : 236);
+    if (system->timeline_hover_index >= 0 &&
+        (size_t)system->timeline_hover_index < system->content.timeline_event_count)
+    {
+        const DetailViewTimelineEvent *event = &system->content.timeline_events[system->timeline_hover_index];
+        DrawText(event->title, margin, tooltip_y, 22, subtitle_color);
+        tooltip_y += 24;
+        if (event->date[0] != '\0')
+        {
+            DrawText(event->date, margin, tooltip_y, 18, hint_color);
+            tooltip_y += 20;
+        }
+        if (event->description[0] != '\0')
+        {
+            DrawText(event->description, margin, tooltip_y, 18, hint_color);
+        }
+    }
+    else
+    {
+        DrawText("Hover timeline markers to inspect milestones.", margin, tooltip_y, 20, hint_color);
+    }
+
+    DrawText("Press Backspace to exit detail view | C: cycle documents | X: reset zoom", margin,
+             screen_height - margin, 18, hint_color);
 }
 
 void detail_view_render(const DetailViewSystem *system, const struct ExpansionState *expansion,
@@ -616,6 +756,9 @@ void detail_view_render(const DetailViewSystem *system, const struct ExpansionSt
             DrawSphere(node_position, node_radius, timeline_color);
         }
     }
+
+    certificate_render(&system->certificate_state, &system->content, detail_activation, origin_array, room_radius,
+                       camera);
 
     image_panel_render(system->panel_system, panel_activation, origin_array, room_radius);
 
