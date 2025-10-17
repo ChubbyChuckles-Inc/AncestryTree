@@ -615,8 +615,8 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
 8.6 Integration Tests
     [x] Create tests/test_integration.c
             [x] Test full workflow: create tree, add persons, save, load
-      [ ] Test expansion animation workflow
-      [ ] Test UI interaction workflow
+    [x] Test expansion animation workflow
+    [x] Test UI interaction workflow
     [x] Test undo/redo workflow
 
 8.7 Memory Leak Tests

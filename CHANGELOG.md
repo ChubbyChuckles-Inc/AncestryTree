@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file. The format 
 - Immersive image panel subsystem that lays out conical anchors with sightline prechecks, animates focus/zoom interactions, resolves timeline occlusion, and renders holographic panels with light cones; accompanied by a dedicated regression test suite.
 - Detail view accessors for content readiness, timeline/panel phase queries, and sanitised metadata retrieval, backed by new regression tests covering initialization, content clamping, and activation smoothing.
 - Expansion animation regression suite exercising full enter/exit cycles with camera focus persistence and lighting transitions to guard against future behavioural regressions.
+- Integration tests now exercise the expansion enter/exit workflow and UI event queue saturation to protect immersive detail transitions and menu dispatch behaviour.
 - Detail view rendering system with holographic interior rooms, orbiting timeline nodes, and floating information panels triggered by sphere expansion animations.
 - Expansion animation controller managing cubic-eased sphere growth, camera transitions, and bidirectional animation sequences for immersive person detail views.
 - Unit tests for expansion state management and detail view system initialization ensuring null safety and basic functionality coverage.
