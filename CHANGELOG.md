@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Detail view rendering system with holographic interior rooms, orbiting timeline nodes, and floating information panels triggered by sphere expansion animations.
+- Expansion animation controller managing cubic-eased sphere growth, camera transitions, and bidirectional animation sequences for immersive person detail views.
+- Unit tests for expansion state management and detail view system initialization ensuring null safety and basic functionality coverage.
 - Initial repository scaffolding and documentation.
 - Core unit tests for person and family tree modules covering relationships, metadata, and validation.
 - ISO-8601 date utilities with strict validation for people and timeline entries, plus timeline unit coverage.
