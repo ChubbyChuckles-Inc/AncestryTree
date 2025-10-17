@@ -303,50 +303,53 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
 
 5.1 Expansion Animation
   [ ] Implement expansion_start() in src/expansion.c
-      [ ] Store initial sphere position and size
-      [ ] Calculate target position (camera center)
-      [ ] Calculate target size (full screen)
-      [ ] Set animation duration
+      [ ] Store initial sphere transform and camera state
+      [ ] Calculate interior-room target by inverting sphere normals and scaling to envelop the user
+      [ ] Anchor the user at the room center while preserving world orientation
+      [ ] Set animation duration and easing curve for a smooth wraparound effect
   [ ] Implement expansion_update() function
-      [ ] Interpolate position over time (easing)
-      [ ] Interpolate scale over time
-      [ ] Update camera to follow
-      [ ] Fade out other spheres
+      [ ] Interpolate interior radius and material transition to form the room around the user
+      [ ] Keep camera inside the expanding room without clipping other geometry
+      [ ] Gradually dim tree lighting while introducing interior room lighting cues
+      [ ] Fade out external tree spheres as the room seals
   [ ] Implement expansion_complete() function
-      [ ] Switch to detail view mode
-      [ ] Show detail UI panels
+      [ ] Lock into detail view mode with inside-the-sphere camera constraints
+      [ ] Activate immersive timeline stream and image panel subsystems
+      [ ] Initialize return path data for reversal
   [ ] Implement expansion_reverse() function
-      [ ] Animate sphere back to tree
-      [ ] Return camera to tree view
-      [ ] Fade in other spheres
+      [ ] Animate the room collapsing back into the original sphere without camera pops
+      [ ] Restore tree lighting, visibility, and camera controls
+      [ ] Re-enable standard interaction cues
 
 5.2 Detail View Rendering
   [ ] Implement detail_view_init() function
-      [ ] Create layout for detail panels
-      [ ] Load high-res images
-      [ ] Prepare timeline visualization
+      [ ] Generate interior room mesh and materials sized to the expanded sphere
+      [ ] Spawn circular timeline track encircling the user with streaming data nodes
+      [ ] Load high-res imagery and metadata required for 3D panels
+      [ ] Configure volumetric cone lighting rigs for hovering media
   [ ] Implement detail_view_render() function
-      [ ] Render expanded sphere (immersive)
-      [ ] Render person name and dates (large text)
-      [ ] Render profile image gallery
-      [ ] Render certificates grid
-      [ ] Render timeline
-      [ ] Render back button
+      [ ] Render the room interior with inverted normals and ambient accents
+      [ ] Draw animated circular timeline elements orbiting around the user at readable distance
+      [ ] Render person name, dates, and key facts as floating HUD elements that do not occlude images
+      [ ] Blend cone lights and volumetric effects to highlight suspended panels
+      [ ] Render back/close affordances that fit the immersive layout
   [ ] Implement detail_view_cleanup() function
+      [ ] Tear down room-specific meshes, timeline buffers, and lighting rigs
+      [ ] Release streamed media assets and restore standard UI state
 
-5.3 Image Gallery
-  [ ] Implement gallery_init() function
-      [ ] Load all images for person
-      [ ] Create thumbnails
-      [ ] Set up scrollable grid
-  [ ] Implement gallery_render() function
-      [ ] Display images in grid layout
-      [ ] Handle image selection
-      [ ] Support zoom on selected image
-  [ ] Implement image_viewer() function
-      [ ] Full screen image display
-      [ ] Zoom and pan controls
-      [ ] Next/previous navigation
+5.3 Immersive Image Panels
+  [ ] Implement image_panel_layout_init() function
+      [ ] Evenly distribute image anchor points on a conical frustum around the user with minimum angular separation
+      [ ] Precompute sightline checks to prevent panels from obstructing each other or intersecting the timeline stream
+      [ ] Align panel normals to face the user’s viewpoint while respecting cone alignment
+  [ ] Implement image_panel_render() function
+      [ ] Render images on floating 3D panels with subtle motion and cone-of-light illumination from below
+      [ ] Adjust panel height and scale dynamically for visibility regardless of user orientation
+      [ ] Apply depth-based fading or repositioning when occlusion is detected
+  [ ] Implement image_panel_interaction() function
+      [ ] Allow focus/zoom on a selected panel without breaking even distribution
+      [ ] Maintain unobstructed timeline visibility during interactions
+      [ ] Provide smooth transitions when panels rearrange to stay visible
 
 5.4 Certificate Display
   [ ] Implement certificate_render() function
