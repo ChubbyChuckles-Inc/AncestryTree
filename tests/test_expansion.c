@@ -51,6 +51,12 @@ TEST(test_expansion_cycle_reaches_detail_mode_and_resets)
     ASSERT_TRUE(expansion_room_light_factor(&state) > 0.5f);
     ASSERT_TRUE(expansion_tree_light_factor(&state) < 0.8f);
 
+    float room_position[3];
+    expansion_current_position(&state, room_position);
+    ASSERT_FLOAT_NEAR(room_position[0], camera.view_position[0], 0.001f);
+    ASSERT_FLOAT_NEAR(room_position[1], camera.view_position[1], 0.001f);
+    ASSERT_FLOAT_NEAR(room_position[2], camera.view_position[2], 0.001f);
+
     expansion_reverse(&state, &camera);
     ASSERT_TRUE(expansion_is_reversing(&state));
 
@@ -70,7 +76,65 @@ TEST(test_expansion_cycle_reaches_detail_mode_and_resets)
     person_destroy(person);
 }
 
+TEST(test_expansion_activation_curves_follow_progress)
+{
+    ExpansionState state;
+    expansion_state_reset(&state);
+
+    Person *person = person_create(202U);
+    ASSERT_NOT_NULL(person);
+    ASSERT_TRUE(person_set_name(person, "Grace", NULL, "Hopper"));
+    ASSERT_TRUE(person_set_birth(person, "1906-12-09", "New York"));
+
+    LayoutNode node_storage[1];
+    LayoutResult layout;
+    memset(&layout, 0, sizeof(layout));
+    prepare_layout(person, &layout, node_storage);
+
+    CameraControllerConfig config;
+    camera_controller_config_default(&config);
+    CameraController camera;
+    ASSERT_TRUE(camera_controller_init(&camera, &config));
+
+    ASSERT_TRUE(expansion_start(&state, &layout, person, &camera));
+    ASSERT_FLOAT_NEAR(expansion_detail_activation(&state), 0.0f, 0.001f);
+    ASSERT_FLOAT_NEAR(expansion_timeline_activation(&state), 0.0f, 0.001f);
+    ASSERT_FLOAT_NEAR(expansion_panel_activation(&state), 0.0f, 0.001f);
+
+    const float delta = 0.05f;
+    for (int step = 0; step < 36; ++step)
+    {
+        (void)expansion_update(&state, delta, &camera);
+    }
+
+    ASSERT_TRUE(expansion_detail_activation(&state) > 0.9f);
+    ASSERT_TRUE(expansion_timeline_activation(&state) > 0.75f);
+    ASSERT_TRUE(expansion_panel_activation(&state) > 0.65f);
+
+    expansion_reverse(&state, &camera);
+    float last_detail = 1.0f;
+    for (int step = 0; step < 24; ++step)
+    {
+        (void)expansion_update(&state, delta, &camera);
+        float current = expansion_detail_activation(&state);
+        ASSERT_TRUE(current <= last_detail + 0.05f);
+        last_detail = current;
+        if (!expansion_is_active(&state))
+        {
+            break;
+        }
+    }
+
+    ASSERT_FALSE(expansion_is_active(&state));
+    ASSERT_FLOAT_NEAR(expansion_detail_activation(&state), 0.0f, 0.001f);
+    ASSERT_FLOAT_NEAR(expansion_timeline_activation(&state), 0.0f, 0.001f);
+    ASSERT_FLOAT_NEAR(expansion_panel_activation(&state), 0.0f, 0.001f);
+
+    person_destroy(person);
+}
+
 void register_expansion_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_expansion_cycle_reaches_detail_mode_and_resets);
+    REGISTER_TEST(registry, test_expansion_activation_curves_follow_progress);
 }

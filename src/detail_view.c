@@ -79,8 +79,10 @@ struct DetailViewSystem
     DetailViewContent content;
     float rotation;
     float pulse_time;
+    float detail_phase;
     float timeline_phase;
     float panel_phase;
+    float detail_target_phase;
     float timeline_target_phase;
     float panel_target_phase;
     float base_timeline_radius;
@@ -116,8 +118,10 @@ static void detail_view_reset_state(DetailViewSystem *system)
     }
     system->rotation = 0.0f;
     system->pulse_time = 0.0f;
+    system->detail_phase = 0.0f;
     system->timeline_phase = 0.0f;
     system->panel_phase = 0.0f;
+    system->detail_target_phase = 0.0f;
     system->timeline_target_phase = 0.0f;
     system->panel_target_phase = 0.0f;
     system->panel_focus_index = 0U;
@@ -398,6 +402,15 @@ float detail_view_get_panel_phase(const DetailViewSystem *system)
     return detail_clamp01(system->panel_phase);
 }
 
+float detail_view_get_detail_phase(const DetailViewSystem *system)
+{
+    if (!system || !system->initialized)
+    {
+        return 0.0f;
+    }
+    return detail_clamp01(system->detail_phase);
+}
+
 void detail_view_update(DetailViewSystem *system, float delta_seconds, const struct ExpansionState *expansion,
                         float timeline_phase, float panel_phase)
 {
@@ -414,14 +427,19 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
     }
 
     float safe_delta = (delta_seconds > 0.0f) ? delta_seconds : 0.0f;
-    float expansion_room = expansion ? expansion_room_light_factor(expansion) : 0.0f;
+    float expansion_detail = expansion ? expansion_detail_activation(expansion) : 0.0f;
+    float expansion_timeline = expansion ? expansion_timeline_activation(expansion) : expansion_detail;
+    float expansion_panel = expansion ? expansion_panel_activation(expansion) : expansion_detail;
 
-    float desired_timeline = detail_clamp01(fmaxf(timeline_phase, expansion_room));
-    float desired_panel = detail_clamp01(fmaxf(panel_phase, expansion_room * 0.9f));
+    float desired_timeline = detail_clamp01(fmaxf(timeline_phase, expansion_timeline));
+    float desired_panel = detail_clamp01(fmaxf(panel_phase, expansion_panel));
+    float desired_detail = detail_clamp01(fmaxf(expansion_detail, desired_panel));
 
     float smoothing = detail_clamp01(safe_delta * DETAIL_VIEW_ROTATION_SMOOTHING);
+    system->detail_phase += (desired_detail - system->detail_phase) * smoothing;
     system->timeline_phase += (desired_timeline - system->timeline_phase) * smoothing;
     system->panel_phase += (desired_panel - system->panel_phase) * smoothing;
+    system->detail_target_phase = desired_detail;
     system->timeline_target_phase = desired_timeline;
     system->panel_target_phase = desired_panel;
 
@@ -557,6 +575,7 @@ void detail_view_render(const DetailViewSystem *system, const struct ExpansionSt
 
     float timeline_activation = detail_clamp01(system->timeline_phase);
     float panel_activation = detail_clamp01(system->panel_phase);
+    float detail_activation = detail_clamp01(system->detail_phase);
     float room_light = expansion ? expansion_room_light_factor(expansion) : panel_activation;
 
     rlDisableBackfaceCulling();
@@ -604,7 +623,7 @@ void detail_view_render(const DetailViewSystem *system, const struct ExpansionSt
     Vector2 exit_center = {origin.x, origin.z};
     DrawRing(exit_center, room_radius * 0.18f, room_radius * 0.21f, 0.0f, 360.0f, 48, exit_ring);
 
-    detail_view_draw_overlay(system, panel_activation);
+    detail_view_draw_overlay(system, detail_activation);
 }
 
 #else

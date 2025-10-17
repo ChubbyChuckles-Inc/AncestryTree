@@ -16,6 +16,7 @@ typedef struct ExpansionState
     const struct Person *person;
     float elapsed;
     float duration;
+    float progress_current;
     float baseline_radius;
     float detail_radius;
     float origin_position[3];
@@ -56,6 +57,9 @@ float expansion_inactive_scale(const ExpansionState *state);
 float expansion_inactive_opacity(const ExpansionState *state);
 float expansion_tree_light_factor(const ExpansionState *state);
 float expansion_room_light_factor(const ExpansionState *state);
+float expansion_detail_activation(const ExpansionState *state);
+float expansion_timeline_activation(const ExpansionState *state);
+float expansion_panel_activation(const ExpansionState *state);
 void expansion_current_position(const ExpansionState *state, float out_position[3]);
 
 #endif /* EXPANSION_H */

@@ -6,6 +6,8 @@
 #include "interaction.h"
 #include "layout.h"
 #include "event.h"
+#include "detail_view.h"
+#include "expansion.h"
 #include "path_utils.h"
 #include "persistence.h"
 #include "person.h"
@@ -104,6 +106,101 @@ static FamilyTree *app_create_placeholder_tree(void);
 static FamilyTree *app_auto_save_tree_supplier(void *user_data);
 static void app_apply_settings(const Settings *settings, RenderState *render_state, CameraController *camera,
                                PersistenceAutoSave *auto_save);
+
+static void app_copy_string(char *destination, size_t capacity, const char *source)
+{
+    if (!destination || capacity == 0U)
+    {
+        return;
+    }
+    if (!source)
+    {
+        destination[0] = '\0';
+        return;
+    }
+#if defined(_MSC_VER)
+    (void)strncpy_s(destination, capacity, source, _TRUNCATE);
+#else
+    (void)snprintf(destination, capacity, "%s", source);
+#endif
+}
+
+static void app_build_detail_view_content(const Person *person, DetailViewContent *out_content)
+{
+    if (!out_content)
+    {
+        return;
+    }
+    memset(out_content, 0, sizeof(*out_content));
+    if (!person)
+    {
+        return;
+    }
+
+    char name_buffer[sizeof(out_content->name)];
+    if (!person_format_display_name(person, name_buffer, sizeof(name_buffer)))
+    {
+        (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", person->id);
+    }
+    app_copy_string(out_content->name, sizeof(out_content->name), name_buffer);
+
+    const char *birth = (person->dates.birth_date && person->dates.birth_date[0] != '\0')
+                            ? person->dates.birth_date
+                            : NULL;
+    const char *death = (person->dates.death_date && person->dates.death_date[0] != '\0')
+                            ? person->dates.death_date
+                            : NULL;
+
+    if (birth && death)
+    {
+        (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "%s — %s", birth, death);
+    }
+    else if (birth)
+    {
+        if (person->is_alive)
+        {
+            (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "%s — Present", birth);
+        }
+        else
+        {
+            (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "Born %s", birth);
+        }
+    }
+    else if (death)
+    {
+        (void)snprintf(out_content->lifespan, sizeof(out_content->lifespan), "Died %s", death);
+    }
+    else
+    {
+        app_copy_string(out_content->lifespan, sizeof(out_content->lifespan), "Timeline unavailable");
+    }
+
+    size_t fact_index = 0U;
+    if (person->dates.birth_location && person->dates.birth_location[0] != '\0' &&
+        fact_index < DETAIL_VIEW_MAX_FACTS)
+    {
+        (void)snprintf(out_content->facts[fact_index], sizeof(out_content->facts[fact_index]),
+                       "Birthplace: %s", person->dates.birth_location);
+        fact_index += 1U;
+    }
+
+    if (person->dates.death_location && person->dates.death_location[0] != '\0' &&
+        fact_index < DETAIL_VIEW_MAX_FACTS)
+    {
+        (void)snprintf(out_content->facts[fact_index], sizeof(out_content->facts[fact_index]),
+                       "Resting Place: %s", person->dates.death_location);
+        fact_index += 1U;
+    }
+
+    if (fact_index < DETAIL_VIEW_MAX_FACTS)
+    {
+        app_copy_string(out_content->facts[fact_index], sizeof(out_content->facts[fact_index]),
+                        person->is_alive ? "Status: Living" : "Status: Deceased");
+        fact_index += 1U;
+    }
+
+    out_content->fact_count = fact_index;
+}
 
 static void app_file_state_clear(AppFileState *state)
 {
@@ -690,7 +787,8 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
                                       RenderState *render_state, CameraController *camera, AtLogger *logger,
                                       Settings *settings, Settings *persisted_settings, const char *settings_path,
                                       PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
-                                      AppState *app_state);
+                                      AppState *app_state, ExpansionState *expansion,
+                                      DetailViewSystem *detail_view);
 
 typedef struct EventShortcutPayload
 {
@@ -708,6 +806,8 @@ typedef struct EventShortcutPayload
     PersistenceAutoSave *auto_save;
     unsigned int *settings_revision;
     AppState *app_state;
+    ExpansionState *expansion;
+    DetailViewSystem *detail_view;
 } EventShortcutPayload;
 
 typedef struct EventQueuePayload
@@ -739,7 +839,8 @@ static void event_shortcut_handler(void *user_data, float delta_seconds)
     app_handle_shortcut_input(payload->ui, payload->file_state, payload->tree, payload->layout,
                               payload->interaction_state, payload->render_state, payload->camera, payload->logger,
                               payload->settings, payload->persisted_settings, payload->settings_path,
-                              payload->auto_save, payload->settings_revision, payload->app_state);
+                              payload->auto_save, payload->settings_revision, payload->app_state,
+                              payload->expansion, payload->detail_view);
 }
 
 static void event_queue_handler(void *user_data, float delta_seconds)
@@ -761,7 +862,8 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
                                       RenderState *render_state, CameraController *camera, AtLogger *logger,
                                       Settings *settings, Settings *persisted_settings, const char *settings_path,
                                       PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
-                                      AppState *app_state)
+                                      AppState *app_state, ExpansionState *expansion,
+                                      DetailViewSystem *detail_view)
 {
     if (!ui)
     {
@@ -778,6 +880,8 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
     state.key_redo_pressed = IsKeyPressed(KEY_Y);
     state.key_space_pressed = IsKeyPressed(KEY_SPACE);
     state.key_escape_pressed = IsKeyPressed(KEY_ESCAPE);
+    bool key_enter_pressed = IsKeyPressed(KEY_ENTER);
+    bool key_backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
 
     ShortcutResult result;
     shortcuts_evaluate(&state, &result);
@@ -791,6 +895,58 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
             app_process_ui_event(&fallback_event, ui, file_state, tree, layout, interaction_state, render_state,
                                  camera, logger, settings, persisted_settings, settings_path, auto_save,
                                  settings_applied_revision, app_state);
+        }
+    }
+
+    if (key_enter_pressed && interaction_state && expansion && detail_view && layout && layout->count > 0U)
+    {
+        const Person *selected = interaction_get_selected(interaction_state);
+        if (selected && !expansion_is_active(expansion))
+        {
+            DetailViewContent content;
+            app_build_detail_view_content(selected, &content);
+            if (!detail_view_set_content(detail_view, &content))
+            {
+                if (logger)
+                {
+                    AT_LOG(logger, AT_LOG_WARN, "Detail view content rejected for selection %u.", selected->id);
+                }
+            }
+            else if (!expansion_start(expansion, layout, selected, camera))
+            {
+                if (logger)
+                {
+                    AT_LOG(logger, AT_LOG_WARN, "Expansion launch failed for selection %u.", selected->id);
+                }
+            }
+            else
+            {
+                if (app_state)
+                {
+                    app_state->interaction_mode = APP_INTERACTION_MODE_DETAIL_VIEW;
+                    app_state->selected_person = (Person *)selected;
+                }
+                if (logger)
+                {
+                    char name_buffer[128];
+                    if (!person_format_display_name(selected, name_buffer, sizeof(name_buffer)))
+                    {
+                        (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", selected->id);
+                    }
+                    AT_LOG(logger, AT_LOG_INFO, "Entering detail view for %s.", name_buffer);
+                }
+            }
+        }
+    }
+    else if (key_backspace_pressed && expansion && expansion_is_active(expansion))
+    {
+        if (!expansion_is_reversing(expansion))
+        {
+            expansion_reverse(expansion, camera);
+            if (logger)
+            {
+                AT_LOG(logger, AT_LOG_INFO, "Exiting detail view.");
+            }
         }
     }
     /* Manual validation checklist:
@@ -811,6 +967,9 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
     (void)settings_path;
     (void)auto_save;
     (void)settings_applied_revision;
+    (void)app_state;
+    (void)expansion;
+    (void)detail_view;
 #endif
 }
 
@@ -1163,6 +1322,16 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         return 1;
     }
 
+    ExpansionState expansion_state;
+    expansion_state_reset(&expansion_state);
+
+    DetailViewSystem *detail_view = detail_view_create();
+    bool detail_view_ready = detail_view != NULL;
+    if (!detail_view_ready && logger)
+    {
+        AT_LOG(logger, AT_LOG_WARN, "Detail view system unavailable; immersive mode disabled.");
+    }
+
     PersistenceAutoSave auto_save;
     memset(&auto_save, 0, sizeof(auto_save));
     bool auto_save_ready = false;
@@ -1229,6 +1398,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     shortcut_payload.auto_save = auto_save_ready ? &auto_save : NULL;
     shortcut_payload.settings_revision = &settings_applied_revision;
     shortcut_payload.app_state = &app_state;
+    shortcut_payload.expansion = &expansion_state;
+    shortcut_payload.detail_view = detail_view_ready ? detail_view : NULL;
 
     EventQueuePayload queue_payload;
     queue_payload.ui = ui_ready ? &ui : NULL;
@@ -1263,6 +1434,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     event_context.queue_handler = event_queue_handler;
     event_context.queue_user_data = &queue_payload;
 
+    bool expansion_was_active = false;
+
     while (!WindowShouldClose())
     {
         float delta_seconds = GetFrameTime();
@@ -1280,6 +1453,37 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         camera_controller_update(&camera_controller, &controller_input, delta_seconds);
         app_state_tick(&app_state, delta_seconds);
 
+        const ExpansionState *detail_expansion_ptr = NULL;
+        float detail_view_phase = 0.0f;
+        bool detail_view_should_render = false;
+
+        bool expansion_active_before = expansion_is_active(&expansion_state);
+        bool expansion_reversing = expansion_is_reversing(&expansion_state);
+        if (expansion_active_before)
+        {
+            (void)expansion_update(&expansion_state, delta_seconds, &camera_controller);
+        }
+        bool expansion_active_now = expansion_is_active(&expansion_state);
+        if (!expansion_active_now && expansion_was_active)
+        {
+            app_state.interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
+        }
+        expansion_was_active = expansion_active_now;
+
+        if (expansion_active_now)
+        {
+            detail_expansion_ptr = &expansion_state;
+        }
+
+        if (detail_view_ready)
+        {
+            bool expansion_forward = expansion_active_now && !expansion_reversing;
+            float target_phase = expansion_forward ? 1.0f : 0.0f;
+            detail_view_update(detail_view, delta_seconds, detail_expansion_ptr, target_phase, target_phase);
+            detail_view_phase = detail_view_get_detail_phase(detail_view);
+            detail_view_should_render = detail_view_phase > 0.01f;
+        }
+
         bool ui_frame_started = ui_begin_frame(&ui, delta_seconds);
 
         BeginDrawing();
@@ -1293,6 +1497,16 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         {
             app_render_scene_basic(&layout, &camera_controller, selected_person, hovered_person,
                                    &render_state.config);
+        }
+
+        if (detail_view_should_render)
+        {
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+            const Camera3D *detail_camera = camera_controller_get_camera(&camera_controller);
+            detail_view_render(detail_view, detail_expansion_ptr, &render_state.config, detail_camera);
+#else
+            detail_view_render(detail_view, detail_expansion_ptr, &render_state.config, NULL);
+#endif
         }
 
         bool settings_dirty = memcmp(&settings, &persisted_settings, sizeof(Settings)) != 0;
@@ -1335,6 +1549,10 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
     EnableCursor();
     ui_cleanup(&ui);
+    if (detail_view)
+    {
+        detail_view_destroy(detail_view);
+    }
     render_cleanup(&render_state);
     app_state_shutdown(&app_state);
     layout_result_destroy(&layout);

@@ -1,4 +1,5 @@
 #include "detail_view.h"
+#include "expansion.h"
 #include "test_framework.h"
 
 #include <stdio.h>
@@ -70,9 +71,36 @@ TEST(test_detail_view_update_tracks_phases)
     detail_view_destroy(system);
 }
 
+TEST(test_detail_view_update_responds_to_expansion_activation)
+{
+    DetailViewSystem *system = detail_view_create();
+    ASSERT_NOT_NULL(system);
+
+    ExpansionState expansion;
+    expansion_state_reset(&expansion);
+    expansion.active = true;
+    expansion.progress_current = 0.6f;
+    expansion.room_light_current = 0.7f;
+    expansion.fade_current = 0.3f;
+    expansion.inactive_current = 0.6f;
+    expansion.tree_light_current = 0.5f;
+    expansion.baseline_radius = 1.0f;
+    expansion.detail_radius = 3.0f;
+    expansion.radius_current = 2.2f;
+
+    detail_view_update(system, 0.16f, &expansion, 0.0f, 0.0f);
+
+    ASSERT_TRUE(detail_view_get_detail_phase(system) > 0.0f);
+    ASSERT_TRUE(detail_view_get_timeline_phase(system) > 0.0f);
+    ASSERT_TRUE(detail_view_get_panel_phase(system) > 0.0f);
+
+    detail_view_destroy(system);
+}
+
 void register_detail_view_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_detail_view_init_configures_slots);
     REGISTER_TEST(registry, test_detail_view_set_content_clamps_fact_count);
     REGISTER_TEST(registry, test_detail_view_update_tracks_phases);
+    REGISTER_TEST(registry, test_detail_view_update_responds_to_expansion_activation);
 }
