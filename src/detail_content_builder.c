@@ -5,7 +5,7 @@
 #include "timeline.h"
 
 #include <ctype.h>
-#include <math.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -83,90 +83,129 @@ static void build_default_content(struct DetailViewContent *content)
         return;
     }
     memset(content, 0, sizeof(*content));
-    copy_string(content->name, sizeof(content->name), "Select a person");
-    copy_string(content->lifespan, sizeof(content->lifespan), "Awaiting selection");
-    copy_string(content->facts[0], sizeof(content->facts[0]),
-                "Choose an ancestor to explore their holographic records.");
-    content->fact_count = 1U;
-    content->certificate_count = 0U;
-    content->certificate_focus_index = 0U;
-    content->timeline_event_count = 0U;
+    copy_string(content->name, sizeof(content->name), "No Profile Selected");
+    copy_string(content->lifespan, sizeof(content->lifespan), "Timeline unavailable");
 }
 
-static int parse_year(const char *date_string)
+static bool string_has_value(const char *text)
 {
-    if (!date_string)
-    {
-        return -1;
-    }
-    int digits = 0;
-    int year = 0;
-    for (const char *cursor = date_string; *cursor != '\0'; ++cursor)
-    {
-        if (!isdigit((unsigned char)*cursor))
-        {
-            if (digits >= 4)
-            {
-                break;
-            }
-            if (digits > 0)
-            {
-                return year;
-            }
-            continue;
-        }
-        year = year * 10 + (*cursor - '0');
-        digits += 1;
-        if (digits == 4)
-        {
-            return year;
-        }
-    }
-    return digits >= 4 ? year : -1;
+    return text && text[0] != '\0';
 }
 
 static void append_fact(struct DetailViewContent *content, const char *format, const char *value)
 {
-    if (!content || !value || value[0] == '\0')
+    if (!content || !format || !value)
     {
         return;
     }
-    if (content->fact_count >= DETAIL_VIEW_MAX_FACTS)
+    if (!string_has_value(value) || content->fact_count >= DETAIL_VIEW_MAX_FACTS)
     {
         return;
     }
-    (void)snprintf(content->facts[content->fact_count], sizeof(content->facts[content->fact_count]), format, value);
+    char *destination = content->facts[content->fact_count];
+    size_t capacity = sizeof(content->facts[0]);
+    (void)snprintf(destination, capacity, format, value);
     content->fact_count += 1U;
+}
+
+static void extract_filename(const char *path, char *buffer, size_t capacity)
+{
+    if (!buffer || capacity == 0U)
+    {
+        return;
+    }
+    if (!string_has_value(path))
+    {
+        buffer[0] = '\0';
+        return;
+    }
+
+    const char *last_forward = strrchr(path, '/');
+    const char *last_backward = strrchr(path, '\\');
+    const char *cursor = path;
+    if (last_forward && last_backward)
+    {
+        cursor = (last_forward > last_backward) ? (last_forward + 1) : (last_backward + 1);
+    }
+    else if (last_forward)
+    {
+        cursor = last_forward + 1;
+    }
+    else if (last_backward)
+    {
+        cursor = last_backward + 1;
+    }
+
+    copy_string(buffer, capacity, cursor);
+    if (buffer[0] == '\0')
+    {
+        copy_string(buffer, capacity, path);
+    }
 }
 
 static void push_certificate(struct DetailViewContent *content, DetailViewCertificateType type, const char *heading,
                              const char *summary, const char *media_path)
 {
-    if (!content || !heading)
+    if (!content || content->certificate_count >= DETAIL_VIEW_MAX_CERTIFICATES)
     {
         return;
     }
-    if (content->certificate_count >= DETAIL_VIEW_MAX_CERTIFICATES)
-    {
-        return;
-    }
+
     DetailViewCertificate *certificate = &content->certificates[content->certificate_count];
     memset(certificate, 0, sizeof(*certificate));
     certificate->type = type;
-    copy_string(certificate->heading, sizeof(certificate->heading), heading);
-    if (summary)
+    if (string_has_value(heading))
+    {
+        copy_string(certificate->heading, sizeof(certificate->heading), heading);
+    }
+    if (string_has_value(summary))
     {
         copy_string(certificate->summary, sizeof(certificate->summary), summary);
     }
-    if (media_path)
+    if (string_has_value(media_path))
     {
         copy_string(certificate->media_path, sizeof(certificate->media_path), media_path);
         certificate->has_media_asset = true;
         size_t length = strlen(media_path);
-        certificate->is_pdf = length >= 4 &&
-                              string_compare_insensitive(media_path + (length - 4), ".pdf") == 0;
+        if (length >= 4U && string_compare_insensitive(media_path + (length - 4U), ".pdf") == 0)
+        {
+            certificate->is_pdf = true;
+        }
     }
+
     content->certificate_count += 1U;
+}
+
+static int parse_year(const char *value)
+{
+    if (!string_has_value(value))
+    {
+        return INT_MAX;
+    }
+
+    size_t index = 0U;
+    int sign = 1;
+    if (value[index] == '-')
+    {
+        sign = -1;
+        index += 1U;
+    }
+
+    int year = 0;
+    size_t digits = 0U;
+    while (value[index] >= '0' && value[index] <= '9')
+    {
+        year = (year * 10) + (value[index] - '0');
+        index += 1U;
+        digits += 1U;
+    }
+
+    if (digits == 0U)
+    {
+        return INT_MAX;
+    }
+
+    return year * sign;
 }
 
 static void populate_core_facts(const struct Person *person, struct DetailViewContent *content)
@@ -183,16 +222,13 @@ static void populate_core_facts(const struct Person *person, struct DetailViewCo
     }
     copy_string(content->name, sizeof(content->name), name_buffer);
 
-    const char *birth = (person->dates.birth_date && person->dates.birth_date[0] != '\0') ? person->dates.birth_date
-                                                                                          : NULL;
-    const char *death = (person->dates.death_date && person->dates.death_date[0] != '\0') ? person->dates.death_date
-                                                                                          : NULL;
-
-    if (birth && death)
+    const char *birth = person->dates.birth_date;
+    const char *death = person->dates.death_date;
+    if (string_has_value(birth) && string_has_value(death))
     {
         (void)snprintf(content->lifespan, sizeof(content->lifespan), "%s - %s", birth, death);
     }
-    else if (birth)
+    else if (string_has_value(birth))
     {
         if (person->is_alive)
         {
@@ -203,7 +239,7 @@ static void populate_core_facts(const struct Person *person, struct DetailViewCo
             (void)snprintf(content->lifespan, sizeof(content->lifespan), "Born %s", birth);
         }
     }
-    else if (death)
+    else if (string_has_value(death))
     {
         (void)snprintf(content->lifespan, sizeof(content->lifespan), "Died %s", death);
     }
@@ -217,6 +253,23 @@ static void populate_core_facts(const struct Person *person, struct DetailViewCo
     append_fact(content, "Status: %s", person->is_alive ? "Living" : "Deceased");
 }
 
+static bool certificate_path_used(const struct DetailViewContent *content, const char *path)
+{
+    if (!content || !string_has_value(path))
+    {
+        return false;
+    }
+    for (size_t index = 0U; index < content->certificate_count; ++index)
+    {
+        if (content->certificates[index].has_media_asset &&
+            string_compare_insensitive(content->certificates[index].media_path, path) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void populate_certificates(const struct Person *person, struct DetailViewContent *content)
 {
     if (!person || !content)
@@ -224,25 +277,25 @@ static void populate_certificates(const struct Person *person, struct DetailView
         return;
     }
 
-    if (person->dates.birth_date || person->dates.birth_location)
+    char summary[160];
+    summary[0] = '\0';
+    if (string_has_value(person->dates.birth_date) && string_has_value(person->dates.birth_location))
     {
-        char summary[160];
-        summary[0] = '\0';
-        if (person->dates.birth_date && person->dates.birth_location)
-        {
-            (void)snprintf(summary, sizeof(summary), "%s - %s", person->dates.birth_date,
-                           person->dates.birth_location);
-        }
-        else if (person->dates.birth_date)
-        {
-            copy_string(summary, sizeof(summary), person->dates.birth_date);
-        }
-        else if (person->dates.birth_location)
-        {
-            copy_string(summary, sizeof(summary), person->dates.birth_location);
-        }
-        push_certificate(content, DETAIL_CERTIFICATE_BIRTH, "Birth Certificate", summary,
-                         person->certificate_count > 0U ? person->certificate_paths[0] : NULL);
+        (void)snprintf(summary, sizeof(summary), "%s - %s", person->dates.birth_date,
+                       person->dates.birth_location);
+    }
+    else if (string_has_value(person->dates.birth_date))
+    {
+        copy_string(summary, sizeof(summary), person->dates.birth_date);
+    }
+    else if (string_has_value(person->dates.birth_location))
+    {
+        copy_string(summary, sizeof(summary), person->dates.birth_location);
+    }
+    if (summary[0] != '\0')
+    {
+        const char *media_path = (person->certificate_count > 0U) ? person->certificate_paths[0] : NULL;
+        push_certificate(content, DETAIL_CERTIFICATE_BIRTH, "Birth Certificate", summary, media_path);
     }
 
     for (size_t index = 0U; index < person->spouses_count; ++index)
@@ -252,6 +305,7 @@ static void populate_certificates(const struct Person *person, struct DetailView
         {
             continue;
         }
+
         char heading[64];
         heading[0] = '\0';
         if (record->partner)
@@ -268,72 +322,85 @@ static void populate_certificates(const struct Person *person, struct DetailView
             copy_string(heading, sizeof(heading), "Marriage Certificate");
         }
 
-        char summary[160];
         summary[0] = '\0';
-        if (record->marriage_date && record->marriage_location)
+        if (string_has_value(record->marriage_date) && string_has_value(record->marriage_location))
         {
             (void)snprintf(summary, sizeof(summary), "%s - %s", record->marriage_date, record->marriage_location);
         }
-        else if (record->marriage_date)
+        else if (string_has_value(record->marriage_date))
         {
             copy_string(summary, sizeof(summary), record->marriage_date);
         }
-        else if (record->marriage_location)
+        else if (string_has_value(record->marriage_location))
         {
             copy_string(summary, sizeof(summary), record->marriage_location);
         }
-        push_certificate(content, DETAIL_CERTIFICATE_MARRIAGE, heading, summary, NULL);
+
+        push_certificate(content, DETAIL_CERTIFICATE_MARRIAGE, heading, summary[0] != '\0' ? summary : NULL, NULL);
     }
 
-    if (person->dates.death_date || person->dates.death_location)
+    summary[0] = '\0';
+    if (string_has_value(person->dates.death_date) && string_has_value(person->dates.death_location))
     {
-        char summary[160];
-        summary[0] = '\0';
-        if (person->dates.death_date && person->dates.death_location)
-        {
-            (void)snprintf(summary, sizeof(summary), "%s - %s", person->dates.death_date,
-                           person->dates.death_location);
-        }
-        else if (person->dates.death_date)
-        {
-            copy_string(summary, sizeof(summary), person->dates.death_date);
-        }
-        else if (person->dates.death_location)
-        {
-            copy_string(summary, sizeof(summary), person->dates.death_location);
-        }
-        push_certificate(content, DETAIL_CERTIFICATE_DEATH, "Death Certificate", summary,
-                         person->certificate_count > 1U ? person->certificate_paths[1] : NULL);
+        (void)snprintf(summary, sizeof(summary), "%s - %s", person->dates.death_date,
+                       person->dates.death_location);
+    }
+    else if (string_has_value(person->dates.death_date))
+    {
+        copy_string(summary, sizeof(summary), person->dates.death_date);
+    }
+    else if (string_has_value(person->dates.death_location))
+    {
+        copy_string(summary, sizeof(summary), person->dates.death_location);
+    }
+    if (summary[0] != '\0')
+    {
+        const char *media_path = (person->certificate_count > 1U) ? person->certificate_paths[1] : NULL;
+        push_certificate(content, DETAIL_CERTIFICATE_DEATH, "Death Certificate", summary, media_path);
     }
 
     for (size_t index = 0U; index < person->certificate_count; ++index)
     {
         const char *path = person->certificate_paths[index];
-        if (!path)
+        if (!string_has_value(path) || certificate_path_used(content, path))
         {
             continue;
         }
-        bool already_used = false;
-        for (size_t existing = 0U; existing < content->certificate_count; ++existing)
+        char title[64];
+        extract_filename(path, title, sizeof(title));
+        if (title[0] == '\0')
         {
-            if (content->certificates[existing].has_media_asset &&
-                string_compare_insensitive(content->certificates[existing].media_path, path) == 0)
-            {
-                already_used = true;
-                break;
-            }
+            copy_string(title, sizeof(title), "Archival Document");
         }
-        if (already_used)
-        {
-            continue;
-        }
-        push_certificate(content, DETAIL_CERTIFICATE_ARCHIVE, "Archival Document", path, path);
+        push_certificate(content, DETAIL_CERTIFICATE_ARCHIVE, title, path, path);
     }
 
     if (content->certificate_count == 0U)
     {
         push_certificate(content, DETAIL_CERTIFICATE_ARCHIVE, "No Certificates Located",
                          "Upload records to visualize lineage documents.", NULL);
+    }
+}
+
+static void assign_even_timeline_spacing(struct DetailViewContent *content)
+{
+    if (!content)
+    {
+        return;
+    }
+    size_t count = content->timeline_event_count;
+    if (count == 0U)
+    {
+        return;
+    }
+    if (count == 1U)
+    {
+        content->timeline_events[0].normalized_time = 0.5f;
+        return;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        content->timeline_events[index].normalized_time = (float)index / (float)(count - 1U);
     }
 }
 
@@ -344,13 +411,11 @@ static void populate_timeline(const struct Person *person, struct DetailViewCont
         return;
     }
 
-    int min_year = 99999;
-    int max_year = -99999;
-    int years[DETAIL_VIEW_MAX_TIMELINE_EVENTS];
-    size_t year_count = 0U;
-
     content->timeline_event_count = 0U;
-    for (size_t index = 0U; index < person->timeline_count && content->timeline_event_count < DETAIL_VIEW_MAX_TIMELINE_EVENTS;
+    int years[DETAIL_VIEW_MAX_TIMELINE_EVENTS];
+
+    for (size_t index = 0U; index < person->timeline_count &&
+                           content->timeline_event_count < DETAIL_VIEW_MAX_TIMELINE_EVENTS;
          ++index)
     {
         const TimelineEntry *entry = &person->timeline_entries[index];
@@ -358,6 +423,7 @@ static void populate_timeline(const struct Person *person, struct DetailViewCont
         {
             continue;
         }
+
         DetailViewTimelineEvent *event = &content->timeline_events[content->timeline_event_count];
         memset(event, 0, sizeof(*event));
 
@@ -378,19 +444,26 @@ static void populate_timeline(const struct Person *person, struct DetailViewCont
         case TIMELINE_EVENT_CUSTOM:
         default:
             event->type = DETAIL_TIMELINE_CUSTOM;
-            copy_string(event->title, sizeof(event->title), entry->description ? entry->description : "Event");
+            if (string_has_value(entry->description))
+            {
+                copy_string(event->title, sizeof(event->title), entry->description);
+            }
+            else
+            {
+                copy_string(event->title, sizeof(event->title), "Event");
+            }
             break;
         }
 
-        if (entry->date)
+        if (string_has_value(entry->date))
         {
             copy_string(event->date, sizeof(event->date), entry->date);
         }
-        if (entry->description)
+        if (string_has_value(entry->description))
         {
             copy_string(event->description, sizeof(event->description), entry->description);
         }
-        if (entry->location)
+        if (string_has_value(entry->location))
         {
             if (event->description[0] != '\0')
             {
@@ -399,21 +472,34 @@ static void populate_timeline(const struct Person *person, struct DetailViewCont
             append_text(event->description, sizeof(event->description), entry->location);
         }
 
-        int year = parse_year(entry->date);
-        years[year_count < DETAIL_VIEW_MAX_TIMELINE_EVENTS ? year_count : DETAIL_VIEW_MAX_TIMELINE_EVENTS - 1U] = year;
-        if (year >= 0)
+        if (entry->media_count > 0U && entry->media_paths)
         {
-            if (year < min_year)
+            const char *primary_media = entry->media_paths[0];
+            if (string_has_value(primary_media))
             {
-                min_year = year;
-            }
-            if (year > max_year)
-            {
-                max_year = year;
+                copy_string(event->media_path, sizeof(event->media_path), primary_media);
+                extract_filename(primary_media, event->media_label, sizeof(event->media_label));
+                if (event->media_label[0] == '\0')
+                {
+                    copy_string(event->media_label, sizeof(event->media_label), "Attached media");
+                }
+                if (entry->media_count > 1U)
+                {
+                    char count_buffer[32];
+                    (void)snprintf(count_buffer, sizeof(count_buffer), " (+%zu)", entry->media_count - 1U);
+                    append_text(event->media_label, sizeof(event->media_label), count_buffer);
+                    event->multiple_media_assets = true;
+                }
+                event->has_media_asset = true;
+                size_t length = strlen(primary_media);
+                if (length >= 4U && string_compare_insensitive(primary_media + (length - 4U), ".pdf") == 0)
+                {
+                    event->media_is_pdf = true;
+                }
             }
         }
-        year_count += 1U;
 
+        years[content->timeline_event_count] = parse_year(entry->date);
         content->timeline_event_count += 1U;
     }
 
@@ -429,32 +515,82 @@ static void populate_timeline(const struct Person *person, struct DetailViewCont
         return;
     }
 
-    if (min_year > max_year || min_year == 99999 || max_year == -99999)
+    for (size_t i = 0U; i + 1U < content->timeline_event_count; ++i)
     {
-        /* Fall back to positional spacing when no year data is available. */
-        size_t count = content->timeline_event_count;
-        for (size_t index = 0U; index < count; ++index)
+        for (size_t j = i + 1U; j < content->timeline_event_count; ++j)
         {
-            content->timeline_events[index].normalized_time = (float)index / (float)(count > 1U ? (count - 1U) : 1U);
+            int year_i = years[i];
+            int year_j = years[j];
+            if (year_j < year_i)
+            {
+                DetailViewTimelineEvent temp_event = content->timeline_events[i];
+                content->timeline_events[i] = content->timeline_events[j];
+                content->timeline_events[j] = temp_event;
+
+                int temp_year = years[i];
+                years[i] = years[j];
+                years[j] = temp_year;
+            }
         }
+    }
+
+    int min_year = INT_MAX;
+    int max_year = INT_MIN;
+    for (size_t index = 0U; index < content->timeline_event_count; ++index)
+    {
+        int year = years[index];
+        if (year == INT_MAX)
+        {
+            continue;
+        }
+        if (year < min_year)
+        {
+            min_year = year;
+        }
+        if (year > max_year)
+        {
+            max_year = year;
+        }
+    }
+
+    if (min_year == INT_MAX || max_year == INT_MIN || min_year == max_year)
+    {
+        assign_even_timeline_spacing(content);
         return;
     }
 
-    const float range = (float)(max_year - min_year);
-    for (size_t index = 0U; index < content->timeline_event_count; ++index)
+    float range = (float)(max_year - min_year);
+    if (range <= 0.0f)
     {
-        int year = parse_year(content->timeline_events[index].date);
-        if (year < 0 || range <= 0.0f)
+        assign_even_timeline_spacing(content);
+        return;
+    }
+
+    size_t count = content->timeline_event_count;
+    if (count == 1U)
+    {
+        content->timeline_events[0].normalized_time = 0.5f;
+        return;
+    }
+
+    for (size_t index = 0U; index < count; ++index)
+    {
+        int year = years[index];
+        if (year == INT_MAX)
         {
-            content->timeline_events[index].normalized_time = (float)index /
-                                                              (float)(content->timeline_event_count > 1U
-                                                                          ? (content->timeline_event_count - 1U)
-                                                                          : 1U);
+            content->timeline_events[index].normalized_time = (float)index / (float)(count - 1U);
+            continue;
         }
-        else
+        float normalized = (float)(year - min_year) / range;
+        if (normalized < 0.0f)
         {
-            content->timeline_events[index].normalized_time = (float)(year - min_year) / range;
+            normalized = 0.0f;
         }
+        if (normalized > 1.0f)
+        {
+            normalized = 1.0f;
+        }
+        content->timeline_events[index].normalized_time = normalized;
     }
 }
 
@@ -464,6 +600,7 @@ bool detail_view_content_build(const struct Person *person, struct DetailViewCon
     {
         return false;
     }
+
     build_default_content(out_content);
     if (!person)
     {

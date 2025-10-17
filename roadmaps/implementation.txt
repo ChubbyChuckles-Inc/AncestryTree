@@ -371,10 +371,10 @@ PHASE 5: SPHERE EXPANSION & DETAIL VIEW
       [x] Plot events at correct positions
       [x] Draw event markers with dates
       [x] Draw event descriptions
-      [ ] Support scrolling for long timelines
+    [x] Support scrolling for long timelines
   [x] Implement timeline_event_hover() function
       [x] Show detailed popup on hover
-      [ ] Display associated images
+    [x] Display associated images
 
 ================================================================================
 PHASE 6: USER INTERFACE (NUKLEAR)

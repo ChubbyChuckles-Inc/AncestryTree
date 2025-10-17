@@ -56,14 +56,14 @@ TEST(test_detail_view_update_tracks_phases)
 
     for (int step = 0; step < 12; ++step)
     {
-        detail_view_update(system, 0.1f, NULL, 1.0f, 0.5f);
+        detail_view_update(system, 0.1f, NULL, 1.0f, 0.5f, 0.0f);
     }
     ASSERT_FLOAT_NEAR(detail_view_get_timeline_phase(system), 1.0f, 0.15f);
     ASSERT_FLOAT_NEAR(detail_view_get_panel_phase(system), 0.5f, 0.15f);
 
     for (int step = 0; step < 18; ++step)
     {
-        detail_view_update(system, 0.1f, NULL, 0.0f, 0.0f);
+        detail_view_update(system, 0.1f, NULL, 0.0f, 0.0f, 0.0f);
     }
     ASSERT_FLOAT_NEAR(detail_view_get_timeline_phase(system), 0.0f, 0.15f);
     ASSERT_FLOAT_NEAR(detail_view_get_panel_phase(system), 0.0f, 0.15f);
@@ -88,7 +88,7 @@ TEST(test_detail_view_update_responds_to_expansion_activation)
     expansion.detail_radius = 3.0f;
     expansion.radius_current = 2.2f;
 
-    detail_view_update(system, 0.16f, &expansion, 0.0f, 0.0f);
+    detail_view_update(system, 0.16f, &expansion, 0.0f, 0.0f, 0.0f);
 
     ASSERT_TRUE(detail_view_get_detail_phase(system) > 0.0f);
     ASSERT_TRUE(detail_view_get_timeline_phase(system) > 0.0f);

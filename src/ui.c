@@ -241,6 +241,7 @@ static void ui_apply_default_style(struct nk_context *ctx)
         return;
     }
     struct nk_color table[NK_COLOR_COUNT];
+    memset(table, 0, sizeof(table));
     table[NK_COLOR_TEXT] = nk_rgba(236, 240, 241, 255);
     table[NK_COLOR_WINDOW] = nk_rgba(12, 16, 24, 230);
     table[NK_COLOR_HEADER] = nk_rgba(34, 44, 68, 255);
@@ -1493,7 +1494,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
     nk_end(ctx);
 }
 
-static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_seconds)
+static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_seconds, float wheel_delta)
 {
     if (!internal)
     {
@@ -1508,7 +1509,7 @@ static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_se
     nk_input_button(ctx, NK_BUTTON_LEFT, (int)mouse.x, (int)mouse.y, IsMouseButtonDown(MOUSE_BUTTON_LEFT));
     nk_input_button(ctx, NK_BUTTON_RIGHT, (int)mouse.x, (int)mouse.y, IsMouseButtonDown(MOUSE_BUTTON_RIGHT));
     nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)mouse.x, (int)mouse.y, IsMouseButtonDown(MOUSE_BUTTON_MIDDLE));
-    nk_input_scroll(ctx, nk_vec2(0.0f, GetMouseWheelMove()));
+    nk_input_scroll(ctx, nk_vec2(0.0f, wheel_delta));
 
     nk_input_key(ctx, NK_KEY_DEL, IsKeyDown(KEY_DELETE));
     nk_input_key(ctx, NK_KEY_ENTER, IsKeyDown(KEY_ENTER));
@@ -1632,7 +1633,7 @@ void ui_shutdown(UIContext *ui)
     ui_cleanup(ui);
 }
 
-bool ui_begin_frame(UIContext *ui, float delta_seconds)
+bool ui_begin_frame(UIContext *ui, float delta_seconds, float wheel_delta)
 {
     if (!ui)
     {
@@ -1648,9 +1649,11 @@ bool ui_begin_frame(UIContext *ui, float delta_seconds)
     {
         return false;
     }
-    ui_process_input(internal, ui, delta_seconds);
+    ui_process_input(internal, ui, delta_seconds, wheel_delta);
     return true;
 #else
+    (void)delta_seconds;
+    (void)wheel_delta;
     return false;
 #endif
 }

@@ -486,7 +486,7 @@ float detail_view_get_detail_phase(const DetailViewSystem *system)
 }
 
 void detail_view_update(DetailViewSystem *system, float delta_seconds, const struct ExpansionState *expansion,
-                        float timeline_phase, float panel_phase)
+                        float timeline_phase, float panel_phase, float wheel_delta)
 {
     if (!system)
     {
@@ -574,6 +574,15 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
         Vector2 cursor = GetMousePosition();
         system->timeline_hover_index = timeline_event_hover(&system->timeline_state, (int)cursor.x, (int)cursor.y,
                                                             GetScreenWidth(), GetScreenHeight(), &system->content);
+        bool shift_down = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+        if (shift_down && timeline_requires_scroll(&system->timeline_state) &&
+            timeline_area_hovered(&system->timeline_state))
+        {
+            if (fabsf(wheel_delta) > 0.01f)
+            {
+                timeline_scroll(&system->timeline_state, -wheel_delta * 0.35f);
+            }
+        }
     }
     else
     {
@@ -582,6 +591,24 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
 #else
     system->timeline_hover_index = -1;
 #endif
+}
+
+bool detail_view_timeline_requires_scroll(const DetailViewSystem *system)
+{
+    if (!system)
+    {
+        return false;
+    }
+    return timeline_requires_scroll(&system->timeline_state);
+}
+
+bool detail_view_timeline_hovered(const DetailViewSystem *system)
+{
+    if (!system)
+    {
+        return false;
+    }
+    return timeline_area_hovered(&system->timeline_state);
 }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
@@ -667,6 +694,29 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
         if (event->description[0] != '\0')
         {
             DrawText(event->description, margin, tooltip_y, 18, hint_color);
+            tooltip_y += 20;
+        }
+        if (event->has_media_asset)
+        {
+            Color media_colour = event->media_is_pdf ? (Color){240, 140, 140, text_alpha}
+                                                     : (Color){140, 220, 200, text_alpha};
+            DrawText("Associated media:", margin, tooltip_y, 18, subtitle_color);
+            tooltip_y += 20;
+            int preview_width = screen_width < 1280 ? 220 : 280;
+            int preview_height = 64;
+            Rectangle preview = {(float)margin, (float)tooltip_y, (float)preview_width, (float)preview_height};
+            DrawRectangleRounded(preview, 0.25f, 6, media_colour);
+            DrawRectangleRoundedLines(preview, 0.25f, 6, 2.0f,
+                                      (Color){media_colour.r, media_colour.g, media_colour.b, 255});
+            int text_x = margin + 16;
+            int text_y = tooltip_y + 20;
+            DrawText(event->media_label[0] != '\0' ? event->media_label : "Media reference", text_x, text_y, 18,
+                     (Color){12, 18, 28, 235});
+            if (event->multiple_media_assets)
+            {
+                DrawText("Multiple attachments", text_x, text_y + 20, 16, (Color){20, 26, 38, 220});
+            }
+            tooltip_y += preview_height + 12;
         }
     }
     else
@@ -674,8 +724,8 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
         DrawText("Hover timeline markers to inspect milestones.", margin, tooltip_y, 20, hint_color);
     }
 
-    DrawText("Press Backspace to exit detail view | C: cycle documents | X: reset zoom", margin,
-             screen_height - margin, 18, hint_color);
+    DrawText("Press Backspace to exit detail view | C: cycle documents | X: reset zoom | Shift+Wheel: scroll timeline",
+             margin, screen_height - margin, 18, hint_color);
 }
 
 void detail_view_render(const DetailViewSystem *system, const struct ExpansionState *expansion,

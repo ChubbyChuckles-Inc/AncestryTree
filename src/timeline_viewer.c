@@ -18,6 +18,7 @@ void timeline_reset(TimelineViewState *state)
     }
     memset(state, 0, sizeof(*state));
     state->hover_index = -1;
+    state->content_span = 1.0f;
 }
 
 void timeline_init(TimelineViewState *state, const DetailViewContent *content)
@@ -32,13 +33,30 @@ void timeline_init(TimelineViewState *state, const DetailViewContent *content)
         return;
     }
     state->event_count = content->timeline_event_count;
+    float min_time = 1.0f;
+    float max_time = 0.0f;
     for (size_t index = 0U; index < state->event_count && index < DETAIL_VIEW_MAX_TIMELINE_EVENTS; ++index)
     {
         const DetailViewTimelineEvent *event = &content->timeline_events[index];
         TimelineViewEventVisual *visual = &state->events[index];
         visual->normalized_time = event->normalized_time;
         visual->eased_height = 0.0f;
+        if (event->normalized_time < min_time)
+        {
+            min_time = event->normalized_time;
+        }
+        if (event->normalized_time > max_time)
+        {
+            max_time = event->normalized_time;
+        }
     }
+    float range = max_time - min_time;
+    if (range < 0.1f)
+    {
+        range = 0.1f;
+    }
+    float density_span = state->event_count > 6U ? ((float)state->event_count / 6.0f) : 1.0f;
+    state->content_span = fmaxf(1.0f, fmaxf(range * 1.05f, density_span));
 }
 
 void timeline_update(TimelineViewState *state, float delta_seconds, float activation)
@@ -61,6 +79,17 @@ void timeline_update(TimelineViewState *state, float delta_seconds, float activa
     float hover_target = (state->hover_index >= 0) ? 1.0f : 0.0f;
     float hover_blend = fminf(1.0f, safe_delta * 6.0f);
     state->hover_blend = state->hover_blend * (1.0f - hover_blend) + hover_target * hover_blend;
+
+    float span = fmaxf(state->content_span, 1.0f);
+    float max_offset = fmaxf(0.0f, span - 1.0f);
+    if (state->scroll_offset < 0.0f)
+    {
+        state->scroll_offset = 0.0f;
+    }
+    else if (state->scroll_offset > max_offset)
+    {
+        state->scroll_offset = max_offset;
+    }
 }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
@@ -81,6 +110,17 @@ static Color timeline_colour(DetailViewTimelineType type)
 }
 #endif
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+static Rectangle timeline_area_rect(int screen_width, int screen_height)
+{
+    int margin = screen_width < 1280 ? 36 : 64;
+    int area_height = screen_height < 720 ? 120 : 160;
+    int base_y = screen_height - margin - area_height;
+    Rectangle area = {(float)margin, (float)base_y, (float)(screen_width - margin * 2), (float)area_height};
+    return area;
+}
+#endif
+
 void timeline_render(const TimelineViewState *state, float activation, int screen_width, int screen_height,
                      const DetailViewContent *content)
 {
@@ -89,10 +129,7 @@ void timeline_render(const TimelineViewState *state, float activation, int scree
     {
         return;
     }
-    int margin = screen_width < 1280 ? 36 : 64;
-    int area_height = screen_height < 720 ? 120 : 160;
-    int base_y = screen_height - margin - area_height;
-    Rectangle area = {(float)margin, (float)base_y, (float)(screen_width - margin * 2), (float)area_height};
+    Rectangle area = timeline_area_rect(screen_width, screen_height);
 
     Color background = {18, 28, 46, (unsigned char)(activation * 90.0f)};
     DrawRectangleRounded(area, 0.08f, 12, background);
@@ -101,11 +138,25 @@ void timeline_render(const TimelineViewState *state, float activation, int scree
     Color line_colour = {80, 140, 220, (unsigned char)(activation * 180.0f)};
     DrawLineEx((Vector2){area.x + 18.0f, line_y}, (Vector2){area.x + area.width - 18.0f, line_y}, 3.0f, line_colour);
 
+    float span = fmaxf(state->content_span, 1.0f);
+    float max_offset = fmaxf(0.0f, span - 1.0f);
+    float offset = state->scroll_offset;
+    if (offset > max_offset)
+    {
+        offset = max_offset;
+    }
+    float track_width = area.width - 48.0f;
+
     for (size_t index = 0U; index < state->event_count && index < content->timeline_event_count; ++index)
     {
         const DetailViewTimelineEvent *event = &content->timeline_events[index];
         const TimelineViewEventVisual *visual = &state->events[index];
-        float x = area.x + 24.0f + visual->normalized_time * (area.width - 48.0f);
+        float normalized = event->normalized_time * span - offset;
+        if (normalized < -0.1f || normalized > 1.1f)
+        {
+            continue;
+        }
+        float x = area.x + 24.0f + normalized * track_width;
         float height = area.height * 0.28f * fmaxf(0.3f, visual->eased_height);
         float radius = 12.0f + 18.0f * visual->eased_height;
         Color colour = timeline_colour(event->type);
@@ -115,6 +166,15 @@ void timeline_render(const TimelineViewState *state, float activation, int scree
         DrawCircleGradient((int)marker.x, (int)marker.y, radius, colour, (Color){10, 18, 32, 0});
         DrawCircleLines((int)marker.x, (int)marker.y, radius, (Color){colour.r, colour.g, colour.b, (unsigned char)255});
 
+        if (event->has_media_asset)
+        {
+            float icon_radius = radius * 0.5f;
+            Color media_colour = event->media_is_pdf ? (Color){240, 120, 120, 220} : (Color){120, 240, 180, 220};
+            DrawCircleV((Vector2){marker.x, marker.y - radius - icon_radius - 4.0f}, icon_radius, media_colour);
+            DrawCircleLines((int)marker.x, (int)(marker.y - radius - icon_radius - 4.0f), icon_radius,
+                            (Color){media_colour.r, media_colour.g, media_colour.b, 255});
+        }
+
         if (radius > 16.0f)
         {
             int font_size = 16;
@@ -123,6 +183,18 @@ void timeline_render(const TimelineViewState *state, float activation, int scree
             DrawText(label, (int)(marker.x - text_width / 2), (int)(marker.y - radius - 20.0f), font_size,
                      (Color){215, 240, 255, (unsigned char)(activation * 200.0f)});
         }
+    }
+
+    if (span > 1.0f)
+    {
+        float scrollbar_height = 6.0f;
+        float scrollbar_y = area.y + area.height - scrollbar_height - 10.0f;
+        Rectangle track = {area.x + 24.0f, scrollbar_y, area.width - 48.0f, scrollbar_height};
+        DrawRectangleRounded(track, 0.3f, 4, (Color){30, 44, 68, 200});
+        float handle_width = track.width / span;
+        float handle_x = track.x + (offset / span) * track.width;
+        Rectangle handle = {handle_x, track.y, handle_width, track.height};
+        DrawRectangleRounded(handle, 0.4f, 4, (Color){70, 120, 200, 230});
     }
 #else
     (void)state;
@@ -142,17 +214,30 @@ int timeline_event_hover(TimelineViewState *state, int cursor_x, int cursor_y, i
     }
     int hover = -1;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    int margin = screen_width < 1280 ? 36 : 64;
-    int area_height = screen_height < 720 ? 120 : 160;
-    int base_y = screen_height - margin - area_height;
-    Rectangle area = {(float)margin, (float)base_y, (float)(screen_width - margin * 2), (float)area_height};
+    Rectangle area = timeline_area_rect(screen_width, screen_height);
     Vector2 cursor = {(float)cursor_x, (float)cursor_y};
-    if (CheckCollisionPointRec(cursor, area))
+    bool contains_cursor = CheckCollisionPointRec(cursor, area);
+    state->area_hovered = contains_cursor;
+    float span = fmaxf(state->content_span, 1.0f);
+    float max_offset = fmaxf(0.0f, span - 1.0f);
+    float offset = state->scroll_offset;
+    if (offset > max_offset)
+    {
+        offset = max_offset;
+    }
+    float track_width = area.width - 48.0f;
+    if (contains_cursor)
     {
         for (size_t index = 0U; index < state->event_count && index < content->timeline_event_count; ++index)
         {
             const TimelineViewEventVisual *visual = &state->events[index];
-            float x = area.x + 24.0f + visual->normalized_time * (area.width - 48.0f);
+            const DetailViewTimelineEvent *event = &content->timeline_events[index];
+            float normalized = event->normalized_time * span - offset;
+            if (normalized < -0.1f || normalized > 1.1f)
+            {
+                continue;
+            }
+            float x = area.x + 24.0f + normalized * track_width;
             float radius = 16.0f + 18.0f * visual->eased_height;
             float dx = cursor.x - x;
             float dy = cursor.y - (area.y + area.height * 0.6f - area.height * 0.28f * visual->eased_height);
@@ -169,7 +254,47 @@ int timeline_event_hover(TimelineViewState *state, int cursor_x, int cursor_y, i
     (void)cursor_y;
     (void)screen_width;
     (void)screen_height;
+    (void)content;
+    state->area_hovered = false;
 #endif
     state->hover_index = hover;
     return hover;
+}
+
+void timeline_scroll(TimelineViewState *state, float delta)
+{
+    if (!state)
+    {
+        return;
+    }
+    float span = fmaxf(state->content_span, 1.0f);
+    float max_offset = fmaxf(0.0f, span - 1.0f);
+    if (max_offset <= 0.0f)
+    {
+        state->scroll_offset = 0.0f;
+        return;
+    }
+    state->scroll_offset += delta;
+    if (state->scroll_offset < 0.0f)
+    {
+        state->scroll_offset = 0.0f;
+    }
+    else if (state->scroll_offset > max_offset)
+    {
+        state->scroll_offset = max_offset;
+    }
+}
+
+bool timeline_requires_scroll(const TimelineViewState *state)
+{
+    if (!state)
+    {
+        return false;
+    }
+    return state->content_span > 1.001f;
+}
+
+bool timeline_area_hovered(const TimelineViewState *state)
+{
+    return state ? state->area_hovered : false;
 }

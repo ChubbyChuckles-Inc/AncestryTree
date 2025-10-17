@@ -1,6 +1,7 @@
 #ifndef TIMELINE_VIEWER_H
 #define TIMELINE_VIEWER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "detail_view.h"
@@ -18,6 +19,8 @@ typedef struct TimelineViewState
     int hover_index;
     float hover_blend;
     float scroll_offset;
+    float content_span;
+    bool area_hovered;
 } TimelineViewState;
 
 void timeline_reset(TimelineViewState *state);
@@ -27,5 +30,8 @@ void timeline_render(const TimelineViewState *state, float activation, int scree
                      const struct DetailViewContent *content);
 int timeline_event_hover(TimelineViewState *state, int cursor_x, int cursor_y, int screen_width, int screen_height,
                          const struct DetailViewContent *content);
+void timeline_scroll(TimelineViewState *state, float delta);
+bool timeline_requires_scroll(const TimelineViewState *state);
+bool timeline_area_hovered(const TimelineViewState *state);
 
 #endif /* TIMELINE_VIEWER_H */

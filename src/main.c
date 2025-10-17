@@ -968,7 +968,8 @@ static void app_apply_settings(const Settings *settings, RenderState *render_sta
     }
 }
 
-static void app_collect_camera_input(CameraControllerInput *input, bool auto_orbit_enabled, const Settings *settings)
+static void app_collect_camera_input(CameraControllerInput *input, bool auto_orbit_enabled, const Settings *settings,
+                                     float wheel_delta)
 {
     if (!input)
     {
@@ -1029,7 +1030,7 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
         }
     }
 
-    input->zoom_delta = GetMouseWheelMove() * zoom_sensitivity;
+    input->zoom_delta = wheel_delta * zoom_sensitivity;
 
     const float threshold = 0.001f;
     bool has_manual_orbit = (fabsf(input->yaw_delta) > threshold) || (fabsf(input->pitch_delta) > threshold);
@@ -1381,6 +1382,23 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     while (!WindowShouldClose())
     {
         float delta_seconds = GetFrameTime();
+        float wheel_delta = GetMouseWheelMove();
+        bool shift_down_global = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+        bool detail_view_consumes_wheel = false;
+        if (detail_view_ready && detail_view && detail_view_content_ready(detail_view))
+        {
+            float prior_detail_phase = detail_view_get_detail_phase(detail_view);
+            if (prior_detail_phase > 0.01f && detail_view_timeline_requires_scroll(detail_view) &&
+                detail_view_timeline_hovered(detail_view) && shift_down_global)
+            {
+                detail_view_consumes_wheel = true;
+            }
+        }
+
+        float camera_wheel_delta = detail_view_consumes_wheel ? 0.0f : wheel_delta;
+        float ui_wheel_delta = detail_view_consumes_wheel ? 0.0f : wheel_delta;
+
         event_context.render_ready = render_ready;
         event_context.ui = ui_ready ? &ui : NULL;
         shortcut_payload.ui = event_context.ui;
@@ -1391,7 +1409,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         event_process(&event_context, EVENT_PROCESS_PHASE_PRE_FRAME, delta_seconds);
 
         CameraControllerInput controller_input;
-        app_collect_camera_input(&controller_input, ui_auto_orbit_enabled(&ui), &settings);
+        app_collect_camera_input(&controller_input, ui_auto_orbit_enabled(&ui), &settings, camera_wheel_delta);
         camera_controller_update(&camera_controller, &controller_input, delta_seconds);
         app_state_tick(&app_state, delta_seconds);
 
@@ -1421,12 +1439,13 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         {
             bool expansion_forward = expansion_active_now && !expansion_reversing;
             float target_phase = expansion_forward ? 1.0f : 0.0f;
-            detail_view_update(detail_view, delta_seconds, detail_expansion_ptr, target_phase, target_phase);
+            detail_view_update(detail_view, delta_seconds, detail_expansion_ptr, target_phase, target_phase,
+                               wheel_delta);
             detail_view_phase = detail_view_get_detail_phase(detail_view);
             detail_view_should_render = detail_view_phase > 0.01f;
         }
 
-        bool ui_frame_started = ui_begin_frame(&ui, delta_seconds);
+        bool ui_frame_started = ui_begin_frame(&ui, delta_seconds, ui_wheel_delta);
 
         BeginDrawing();
         ClearBackground((Color){8, 10, 18, 255});

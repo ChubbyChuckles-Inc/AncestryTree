@@ -52,6 +52,11 @@ typedef struct DetailViewTimelineEvent
     char date[32];
     char description[192];
     float normalized_time;
+    char media_path[256];
+    char media_label[128];
+    bool has_media_asset;
+    bool multiple_media_assets;
+    bool media_is_pdf;
 } DetailViewTimelineEvent;
 
 typedef struct DetailViewContent
@@ -97,8 +102,10 @@ float detail_view_get_timeline_phase(const DetailViewSystem *system);
 float detail_view_get_panel_phase(const DetailViewSystem *system);
 float detail_view_get_detail_phase(const DetailViewSystem *system);
 void detail_view_update(DetailViewSystem *system, float delta_seconds, const struct ExpansionState *expansion,
-                        float timeline_phase, float panel_phase);
+                        float timeline_phase, float panel_phase, float wheel_delta);
 void detail_view_render(const DetailViewSystem *system, const struct ExpansionState *expansion,
                         const struct RenderConfig *config, const struct Camera3D *camera);
+bool detail_view_timeline_requires_scroll(const DetailViewSystem *system);
+bool detail_view_timeline_hovered(const DetailViewSystem *system);
 
 #endif /* DETAIL_VIEW_H */

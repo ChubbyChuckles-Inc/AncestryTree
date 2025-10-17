@@ -31,6 +31,8 @@ TEST(test_detail_content_builder_populates_certificates_and_timeline)
     timeline_entry_init(&marriage, TIMELINE_EVENT_MARRIAGE);
     ASSERT_TRUE(timeline_entry_set_date(&marriage, "1835-07-08"));
     ASSERT_TRUE(timeline_entry_set_description(&marriage, "Marriage to William"));
+    ASSERT_TRUE(timeline_entry_add_media(&marriage, "assets/docs/marriage.pdf"));
+    ASSERT_TRUE(timeline_entry_add_media(&marriage, "assets/docs/marriage-photo.png"));
     ASSERT_TRUE(person_add_timeline_entry(primary, &marriage));
     timeline_entry_reset(&marriage);
 
@@ -65,6 +67,15 @@ TEST(test_detail_content_builder_populates_certificates_and_timeline)
         ASSERT_TRUE(event->normalized_time <= 1.0f);
         ASSERT_TRUE(event->normalized_time + 0.001f >= last_time);
         last_time = event->normalized_time;
+
+        if (event->type == DETAIL_TIMELINE_MARRIAGE)
+        {
+            ASSERT_TRUE(event->has_media_asset);
+            ASSERT_TRUE(event->multiple_media_assets);
+            ASSERT_TRUE(event->media_is_pdf);
+            ASSERT_STREQ("marriage.pdf (+1)", event->media_label);
+            ASSERT_STREQ("assets/docs/marriage.pdf", event->media_path);
+        }
     }
 
     person_destroy(spouse);

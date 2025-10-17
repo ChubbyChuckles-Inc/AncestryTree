@@ -58,7 +58,7 @@ void ui_resize(UIContext *ui, int width, int height);
 void ui_cleanup(UIContext *ui);
 void ui_shutdown(UIContext *ui);
 
-bool ui_begin_frame(UIContext *ui, float delta_seconds);
+bool ui_begin_frame(UIContext *ui, float delta_seconds, float wheel_delta);
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
                      float fps, const struct Person *selected_person, const struct Person *hovered_person,
                      struct RenderConfig *render_config, Settings *settings, bool settings_dirty);
