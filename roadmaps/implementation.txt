@@ -402,29 +402,29 @@ PHASE 6: USER INTERFACE (NUKLEAR)
       [x] Show about dialog
 
 6.3 Add Person Panel
-  [ ] Implement add_person_panel_render() function
-      [ ] Floating/docked panel
-      [ ] Name input fields (first, middle, last)
-      [ ] Date pickers (birth, death)
-      [ ] Location input fields
-      [ ] Is alive checkbox
-      [ ] Parent selection dropdowns
-      [ ] Spouse selection dropdown
-      [ ] Image upload button
-      [ ] Certificate upload buttons
-      [ ] Timeline entry editor
-      [ ] Save button
-      [ ] Cancel button
-  [ ] Implement add_person_validate() function
-      [ ] Check required fields
-      [ ] Validate dates
-      [ ] Show error messages
-  [ ] Implement add_person_save() function
-      [ ] Create new Person object
-      [ ] Add to family tree
-      [ ] Update layout
-      [ ] Copy assets to project
-      [ ] Save tree
+  [x] Implement add_person_panel_render() function
+      [x] Floating/docked panel
+      [x] Name input fields (first, middle, last)
+      [x] Date pickers (birth, death)
+      [x] Location input fields
+      [x] Is alive checkbox
+      [x] Parent selection dropdowns
+      [x] Spouse selection dropdown
+      [x] Image upload button
+      [x] Certificate upload buttons
+      [x] Timeline entry editor
+      [x] Save button
+      [x] Cancel button
+  [x] Implement add_person_validate() function
+      [x] Check required fields
+      [x] Validate dates
+      [x] Show error messages
+  [x] Implement add_person_save() function
+      [x] Create new Person object
+      [x] Add to family tree
+      [x] Update layout
+      [x] Copy assets to project
+      [x] Save tree
 
 6.4 Edit Person Panel
   [ ] Implement edit_person_panel_render() function

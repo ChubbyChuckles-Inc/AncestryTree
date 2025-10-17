@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Add-person workflow now routes the Nuklear panel through AppState commands, importing profile/certificate assets, focusing the new holographic node, and shipping regression tests for person creation validation.
 - Certificate gallery holograms sourced from person metadata, rendering birth, marriage, death, and archival documents with PDF-aware badges, keyboard-controlled zoom, and immersive column animations inside the detail view.
 - Timeline holoboard now supports Shift+scroll navigation for dense event histories and surfaces associated media via marker badges and in-room preview cards, with regression tests validating detail content metadata.
 - Timeline holoboard overlay that converts timeline entries into a generated track with hover tooltips, dynamic easing, and supporting `timeline_init`, `timeline_render`, and `timeline_event_hover` helpers plus new content-builder regression coverage.

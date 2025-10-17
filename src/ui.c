@@ -2050,17 +2050,14 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "First", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        int first_len = (int)strnlen(draft->first, sizeof(draft->first));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->first, &first_len, sizeof(draft->first),
-                                       nk_filter_default);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->first, (int)sizeof(draft->first), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Middle", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        int middle_len = (int)strnlen(draft->middle, sizeof(draft->middle));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->middle, &middle_len, sizeof(draft->middle),
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->middle, (int)sizeof(draft->middle),
                                        nk_filter_default);
         nk_layout_row_end(ctx);
 
@@ -2068,17 +2065,14 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Last", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        int last_len = (int)strnlen(draft->last, sizeof(draft->last));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->last, &last_len, sizeof(draft->last),
-                                       nk_filter_default);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->last, (int)sizeof(draft->last), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birth Date", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        int birth_len = (int)strnlen(draft->birth_date, sizeof(draft->birth_date));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_date, &birth_len, sizeof(draft->birth_date),
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_date, (int)sizeof(draft->birth_date),
                                        nk_filter_default);
         nk_layout_row_end(ctx);
 
@@ -2086,9 +2080,8 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birthplace", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        int birth_loc_len = (int)strnlen(draft->birth_location, sizeof(draft->birth_location));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_location, &birth_loc_len,
-                                       sizeof(draft->birth_location), nk_filter_default);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_location,
+                                       (int)sizeof(draft->birth_location), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
@@ -2102,18 +2095,16 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Death Date", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            int death_len = (int)strnlen(draft->death_date, sizeof(draft->death_date));
-            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_date, &death_len,
-                                           sizeof(draft->death_date), nk_filter_default);
+            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_date, (int)sizeof(draft->death_date),
+                                           nk_filter_default);
             nk_layout_row_end(ctx);
 
             nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Death Place", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            int death_loc_len = (int)strnlen(draft->death_location, sizeof(draft->death_location));
-            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_location, &death_loc_len,
-                                           sizeof(draft->death_location), nk_filter_default);
+            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_location,
+                                           (int)sizeof(draft->death_location), nk_filter_default);
             nk_layout_row_end(ctx);
         }
         else
@@ -2349,28 +2340,21 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Date", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        int new_date_len = (int)strnlen(internal->add_person_form.new_timeline_date,
-                                        sizeof(internal->add_person_form.new_timeline_date));
         nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_date,
-                                       &new_date_len, sizeof(internal->add_person_form.new_timeline_date),
-                                       nk_filter_default);
+                                       (int)sizeof(internal->add_person_form.new_timeline_date), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 60.0f, 1);
-        int new_desc_len = (int)strnlen(internal->add_person_form.new_timeline_description,
-                                        sizeof(internal->add_person_form.new_timeline_description));
         nk_edit_string_zero_terminated(ctx, NK_EDIT_BOX, internal->add_person_form.new_timeline_description,
-                                       &new_desc_len, sizeof(internal->add_person_form.new_timeline_description),
+                                       (int)sizeof(internal->add_person_form.new_timeline_description),
                                        nk_filter_default);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Location", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        int new_loc_len = (int)strnlen(internal->add_person_form.new_timeline_location,
-                                       sizeof(internal->add_person_form.new_timeline_location));
         nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_location,
-                                       &new_loc_len, sizeof(internal->add_person_form.new_timeline_location),
+                                       (int)sizeof(internal->add_person_form.new_timeline_location),
                                        nk_filter_default);
         nk_layout_row_end(ctx);
 
@@ -2429,10 +2413,8 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, width - 120.0f);
-        int cert_len = (int)strnlen(internal->add_person_form.new_certificate_path,
-                                    sizeof(internal->add_person_form.new_certificate_path));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->add_person_form.new_certificate_path, &cert_len,
-                                       sizeof(internal->add_person_form.new_certificate_path), nk_filter_default);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->add_person_form.new_certificate_path,
+                                       (int)sizeof(internal->add_person_form.new_certificate_path), nk_filter_default);
         nk_layout_row_push(ctx, 60.0f);
         if (nk_button_label(ctx, "Add"))
         {
@@ -2463,9 +2445,8 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_label(ctx, "Profile Image", NK_TEXT_LEFT);
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
         nk_layout_row_push(ctx, width - 40.0f);
-        int profile_len = (int)strnlen(draft->profile_image_path, sizeof(draft->profile_image_path));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->profile_image_path, &profile_len,
-                                       sizeof(draft->profile_image_path), nk_filter_default);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->profile_image_path,
+                                       (int)sizeof(draft->profile_image_path), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 30.0f, 2);

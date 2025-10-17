@@ -374,6 +374,128 @@ DECLARE_TEST(test_app_command_edit_person_roundtrip)
     app_state_test_context_shutdown(&state, &layout, tree);
 }
 
+DECLARE_TEST(test_app_state_create_person_with_relationships)
+{
+    AppState state;
+    FamilyTree *tree = NULL;
+    LayoutResult layout;
+    InteractionState interaction;
+    CameraController camera;
+    Settings settings;
+    Settings persisted_settings;
+
+    app_state_test_context_init(&state, &tree, &layout, &interaction, &camera, &settings, &persisted_settings);
+
+    char error_buffer[128];
+    error_buffer[0] = '\0';
+
+    Person *father = app_state_test_create_person(101U, "Orion", "Prime", "1960-02-02", "Luna Base");
+    ASSERT_NOT_NULL(father);
+    ASSERT_TRUE(app_state_add_person(&state, father, error_buffer, sizeof(error_buffer)));
+
+    Person *mother = app_state_test_create_person(102U, "Lyra", "Prime", "1965-03-03", "Luna Base");
+    ASSERT_NOT_NULL(mother);
+    ASSERT_TRUE(app_state_add_person(&state, mother, error_buffer, sizeof(error_buffer)));
+
+    Person *spouse = app_state_test_create_person(103U, "Vega", "Prime", "1985-04-04", "Mars City");
+    ASSERT_NOT_NULL(spouse);
+    ASSERT_TRUE(app_state_add_person(&state, spouse, error_buffer, sizeof(error_buffer)));
+
+    AppPersonCreateData create_data;
+    memset(&create_data, 0, sizeof(create_data));
+    create_data.first = "Nova";
+    create_data.middle = "Starlight";
+    create_data.last = "Prime";
+    create_data.birth_date = "2090-01-01";
+    create_data.birth_location = "Orbital Habitat";
+    create_data.is_alive = true;
+    create_data.profile_image_path = "profiles/nova.png";
+    create_data.certificate_paths[0] = "certificates/nova_birth.png";
+    create_data.certificate_count = 1U;
+    create_data.timeline_entries[0].type = TIMELINE_EVENT_BIRTH;
+    create_data.timeline_entries[0].date = "2090-01-01";
+    create_data.timeline_entries[0].description = "Birth aboard orbital habitat.";
+    create_data.timeline_entries[0].location = "Orbital Habitat";
+    create_data.timeline_count = 1U;
+    create_data.father_id = father->id;
+    create_data.mother_id = mother->id;
+    create_data.spouse_id = spouse->id;
+
+    uint32_t new_person_id = 0U;
+    ASSERT_TRUE(app_state_create_person(&state, &create_data, &new_person_id, error_buffer, sizeof(error_buffer)));
+    ASSERT_TRUE(new_person_id != 0U);
+
+    Person *created = family_tree_find_person(tree, new_person_id);
+    ASSERT_NOT_NULL(created);
+    ASSERT_STREQ(created->name.middle, "Starlight");
+    ASSERT_TRUE(created->is_alive);
+    ASSERT_EQ(created->parents[PERSON_PARENT_FATHER], father);
+    ASSERT_EQ(created->parents[PERSON_PARENT_MOTHER], mother);
+    ASSERT_EQ(father->children_count, 1U);
+    ASSERT_EQ(mother->children_count, 1U);
+    ASSERT_EQ(spouse->spouses_count, 1U);
+    ASSERT_EQ(spouse->spouses[0].partner, created);
+    ASSERT_STREQ(created->profile_image_path, "profiles/nova.png");
+    ASSERT_EQ(created->certificate_count, 1U);
+    ASSERT_STREQ(created->certificate_paths[0], "certificates/nova_birth.png");
+    ASSERT_EQ(created->timeline_count, 1U);
+    ASSERT_STREQ(created->timeline_entries[0].description, "Birth aboard orbital habitat.");
+    ASSERT_TRUE(app_state_is_tree_dirty(&state));
+
+    ASSERT_TRUE(app_state_undo(&state, error_buffer, sizeof(error_buffer)));
+    ASSERT_NULL(family_tree_find_person(tree, new_person_id));
+    ASSERT_EQ(father->children_count, 0U);
+    ASSERT_EQ(mother->children_count, 0U);
+    ASSERT_EQ(spouse->spouses_count, 0U);
+
+    ASSERT_TRUE(app_state_redo(&state, error_buffer, sizeof(error_buffer)));
+    Person *reapplied = family_tree_find_person(tree, new_person_id);
+    ASSERT_NOT_NULL(reapplied);
+    ASSERT_EQ(father->children_count, 1U);
+    ASSERT_EQ(mother->children_count, 1U);
+    ASSERT_EQ(spouse->spouses_count, 1U);
+
+    app_state_test_context_shutdown(&state, &layout, tree);
+}
+
+DECLARE_TEST(test_app_state_create_person_validation)
+{
+    AppState state;
+    FamilyTree *tree = NULL;
+    LayoutResult layout;
+    InteractionState interaction;
+    CameraController camera;
+    Settings settings;
+    Settings persisted_settings;
+
+    app_state_test_context_init(&state, &tree, &layout, &interaction, &camera, &settings, &persisted_settings);
+
+    char error_buffer[128];
+    error_buffer[0] = '\0';
+
+    AppPersonCreateData invalid_name;
+    memset(&invalid_name, 0, sizeof(invalid_name));
+    invalid_name.first = "";
+    invalid_name.last = "Tester";
+    invalid_name.birth_date = "2100-01-01";
+    invalid_name.is_alive = true;
+    ASSERT_FALSE(app_state_create_person(&state, &invalid_name, NULL, error_buffer, sizeof(error_buffer)));
+    ASSERT_TRUE(error_buffer[0] != '\0');
+
+    AppPersonCreateData invalid_deceased;
+    memset(&invalid_deceased, 0, sizeof(invalid_deceased));
+    invalid_deceased.first = "Alpha";
+    invalid_deceased.last = "Tester";
+    invalid_deceased.birth_date = "2100-01-01";
+    invalid_deceased.is_alive = false;
+    invalid_deceased.death_date = "";
+    error_buffer[0] = '\0';
+    ASSERT_FALSE(app_state_create_person(&state, &invalid_deceased, NULL, error_buffer, sizeof(error_buffer)));
+    ASSERT_TRUE(error_buffer[0] != '\0');
+
+    app_state_test_context_shutdown(&state, &layout, tree);
+}
+
 void register_app_state_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_app_state_push_undo_redo);
@@ -382,4 +504,6 @@ void register_app_state_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_app_command_add_person_roundtrip);
     REGISTER_TEST(registry, test_app_command_delete_person_roundtrip);
     REGISTER_TEST(registry, test_app_command_edit_person_roundtrip);
+    REGISTER_TEST(registry, test_app_state_create_person_with_relationships);
+    REGISTER_TEST(registry, test_app_state_create_person_validation);
 }

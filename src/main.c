@@ -1,5 +1,6 @@
 #include "app.h"
 #include "app_cli.h"
+#include "assets.h"
 #include "at_log.h"
 #include "camera_controller.h"
 #include "graphics.h"
@@ -19,6 +20,7 @@
 #include "tree.h"
 #include "ui.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -180,6 +182,182 @@ static void app_report_error(UIContext *ui, AtLogger *logger, const char *messag
     {
         AT_LOG(logger, AT_LOG_ERROR, "%s", message);
     }
+}
+
+static bool app_path_has_prefix_ci(const char *value, const char *prefix)
+{
+    if (!value || !prefix)
+    {
+        return false;
+    }
+    for (size_t index = 0U; prefix[index] != '\0'; ++index)
+    {
+        char lhs = value[index];
+        char rhs = prefix[index];
+        if (lhs == '\0')
+        {
+            return false;
+        }
+        lhs = (char)tolower((unsigned char)lhs);
+        rhs = (char)tolower((unsigned char)rhs);
+        if (lhs != rhs)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool app_path_relativize_if_under_assets(const char *path, char *output, size_t capacity)
+{
+    if (!path || !output || capacity == 0U)
+    {
+        return false;
+    }
+
+    char normalized[512];
+    size_t write = 0U;
+    for (size_t index = 0U; path[index] != '\0'; ++index)
+    {
+        char c = path[index];
+        if (c == '\\')
+        {
+            c = '/';
+        }
+        if (write + 1U >= sizeof(normalized))
+        {
+            return false;
+        }
+        normalized[write++] = c;
+    }
+    if (write == 0U)
+    {
+        return false;
+    }
+    normalized[write] = '\0';
+
+    bool has_drive = strchr(normalized, ':') != NULL;
+    bool starts_with_root = normalized[0] == '/' || normalized[0] == '\\';
+
+    size_t offset = 0U;
+    while (normalized[offset] == '.' && normalized[offset + 1U] == '/')
+    {
+        offset += 2U;
+    }
+
+    const char *candidate = &normalized[offset];
+    if (*candidate == '\0')
+    {
+        return false;
+    }
+
+    if (app_path_has_prefix_ci(candidate, "assets/"))
+    {
+        candidate += 7U;
+        if (*candidate == '\0')
+        {
+            return false;
+        }
+        size_t length = strlen(candidate);
+        if (length + 1U > capacity)
+        {
+            return false;
+        }
+        memcpy(output, candidate, length + 1U);
+        return true;
+    }
+
+    if (!has_drive && !starts_with_root)
+    {
+        size_t length = strlen(candidate);
+        if (length + 1U > capacity)
+        {
+            return false;
+        }
+        memcpy(output, candidate, length + 1U);
+        return true;
+    }
+
+    return false;
+}
+
+static bool app_prepare_asset_reference(const char *input_path, const char *subdirectory, const char *prefix,
+                                        char *output, size_t capacity, const char **out_relative, bool *out_copied,
+                                        char *error_buffer, size_t error_buffer_size)
+{
+    if (out_relative)
+    {
+        *out_relative = NULL;
+    }
+    if (out_copied)
+    {
+        *out_copied = false;
+    }
+    if (error_buffer && error_buffer_size > 0U)
+    {
+        error_buffer[0] = '\0';
+    }
+    if (!input_path || input_path[0] == '\0')
+    {
+        if (output && capacity > 0U)
+        {
+            output[0] = '\0';
+        }
+        return true;
+    }
+
+    if (app_path_relativize_if_under_assets(input_path, output, capacity))
+    {
+        if (out_relative)
+        {
+            *out_relative = output;
+        }
+        return true;
+    }
+
+    AssetCopyRequest request;
+    request.source_path = input_path;
+    request.asset_root = "assets";
+    request.subdirectory = subdirectory;
+    request.name_prefix = prefix;
+    if (!asset_copy(&request, output, capacity, error_buffer, error_buffer_size))
+    {
+        if (out_relative)
+        {
+            *out_relative = NULL;
+        }
+        return false;
+    }
+    if (out_relative)
+    {
+        *out_relative = output;
+    }
+    if (out_copied)
+    {
+        *out_copied = true;
+    }
+    return true;
+}
+
+static void app_remove_copied_asset(const char *relative_path)
+{
+    if (!relative_path || relative_path[0] == '\0')
+    {
+        return;
+    }
+    char absolute[512];
+    if (snprintf(absolute, sizeof(absolute), "assets/%s", relative_path) >= (int)sizeof(absolute))
+    {
+        return;
+    }
+    for (size_t index = 0U; absolute[index] != '\0'; ++index)
+    {
+        if (absolute[index] == '\\')
+        {
+            absolute[index] = '/';
+        }
+    }
+    (void)remove(absolute);
 }
 
 static void app_focus_camera_on_layout(CameraController *camera, const LayoutResult *layout)
@@ -706,6 +884,224 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
     }
 }
 
+static void app_process_add_person_requests(UIContext *ui, AppState *app_state, FamilyTree **tree,
+                                            LayoutResult *layout, InteractionState *interaction_state,
+                                            CameraController *camera, PersistenceAutoSave *auto_save,
+                                            AtLogger *logger)
+{
+    if (!ui)
+    {
+        return;
+    }
+
+    UIAddPersonRequest request;
+    while (ui_consume_add_person_request(ui, &request))
+    {
+        if (!app_state || !tree || !layout || !*tree)
+        {
+            app_report_error(ui, logger, "Cannot create person: application state unavailable.");
+            continue;
+        }
+
+        AppPersonCreateData data;
+        memset(&data, 0, sizeof(data));
+        data.first = request.first;
+        data.middle = (request.middle[0] != '\0') ? request.middle : NULL;
+        data.last = request.last;
+        data.birth_date = request.birth_date;
+        data.birth_location = (request.birth_location[0] != '\0') ? request.birth_location : NULL;
+        data.is_alive = request.is_alive;
+        data.death_date = (!request.is_alive && request.death_date[0] != '\0') ? request.death_date : NULL;
+        data.death_location = (!request.is_alive && request.death_location[0] != '\0') ? request.death_location : NULL;
+        data.father_id = request.father_id;
+        data.mother_id = request.mother_id;
+        data.spouse_id = request.spouse_id;
+
+        char profile_buffer[256];
+        const char *profile_path = NULL;
+        bool profile_copied = false;
+        char asset_error[256];
+        asset_error[0] = '\0';
+
+        if (!app_prepare_asset_reference(request.profile_image_path, "profiles", "profile", profile_buffer,
+                                         sizeof(profile_buffer), &profile_path, &profile_copied, asset_error,
+                                         sizeof(asset_error)))
+        {
+            char message[512];
+            if (asset_error[0] != '\0')
+            {
+                (void)snprintf(message, sizeof(message), "Profile import failed: %s", asset_error);
+            }
+            else
+            {
+                (void)snprintf(message, sizeof(message), "Profile import failed for path '%s'.",
+                               request.profile_image_path);
+            }
+            app_report_error(ui, logger, message);
+            if (profile_copied)
+            {
+                app_remove_copied_asset(profile_buffer);
+            }
+            continue;
+        }
+        data.profile_image_path = profile_path;
+
+        char certificate_buffers[APP_PERSON_CREATE_MAX_CERTIFICATES][256];
+        bool certificate_copied[APP_PERSON_CREATE_MAX_CERTIFICATES];
+        memset(certificate_copied, 0, sizeof(certificate_copied));
+        data.certificate_count = request.certificate_count;
+        bool creation_failed = false;
+        char failure_message[512];
+        failure_message[0] = '\0';
+
+        for (size_t index = 0U; index < data.certificate_count; ++index)
+        {
+            const char *source_path = request.certificate_paths[index];
+            const char *relative = NULL;
+            asset_error[0] = '\0';
+            if (!app_prepare_asset_reference(source_path, "certificates", "certificate", certificate_buffers[index],
+                                             sizeof(certificate_buffers[index]), &relative, &certificate_copied[index],
+                                             asset_error, sizeof(asset_error)))
+            {
+                if (asset_error[0] != '\0')
+                {
+                    (void)snprintf(failure_message, sizeof(failure_message), "Certificate import failed: %s",
+                                   asset_error);
+                }
+                else
+                {
+                    (void)snprintf(failure_message, sizeof(failure_message),
+                                   "Certificate import failed for path '%s'.", source_path);
+                }
+                creation_failed = true;
+                break;
+            }
+            data.certificate_paths[index] = relative;
+        }
+
+        if (creation_failed)
+        {
+            if (profile_copied)
+            {
+                app_remove_copied_asset(profile_buffer);
+            }
+            for (size_t cleanup = 0U; cleanup < data.certificate_count; ++cleanup)
+            {
+                if (certificate_copied[cleanup])
+                {
+                    app_remove_copied_asset(certificate_buffers[cleanup]);
+                }
+            }
+            app_report_error(ui, logger, failure_message);
+            continue;
+        }
+
+        for (size_t index = data.certificate_count; index < APP_PERSON_CREATE_MAX_CERTIFICATES; ++index)
+        {
+            data.certificate_paths[index] = NULL;
+        }
+
+        data.timeline_count = request.timeline_count;
+        for (size_t index = 0U; index < data.timeline_count; ++index)
+        {
+            data.timeline_entries[index].type = request.timeline_entries[index].type;
+            data.timeline_entries[index].date =
+                (request.timeline_entries[index].date[0] != '\0') ? request.timeline_entries[index].date : NULL;
+            data.timeline_entries[index].description = request.timeline_entries[index].description;
+            data.timeline_entries[index].location =
+                (request.timeline_entries[index].location[0] != '\0') ? request.timeline_entries[index].location : NULL;
+        }
+        for (size_t index = data.timeline_count; index < APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES; ++index)
+        {
+            data.timeline_entries[index].type = TIMELINE_EVENT_CUSTOM;
+            data.timeline_entries[index].date = NULL;
+            data.timeline_entries[index].description = NULL;
+            data.timeline_entries[index].location = NULL;
+        }
+
+        char error_buffer[256];
+        error_buffer[0] = '\0';
+        uint32_t new_person_id = 0U;
+        if (!app_state_create_person(app_state, &data, &new_person_id, error_buffer, sizeof(error_buffer)))
+        {
+            if (profile_copied)
+            {
+                app_remove_copied_asset(profile_buffer);
+            }
+            for (size_t cleanup = 0U; cleanup < data.certificate_count; ++cleanup)
+            {
+                if (certificate_copied[cleanup])
+                {
+                    app_remove_copied_asset(certificate_buffers[cleanup]);
+                }
+            }
+
+            char message[512];
+            if (error_buffer[0] != '\0')
+            {
+                (void)snprintf(message, sizeof(message), "Unable to create person: %s", error_buffer);
+            }
+            else
+            {
+                (void)snprintf(message, sizeof(message), "Unable to create person due to an unknown error.");
+            }
+            app_report_error(ui, logger, message);
+            continue;
+        }
+
+        Person *created_person = family_tree_find_person(*tree, new_person_id);
+        if (interaction_state)
+        {
+            interaction_select_person(interaction_state, created_person);
+        }
+
+        bool has_position = false;
+        float focus_position[3] = {0.0f, 0.0f, 0.0f};
+        if (layout && layout->nodes)
+        {
+            for (size_t index = 0U; index < layout->count; ++index)
+            {
+                if (layout->nodes[index].person == created_person)
+                {
+                    focus_position[0] = layout->nodes[index].position[0];
+                    focus_position[1] = layout->nodes[index].position[1];
+                    focus_position[2] = layout->nodes[index].position[2];
+                    has_position = true;
+                    break;
+                }
+            }
+        }
+        if (camera && has_position)
+        {
+            float radius = camera->config.default_radius;
+            if (!(radius > 0.0f))
+            {
+                radius = 14.0f;
+            }
+            camera_controller_focus(camera, focus_position, radius);
+        }
+
+        if (auto_save)
+        {
+            persistence_auto_save_mark_dirty(auto_save);
+        }
+
+        char name_buffer[128];
+        if (!created_person || !person_format_display_name(created_person, name_buffer, sizeof(name_buffer)))
+        {
+            (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", new_person_id);
+        }
+        char status_message[192];
+        (void)snprintf(status_message, sizeof(status_message), "Created holographic profile for %s (ID %u).",
+                       name_buffer, new_person_id);
+        app_report_status(ui, logger, status_message);
+        if (logger)
+        {
+            AT_LOG(logger, AT_LOG_INFO, "Created person %u via Add Person panel", new_person_id);
+        }
+    }
+}
+
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                       LayoutResult *layout, InteractionState *interaction_state,
                                       RenderState *render_state, CameraController *camera, AtLogger *logger,
@@ -779,6 +1175,8 @@ static void event_queue_handler(void *user_data, float delta_seconds)
                                  payload->interaction_state, payload->render_state, payload->camera, payload->logger,
                                  payload->settings, payload->persisted_settings, payload->settings_path,
                                  payload->auto_save, payload->settings_revision, payload->app_state);
+    app_process_add_person_requests(payload->ui, payload->app_state, payload->tree, payload->layout,
+                                    payload->interaction_state, payload->camera, payload->auto_save, payload->logger);
 }
 
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,

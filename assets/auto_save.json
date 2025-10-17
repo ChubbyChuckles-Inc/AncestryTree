@@ -21,7 +21,7 @@
         "is_alive": false
       },
       "parents": [null, null],
-      "children": [2],
+      "children": [2, 4],
       "spouses": [
         {
           "id": 3,
@@ -94,7 +94,7 @@
         "is_alive": false
       },
       "parents": [null, null],
-      "children": [2],
+      "children": [2, 4],
       "spouses": [
         {
           "id": 1,
@@ -105,6 +105,39 @@
       "certificates": [],
       "profile_image": "",
       "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 4,
+      "name": {
+        "first": "John",
+        "middle": "",
+        "last": "Lovelace"
+      },
+      "dates": {
+        "birth_date": "1938-05-05",
+        "birth_location": "London",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [3, 1],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "profiles/profile_1760743149000.jpg",
+      "timeline": [
+        {
+          "type": "custom",
+          "date": "1945-02-02",
+          "description": "Become the 1st Person to land on the sun.",
+          "location": "Sun",
+          "media": [],
+          "valid": true
+        }
       ],
       "metadata": {
       }
