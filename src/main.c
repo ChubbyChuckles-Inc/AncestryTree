@@ -1552,6 +1552,62 @@ static void event_queue_handler(void *user_data, float delta_seconds)
                                      payload->interaction_state, payload->camera, payload->auto_save, payload->logger);
 }
 
+static bool app_start_detail_view_for_selection(const Person *selected, LayoutResult *layout,
+                                                ExpansionState *expansion, DetailViewSystem *detail_view,
+                                                CameraController *camera, AppState *app_state, AtLogger *logger)
+{
+    if (!selected || !layout || layout->count == 0U || !expansion || !detail_view)
+    {
+        return false;
+    }
+    if (expansion_is_active(expansion))
+    {
+        return false;
+    }
+
+    DetailViewContent content;
+    if (!detail_view_content_build(selected, &content))
+    {
+        if (logger)
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Failed to build detail view content for selection %u.", selected->id);
+        }
+        return false;
+    }
+    if (!detail_view_set_content(detail_view, &content))
+    {
+        if (logger)
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Detail view content rejected for selection %u.", selected->id);
+        }
+        return false;
+    }
+    if (!expansion_start(expansion, layout, selected, camera))
+    {
+        if (logger)
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Expansion launch failed for selection %u.", selected->id);
+        }
+        return false;
+    }
+
+    if (app_state)
+    {
+        app_state->interaction_mode = APP_INTERACTION_MODE_DETAIL_VIEW;
+        app_state->selected_person = (Person *)selected;
+    }
+    if (logger)
+    {
+        char name_buffer[128];
+        if (!person_format_display_name(selected, name_buffer, sizeof(name_buffer)))
+        {
+            (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", selected->id);
+        }
+        AT_LOG(logger, AT_LOG_INFO, "Entering detail view for %s.", name_buffer);
+    }
+    return true;
+}
+
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                       LayoutResult *layout, InteractionState *interaction_state,
                                       RenderState *render_state, CameraController *camera, AtLogger *logger,
@@ -1596,54 +1652,36 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
     }
 
     bool in_detail_mode = app_state && app_state->interaction_mode == APP_INTERACTION_MODE_DETAIL_VIEW;
+    const Person *selected = interaction_state ? interaction_get_selected(interaction_state) : NULL;
+    const Person *previous_selected = app_state ? app_state->selected_person : NULL;
+    bool triggered_detail_view = false;
 
-    if (key_enter_pressed && interaction_state && expansion && detail_view && layout && layout->count > 0U)
+    if (key_enter_pressed && selected && expansion && detail_view && layout && layout->count > 0U)
     {
-        const Person *selected = interaction_get_selected(interaction_state);
-        if (selected && !expansion_is_active(expansion))
+        triggered_detail_view =
+            app_start_detail_view_for_selection(selected, layout, expansion, detail_view, camera, app_state, logger);
+    }
+
+    if (!triggered_detail_view && app_state && selected && selected != previous_selected && expansion && detail_view &&
+        layout && layout->count > 0U)
+    {
+        triggered_detail_view =
+            app_start_detail_view_for_selection(selected, layout, expansion, detail_view, camera, app_state, logger);
+    }
+
+    if (app_state)
+    {
+        if (selected && app_state->selected_person != (Person *)selected)
         {
-            DetailViewContent content;
-            if (!detail_view_content_build(selected, &content))
-            {
-                if (logger)
-                {
-                    AT_LOG(logger, AT_LOG_WARN, "Failed to build detail view content for selection %u.", selected->id);
-                }
-            }
-            else if (!detail_view_set_content(detail_view, &content))
-            {
-                if (logger)
-                {
-                    AT_LOG(logger, AT_LOG_WARN, "Detail view content rejected for selection %u.", selected->id);
-                }
-            }
-            else if (!expansion_start(expansion, layout, selected, camera))
-            {
-                if (logger)
-                {
-                    AT_LOG(logger, AT_LOG_WARN, "Expansion launch failed for selection %u.", selected->id);
-                }
-            }
-            else
-            {
-                if (app_state)
-                {
-                    app_state->interaction_mode = APP_INTERACTION_MODE_DETAIL_VIEW;
-                    app_state->selected_person = (Person *)selected;
-                }
-                if (logger)
-                {
-                    char name_buffer[128];
-                    if (!person_format_display_name(selected, name_buffer, sizeof(name_buffer)))
-                    {
-                        (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", selected->id);
-                    }
-                    AT_LOG(logger, AT_LOG_INFO, "Entering detail view for %s.", name_buffer);
-                }
-            }
+            app_state->selected_person = (Person *)selected;
+        }
+        else if (!selected && !in_detail_mode && app_state->selected_person)
+        {
+            app_state->selected_person = NULL;
         }
     }
-    else if (in_detail_mode && key_c_pressed && detail_view)
+
+    if (in_detail_mode && key_c_pressed && detail_view)
     {
         detail_view_focus_next_certificate(detail_view);
     }

@@ -290,7 +290,7 @@ PHASE 4: 3D GRAPHICS CORE (RAYLIB)
       [x] Return closest intersected person
   [x] Implement sphere_select() function
       [x] Handle mouse click on sphere
-      [ ] Trigger expansion animation
+      [x] Trigger expansion animation
       [x] Update application state
   [x] Implement sphere_hover() function
       [x] Detect mouse hover
