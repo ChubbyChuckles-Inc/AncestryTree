@@ -1,0 +1,21 @@
+# Manual check: run `doxygen docs/Doxyfile` locally to verify documentation build output.
+PROJECT_NAME           = "AncestryTree"
+PROJECT_NUMBER         = "0.1"
+OUTPUT_DIRECTORY       = docs/build
+CREATE_SUBDIRS         = NO
+ALLOW_UNICODE_NAMES    = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+RECURSIVE              = YES
+INPUT                  = include src
+FILE_PATTERNS          = *.h \
+                          *.c
+EXCLUDE_PATTERNS       = */build/*
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+WARN_IF_UNDOCUMENTED   = YES
+WARN_AS_ERROR          = YES
+QUIET                  = NO
+WARN_LOGFILE           = docs/build/doxygen-warnings.log

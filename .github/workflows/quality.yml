@@ -1,0 +1,84 @@
+name: Quality
+
+on:
+  push:
+    branches: [main, new-detail-view]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    env:
+      BUILD_DIR: build-quality
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build git clang clang-format clang-tidy cppcheck
+          sudo apt-get install -y libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev libglu1-mesa-dev libgl1-mesa-dev
+          git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git
+          cmake -S raylib -B raylib/build -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$HOME/raylib
+          cmake --build raylib/build --target raylib
+          cmake --install raylib/build
+          echo "RAYLIB_HOME=$HOME/raylib" >> $GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$HOME/raylib" >> $GITHUB_ENV
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B $BUILD_DIR -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_C_FLAGS="-Werror -std=c99" \
+            -DANCESTRYTREE_BUILD_TESTS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build (fail fast on warnings)
+        run: cmake --build $BUILD_DIR
+
+      - name: Check formatting
+        run: |
+          clang-format --dry-run --Werror $(git ls-files '*.c' '*.h')
+
+      - name: Run clang-tidy
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+
+          compile_commands = pathlib.Path("${BUILD_DIR}/compile_commands.json")
+          if not compile_commands.exists():
+              raise SystemExit("compile_commands.json missing; clang-tidy cannot run")
+
+          sources = [
+              str(path)
+              for path in pathlib.Path('src').glob('*.c')
+          ]
+          if not sources:
+              raise SystemExit("no sources identified for clang-tidy")
+
+          cmd = [
+              'clang-tidy',
+              '--warnings-as-errors=*',
+              '-p',
+              str(compile_commands)
+          ] + sources
+          print("Running:", " ".join(cmd))
+          subprocess.run(cmd, check=True)
+          PY
+
+      - name: Run cppcheck
+        run: |
+          cppcheck --project=$BUILD_DIR/compile_commands.json \
+            --std=c99 \
+            --enable=warning,style,performance \
+            --error-exitcode=1 \
+            --inline-suppr \
+            --suppress=missingIncludeSystem

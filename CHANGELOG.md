@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file. The format 
 - Memory diagnostics suite that wraps the unit tests with Valgrind/Dr. Memory helpers, adds leak-focused regression cases for tree and persistence lifecycles, and fails the runner when outstanding allocations are detected.
 - GitHub Actions build/test automation spanning Windows, Linux, and macOS with Debug/Release matrices, dependency provisioning, artifact uploads, and Valgrind-backed regression gates.
 - Automated coverage instrumentation toggled via CMake, with CI jobs emitting filtered lcov reports, archiving results, and publishing metrics to Codecov for ongoing regression tracking.
+- Release workflow that builds platform-specific bundles on tagged pushes, packages assets alongside binaries, and publishes archives through GitHub Releases for testers.
+- Dedicated quality gate workflow running clang-format checks, clang-tidy static analysis, cppcheck scans, and strict C99 warning enforcement.
+- Documentation workflow generating Doxygen HTML, archiving artifacts, and publishing to GitHub Pages, with a shared `.clang-format` style to keep generated reports aligned with coding standards.
 - Startup bootstrap planner that deterministically selects between CLI-specified trees, bundled samples, and placeholder holograms with new unit tests covering each scenario and improved logging when falling back.
 - Adaptive Nuklear initialisation that scales fonts to the active render resolution, attempts to load preferred UI typefaces, falls back gracefully to built-in glyphs, and adds regression tests for the scaling heuristics.
 

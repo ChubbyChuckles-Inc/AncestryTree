@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    env:
+      BUILD_DIR: build-release
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build git zip libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev libglu1-mesa-dev libgl1-mesa-dev
+          git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git
+          cmake -S raylib -B raylib/build -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$HOME/raylib
+          cmake --build raylib/build --target raylib
+          cmake --install raylib/build
+          echo "RAYLIB_HOME=$HOME/raylib" >> $GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$HOME/raylib" >> $GITHUB_ENV
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          brew update
+          brew install cmake ninja raylib zip
+          RAYLIB_PREFIX=$(brew --prefix raylib)
+          echo "RAYLIB_HOME=$RAYLIB_PREFIX" >> $GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$RAYLIB_PREFIX" >> $GITHUB_ENV
+
+      - name: Configure dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $raylibPath = Join-Path $env:GITHUB_WORKSPACE 'dependencies/raylib'
+          if (-not (Test-Path -LiteralPath $raylibPath)) {
+              throw "Bundled raylib not found at $raylibPath"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "RAYLIB_HOME=$raylibPath"
+          $nuklearPath = Join-Path $env:GITHUB_WORKSPACE 'include/external'
+          if (-not (Test-Path -LiteralPath (Join-Path $nuklearPath 'nuklear.h'))) {
+              throw "Nuklear header not found under $nuklearPath"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "NUKLEAR_INCLUDE=$nuklearPath"
+
+      - name: Configure CMake (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          cmake -S . -B $BUILD_DIR -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure CMake (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cmake -S . -B $env:BUILD_DIR -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          cmake --build $BUILD_DIR --target ancestrytree
+          cmake --build $BUILD_DIR --target ancestrytree_tests
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cmake --build $env:BUILD_DIR --target ancestrytree
+          cmake --build $env:BUILD_DIR --target ancestrytree_tests
+
+      - name: Package artifacts (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          PACKAGE_DIR="package/${{ matrix.os }}"
+          mkdir -p "$PACKAGE_DIR/bin"
+          mkdir -p "$PACKAGE_DIR/assets"
+          cp -r assets "$PACKAGE_DIR/"
+          cp LICENSE README.md "$PACKAGE_DIR/"
+          cp $BUILD_DIR/bin/ancestrytree "$PACKAGE_DIR/bin/"
+          cp $BUILD_DIR/bin/ancestrytree_tests "$PACKAGE_DIR/bin/"
+          cd package
+          zip -r "ancestrytree-${{ matrix.os }}.zip" "${{ matrix.os }}"
+
+      - name: Package artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $packageDir = Join-Path "package" $env:RUNNER_OS
+          New-Item -ItemType Directory -Force -Path (Join-Path $packageDir 'bin') | Out-Null
+          Copy-Item -Recurse assets (Join-Path $packageDir 'assets') -Force
+          Copy-Item LICENSE, README.md -Destination $packageDir -Force
+          Copy-Item (Join-Path $env:BUILD_DIR 'bin/ancestrytree.exe') (Join-Path $packageDir 'bin/ancestrytree.exe') -Force
+          Copy-Item (Join-Path $env:BUILD_DIR 'bin/ancestrytree_tests.exe') (Join-Path $packageDir 'bin/ancestrytree_tests.exe') -Force
+          Compress-Archive -Path (Join-Path $packageDir '*') -DestinationPath (Join-Path 'package' "ancestrytree-${{ matrix.os }}.zip") -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ancestrytree-${{ matrix.os }}
+          path: package/ancestrytree-${{ matrix.os }}.zip
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/ancestrytree-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
