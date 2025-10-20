@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#091022" />
+      <stop offset="100%" stop-color="#123455" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="640" height="360" fill="url(#bg)" />
+  <g fill="none" stroke="#42f5ff" stroke-width="2" opacity="0.6">
+    <circle cx="200" cy="180" r="60" />
+    <circle cx="320" cy="120" r="45" />
+    <circle cx="420" cy="220" r="50" />
+    <line x1="260" y1="180" x2="275" y2="135" />
+    <line x1="360" y1="220" x2="345" y2="135" />
+    <line x1="260" y1="180" x2="360" y2="220" />
+  </g>
+  <text x="50%" y="55%" font-family="'Segoe UI', 'Arial', sans-serif" font-size="32" fill="#ffffff" text-anchor="middle">
+    Holographic UI Preview
+  </text>
+  <text x="50%" y="70%" font-family="'Segoe UI', 'Arial', sans-serif" font-size="16" fill="#cceaff" text-anchor="middle">
+    Placeholder capture until live screenshots are published
+  </text>
+</svg>

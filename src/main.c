@@ -10,6 +10,7 @@
 #include "detail_view.h"
 #include "detail_content_builder.h"
 #include "expansion.h"
+#include "file_dialog.h"
 #include "path_utils.h"
 #include "persistence.h"
 #include "person.h"
@@ -429,22 +430,34 @@ static bool app_handle_save(FamilyTree *tree, AppFileState *files, char *error_b
     return true;
 }
 
-static bool app_handle_save_as(FamilyTree *tree, AppFileState *files, char *error_buffer, size_t error_buffer_size,
-                               char *out_path, size_t out_path_capacity)
+static bool app_handle_save_as(FamilyTree *tree, AppFileState *files, const char *requested_path,
+                               char *error_buffer, size_t error_buffer_size, char *out_path,
+                               size_t out_path_capacity)
 {
     if (!tree || !files || !out_path || out_path_capacity == 0U)
     {
         return false;
     }
-    if (!app_generate_timestamped_path(out_path, out_path_capacity))
+    const char *target = requested_path;
+    char generated_path[512];
+    if (!target || target[0] == '\0')
+    {
+        if (!app_generate_timestamped_path(generated_path, sizeof(generated_path)))
+        {
+            return false;
+        }
+        target = generated_path;
+    }
+    if (!app_save_tree_to_path(tree, target, error_buffer, error_buffer_size))
     {
         return false;
     }
-    if (!app_save_tree_to_path(tree, out_path, error_buffer, error_buffer_size))
-    {
-        return false;
-    }
-    app_file_state_set(files, out_path);
+    app_file_state_set(files, target);
+#if defined(_MSC_VER)
+    (void)strncpy_s(out_path, out_path_capacity, target, _TRUNCATE);
+#else
+    (void)snprintf(out_path, out_path_capacity, "%s", target);
+#endif
     return true;
 }
 
@@ -498,6 +511,90 @@ static void app_on_tree_changed(LayoutResult *layout, InteractionState *interact
     {
         persistence_auto_save_mark_dirty(auto_save);
     }
+}
+
+static bool app_prompt_open_tree_path(const AppFileState *file_state, char *out_path, size_t capacity,
+                                      char *error_buffer, size_t error_capacity)
+{
+    if (!out_path || capacity == 0U)
+    {
+        if (error_buffer && error_capacity > 0U)
+        {
+#if defined(_MSC_VER)
+            (void)strncpy_s(error_buffer, error_capacity, "Invalid output buffer for open dialog.", _TRUNCATE);
+#else
+            (void)snprintf(error_buffer, error_capacity, "%s", "Invalid output buffer for open dialog.");
+#endif
+        }
+        return false;
+    }
+    const char *default_path = NULL;
+    if (file_state && file_state->current_path[0] != '\0')
+    {
+        default_path = file_state->current_path;
+    }
+    else
+    {
+        default_path = "assets/example_tree.json";
+    }
+    FileDialogFilter filters[] = {
+        {.label = "Family Trees", .pattern = "*.json"},
+        {.label = "All Files", .pattern = "*.*"}};
+    FileDialogOptions options = {
+        .title = "Open Family Tree",
+        .default_path = default_path,
+        .filters = filters,
+        .filter_count = sizeof(filters) / sizeof(filters[0])};
+    return file_dialog_open(&options, out_path, capacity, error_buffer, error_capacity);
+}
+
+static bool app_prompt_save_tree_path(const AppFileState *file_state, char *out_path, size_t capacity,
+                                      char *error_buffer, size_t error_capacity)
+{
+    if (!out_path || capacity == 0U)
+    {
+        if (error_buffer && error_capacity > 0U)
+        {
+#if defined(_MSC_VER)
+            (void)strncpy_s(error_buffer, error_capacity, "Invalid output buffer for save dialog.", _TRUNCATE);
+#else
+            (void)snprintf(error_buffer, error_capacity, "%s", "Invalid output buffer for save dialog.");
+#endif
+        }
+        return false;
+    }
+    const char *default_path = APP_DEFAULT_SAVE_PATH;
+    if (file_state && file_state->current_path[0] != '\0')
+    {
+        default_path = file_state->current_path;
+    }
+    FileDialogFilter filters[] = {
+        {.label = "Family Trees", .pattern = "*.json"},
+        {.label = "All Files", .pattern = "*.*"}};
+    FileDialogOptions options = {
+        .title = "Save Family Tree",
+        .default_path = default_path,
+        .filters = filters,
+        .filter_count = sizeof(filters) / sizeof(filters[0])};
+    if (!file_dialog_save(&options, out_path, capacity, error_buffer, error_capacity))
+    {
+        return false;
+    }
+    if (!file_dialog_ensure_extension(out_path, capacity, ".json"))
+    {
+        if (error_buffer && error_capacity > 0U)
+        {
+#if defined(_MSC_VER)
+            (void)strncpy_s(error_buffer, error_capacity,
+                            "Failed to append .json extension to selected save path.", _TRUNCATE);
+#else
+            (void)snprintf(error_buffer, error_capacity, "%s",
+                           "Failed to append .json extension to selected save path.");
+#endif
+        }
+        return false;
+    }
+    return true;
 }
 
 static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileState *file_state, FamilyTree **tree,
@@ -554,13 +651,25 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
     break;
     case UI_EVENT_OPEN_TREE:
     {
-        char resolved_path[512];
-        if (!app_try_find_asset("assets/example_tree.json", resolved_path, sizeof(resolved_path)))
+        char dialog_error[256];
+        dialog_error[0] = '\0';
+        char chosen_path[512];
+        if (!app_prompt_open_tree_path(file_state, chosen_path, sizeof(chosen_path), dialog_error,
+                                       sizeof(dialog_error)))
         {
-            app_report_error(ui, logger, "Sample tree not found; ensure assets/example_tree.json exists.");
+            if (dialog_error[0] != '\0')
+            {
+                char message[320];
+                (void)snprintf(message, sizeof(message), "Open dialog failed: %s", dialog_error);
+                app_report_error(ui, logger, message);
+            }
+            else
+            {
+                app_report_status(ui, logger, "Open request canceled.");
+            }
             return;
         }
-        FamilyTree *loaded = persistence_tree_load(resolved_path, error_buffer, sizeof(error_buffer));
+        FamilyTree *loaded = persistence_tree_load(chosen_path, error_buffer, sizeof(error_buffer));
         if (!loaded)
         {
             char message[256];
@@ -584,14 +693,16 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             app_state->layout_transition_duration = 0.0f;
             app_state->active_layout_algorithm = algorithm;
         }
-        app_file_state_set(file_state, resolved_path);
+        app_file_state_set(file_state, chosen_path);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
         if (app_state)
         {
             app_state_reset_history(app_state);
             app_state_clear_tree_dirty(app_state);
         }
-        app_report_status(ui, logger, "Sample tree loaded.");
+        char status_message[320];
+        (void)snprintf(status_message, sizeof(status_message), "Loaded tree from %s", chosen_path);
+        app_report_status(ui, logger, status_message);
     }
     break;
     case UI_EVENT_SAVE_TREE:
@@ -600,7 +711,44 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             app_report_error(ui, logger, "No tree available to save.");
             return;
         }
-        if (!app_handle_save(*tree, file_state, error_buffer, sizeof(error_buffer)))
+        if (file_state->current_path[0] == '\0')
+        {
+            char dialog_error[256];
+            dialog_error[0] = '\0';
+            char destination[512];
+            if (!app_prompt_save_tree_path(file_state, destination, sizeof(destination), dialog_error,
+                                           sizeof(dialog_error)))
+            {
+                if (dialog_error[0] != '\0')
+                {
+                    char message[320];
+                    (void)snprintf(message, sizeof(message), "Save dialog failed: %s", dialog_error);
+                    app_report_error(ui, logger, message);
+                }
+                else
+                {
+                    app_report_status(ui, logger, "Save request canceled.");
+                }
+                return;
+            }
+            char saved_path[512];
+            if (!app_handle_save_as(*tree, file_state, destination, error_buffer, sizeof(error_buffer), saved_path,
+                                    sizeof(saved_path)))
+            {
+                char message[320];
+                (void)snprintf(message, sizeof(message), "Save failed: %s", error_buffer);
+                app_report_error(ui, logger, message);
+                return;
+            }
+            if (app_state)
+            {
+                app_state_clear_tree_dirty(app_state);
+            }
+            char message[320];
+            (void)snprintf(message, sizeof(message), "Saved tree to %s", saved_path);
+            app_report_status(ui, logger, message);
+        }
+        else if (!app_handle_save(*tree, file_state, error_buffer, sizeof(error_buffer)))
         {
             char message[256];
             (void)snprintf(message, sizeof(message), "Save failed: %s", error_buffer);
@@ -627,8 +775,26 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         else
         {
             char destination[512];
-            if (!app_handle_save_as(*tree, file_state, error_buffer, sizeof(error_buffer), destination,
-                                    sizeof(destination)))
+            char dialog_error[256];
+            dialog_error[0] = '\0';
+            if (!app_prompt_save_tree_path(file_state, destination, sizeof(destination), dialog_error,
+                                           sizeof(dialog_error)))
+            {
+                if (dialog_error[0] != '\0')
+                {
+                    char message[320];
+                    (void)snprintf(message, sizeof(message), "Save As dialog failed: %s", dialog_error);
+                    app_report_error(ui, logger, message);
+                }
+                else
+                {
+                    app_report_status(ui, logger, "Save As request canceled.");
+                }
+                return;
+            }
+            char saved_path[512];
+            if (!app_handle_save_as(*tree, file_state, destination, error_buffer, sizeof(error_buffer), saved_path,
+                                    sizeof(saved_path)))
             {
                 char message[256];
                 (void)snprintf(message, sizeof(message), "Save As failed: %s", error_buffer);
@@ -640,7 +806,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 app_state_clear_tree_dirty(app_state);
             }
             char message[256];
-            (void)snprintf(message, sizeof(message), "Saved tree to %s", destination);
+            (void)snprintf(message, sizeof(message), "Saved tree to %s", saved_path);
             app_report_status(ui, logger, message);
         }
         break;

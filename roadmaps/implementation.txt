@@ -62,7 +62,7 @@ PHASE 1: PROJECT SETUP & INFRASTRUCTURE
       [x] Project description and features
       [x] Build instructions for all platforms
     [x] Usage guide
-      [ ] Screenshots/GIFs (placeholder)
+            [x] Screenshots/GIFs (placeholder)
       [x] Contributing guidelines
       [x] License information
   [x] Create .gitignore
@@ -396,8 +396,8 @@ PHASE 6: USER INTERFACE (NUKLEAR)
     [x] Edit menu (Undo, Redo)
       [x] View menu (Reset Camera, Layout Options)
       [x] Help menu (About, Documentation)
-  [ ] Implement menu actions
-      [ ] File operations (save/load dialogs)
+    [x] Implement menu actions
+     [x] File operations (save/load dialogs)
       [x] View toggles
       [x] Show about dialog
 
@@ -438,14 +438,14 @@ PHASE 6: USER INTERFACE (NUKLEAR)
       [x] Save tree
 
 6.5 File Browser Dialog
-  [ ] Implement file_dialog_open() function
-      [ ] Native file dialog on Windows
-      [ ] Native file dialog on macOS
-      [ ] Custom Nuklear file browser on Linux
-      [ ] Support file type filtering
-  [ ] Implement file_dialog_save() function
-      [ ] Save file dialog
-      [ ] Default filename suggestion
+  [x] Implement file_dialog_open() function
+      [x] Native file dialog on Windows
+      [x] Native file dialog on macOS
+      [x] Desktop file dialog on Linux (zenity/kdialog fallback)
+      [x] Support file type filtering
+  [x] Implement file_dialog_save() function
+      [x] Save file dialog
+      [x] Default filename suggestion
 
 6.6 Search/Filter Panel
   [x] Implement search_panel_render() function

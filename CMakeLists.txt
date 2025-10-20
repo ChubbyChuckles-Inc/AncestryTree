@@ -90,7 +90,8 @@ if(raylib_FOUND)
 endif()
 
 if(WIN32)
-    target_link_libraries(ancestrytree PRIVATE opengl32 gdi32 winmm)
+    target_link_libraries(ancestrytree_lib PUBLIC Comdlg32)
+    target_link_libraries(ancestrytree PRIVATE opengl32 gdi32 winmm Comdlg32)
 elseif(APPLE)
     target_link_libraries(ancestrytree PRIVATE
         "-framework Cocoa"
@@ -116,7 +117,7 @@ if(ANCESTRYTREE_BUILD_TESTS)
         target_include_directories(ancestrytree_tests PRIVATE ${NUKLEAR_INCLUDE_DIR})
     endif()
     if(WIN32)
-        target_link_libraries(ancestrytree_tests PRIVATE opengl32 gdi32 winmm)
+        target_link_libraries(ancestrytree_tests PRIVATE opengl32 gdi32 winmm Comdlg32)
     elseif(APPLE)
         target_link_libraries(ancestrytree_tests PRIVATE
             "-framework Cocoa"

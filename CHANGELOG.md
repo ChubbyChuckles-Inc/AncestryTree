@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Cross-platform file dialog integration for opening and saving trees, using Win32 common dialogs, AppleScript-backed panels on macOS, and zenity/kdialog fallbacks on Linux, with `.json` extension enforcement and new unit tests for the dialog helpers.
+- Placeholder holographic preview SVG (`docs/preview-placeholder.svg`) linked from the README until captured screenshots and GIFs are published.
 - Add-person workflow now routes the Nuklear panel through AppState commands, importing profile/certificate assets, focusing the new holographic node, and shipping regression tests for person creation validation.
 - Certificate gallery holograms sourced from person metadata, rendering birth, marriage, death, and archival documents with PDF-aware badges, keyboard-controlled zoom, and immersive column animations inside the detail view.
 - Timeline holoboard now supports Shift+scroll navigation for dense event histories and surfaces associated media via marker badges and in-room preview cards, with regression tests validating detail content metadata.

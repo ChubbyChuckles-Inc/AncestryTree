@@ -82,6 +82,12 @@ Until the GUI is fully realised, you can experiment with persistence features an
 
 The roadmap in [`roadmaps/implementation.txt`](roadmaps/implementation.txt) lists the next milestones—including 3D rendering, holographic UI, and real-time interactions.
 
+## Visual Preview (Placeholder)
+
+![AncestryTree holographic preview placeholder](docs/preview-placeholder.svg)
+
+> The visual above is a generated stand-in illustrating the holographic sphere clusters and connective beams until captured screenshots and GIFs are produced from the live runtime.
+
 ## Development Guidelines
 
 - Follow the established coding standards in `docs/coding-standards.md` (to be finalized).
