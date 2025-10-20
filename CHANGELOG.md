@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Glow shader overhaul introduces configurable pulse speed, minimum glow floor,
+  and rim lighting highlights driven by camera-facing normals, with new unit
+  tests guarding configuration validation.
+- Background gradient and volumetric fog defaults now ship with runtime
+  validation, additive rim fallbacks, and expanded regression coverage for
+  render configuration edge cases.
 - Layout cache manager that fingerprints family tree relationships per algorithm, reuses previously computed node
   positions between ticks, and ships with unit tests covering cache invalidation and multi-algorithm reuse.
 - Rendering visibility pipeline featuring frustum culling and distance-based level of detail that skips off-screen

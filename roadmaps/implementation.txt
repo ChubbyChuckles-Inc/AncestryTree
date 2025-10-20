@@ -693,8 +693,8 @@ PHASE 10: OPTIMIZATION & POLISH
 
 10.2 Visual Polish
   [ ] Improve shaders
-      [ ] Better glow effect
-      [ ] Rim lighting on spheres
+      [x] Better glow effect
+      [x] Rim lighting on spheres
       [ ] Shadows (optional)
   [ ] Add particle effects
       [ ] Birth/death visual indicators
@@ -704,8 +704,8 @@ PHASE 10: OPTIMIZATION & POLISH
       [ ] Icons for buttons
       [ ] Animations for panel transitions
   [ ] Add ambient effects
-      [ ] Background skybox or gradient
-      [ ] Fog for depth perception
+      [x] Background skybox or gradient
+      [x] Fog for depth perception
 
 10.3 Accessibility
   [ ] Implement keyboard-only navigation

@@ -46,6 +46,8 @@ static void render_set_default_config(RenderConfig *config)
     }
     config->sphere_radius                 = 0.6f;
     config->glow_intensity                = 0.85f;
+    config->glow_min_strength             = 0.35f;
+    config->glow_pulse_speed              = 1.4f;
     config->connection_radius             = 0.05f;
     config->connection_antialiasing       = true;
     config->connection_style_parent_child = RENDER_CONNECTION_STYLE_BEZIER;
@@ -66,6 +68,17 @@ static void render_set_default_config(RenderConfig *config)
     config->lod_near_distance             = 14.0f;
     config->lod_far_distance              = 42.0f;
     config->culling_margin                = 1.2f;
+    config->show_background_gradient      = true;
+    config->background_gradient_top       = render_color_make(10, 30, 64, 255);
+    config->background_gradient_bottom    = render_color_make(2, 8, 20, 255);
+    config->enable_fog                    = true;
+    config->fog_start_distance            = 18.0f;
+    config->fog_end_distance              = 78.0f;
+    config->fog_color                     = render_color_make(8, 20, 42, 255);
+    config->enable_rim_lighting           = true;
+    config->rim_intensity                 = 1.1f;
+    config->rim_power                     = 2.6f;
+    config->rim_color                     = render_color_make(100, 240, 255, 255);
 }
 
 void render_state_init(RenderState *state)
@@ -84,15 +97,23 @@ void render_state_init(RenderState *state)
     state->visible_node_count    = 0U;
     state->visibility_mask_ready = false;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    state->glow_shader_ready  = false;
-    state->glow_time_loc      = -1;
-    state->ambient_strength   = 0.2f;
-    state->light_direction[0] = -0.3f;
-    state->light_direction[1] = -1.0f;
-    state->light_direction[2] = -0.2f;
-    state->scene_target.id    = 0;
-    state->label_system       = NULL;
-    state->label_system_ready = false;
+    state->glow_shader_ready      = false;
+    state->glow_intensity_loc     = -1;
+    state->glow_time_loc          = -1;
+    state->glow_min_strength_loc  = -1;
+    state->glow_pulse_speed_loc   = -1;
+    state->glow_rim_intensity_loc = -1;
+    state->glow_rim_power_loc     = -1;
+    state->glow_rim_color_loc     = -1;
+    state->glow_rim_enable_loc    = -1;
+    state->ambient_strength       = 0.2f;
+    state->light_direction[0]     = -0.3f;
+    state->light_direction[1]     = -1.0f;
+    state->light_direction[2]     = -0.2f;
+    state->scene_target.id        = 0;
+    state->label_system           = NULL;
+    state->label_system_ready     = false;
+    state->active_camera          = NULL;
 #endif
 }
 
@@ -114,6 +135,14 @@ bool render_config_validate(const RenderConfig *config)
         return false;
     }
     if (!(config->glow_intensity >= 0.0f))
+    {
+        return false;
+    }
+    if (!(config->glow_min_strength >= 0.0f && config->glow_min_strength <= 1.0f))
+    {
+        return false;
+    }
+    if (!(config->glow_pulse_speed > 0.0f))
     {
         return false;
     }
@@ -150,6 +179,25 @@ bool render_config_validate(const RenderConfig *config)
     {
         return false;
     }
+    if (config->enable_fog)
+    {
+        if (!(config->fog_start_distance >= 0.0f))
+        {
+            return false;
+        }
+        if (!(config->fog_end_distance > config->fog_start_distance))
+        {
+            return false;
+        }
+    }
+    if (!(config->rim_intensity >= 0.0f))
+    {
+        return false;
+    }
+    if (!(config->rim_power >= 0.5f))
+    {
+        return false;
+    }
     return true;
 }
 
@@ -175,26 +223,40 @@ static const char *render_glow_vertex_shader(void)
     return "#version 330\n"
            "in vec3 vertexPosition;\n"
            "in vec2 vertexTexCoord;\n"
+           "in vec3 vertexNormal;\n"
            "in vec4 vertexColor;\n"
            "out vec2 fragTexCoord;\n"
            "out vec4 fragColor;\n"
+           "out vec3 fragNormal;\n"
+           "out vec3 fragPosition;\n"
            "uniform mat4 mvp;\n"
+           "uniform mat4 matModel;\n"
+           "uniform mat4 matNormal;\n"
            "void main(){\n"
            "    fragTexCoord = vertexTexCoord;\n"
            "    fragColor = vertexColor;\n"
+           "    fragNormal = (matNormal * vec4(vertexNormal, 0.0)).xyz;\n"
+           "    fragPosition = (matModel * vec4(vertexPosition, 1.0)).xyz;\n"
            "    gl_Position = mvp * vec4(vertexPosition, 1.0);\n"
            "}";
 #else
     return "#version 100\n"
            "attribute vec3 vertexPosition;\n"
            "attribute vec2 vertexTexCoord;\n"
+           "attribute vec3 vertexNormal;\n"
            "attribute vec4 vertexColor;\n"
            "varying vec2 fragTexCoord;\n"
            "varying vec4 fragColor;\n"
+           "varying vec3 fragNormal;\n"
+           "varying vec3 fragPosition;\n"
            "uniform mat4 mvp;\n"
+           "uniform mat4 matModel;\n"
+           "uniform mat4 matNormal;\n"
            "void main(){\n"
            "    fragTexCoord = vertexTexCoord;\n"
            "    fragColor = vertexColor;\n"
+           "    fragNormal = (matNormal * vec4(vertexNormal, 0.0)).xyz;\n"
+           "    fragPosition = (matModel * vec4(vertexPosition, 1.0)).xyz;\n"
            "    gl_Position = mvp * vec4(vertexPosition, 1.0);\n"
            "}";
 #endif
@@ -206,29 +268,71 @@ static const char *render_glow_fragment_shader(void)
     return "#version 330\n"
            "in vec2 fragTexCoord;\n"
            "in vec4 fragColor;\n"
+           "in vec3 fragNormal;\n"
+           "in vec3 fragPosition;\n"
            "out vec4 finalColor;\n"
            "uniform float glowIntensity;\n"
            "uniform float timeSeconds;\n"
+           "uniform float glowMinStrength;\n"
+           "uniform float glowPulseSpeed;\n"
+           "uniform float rimIntensity;\n"
+           "uniform float rimPower;\n"
+           "uniform vec3 rimColor;\n"
+           "uniform int enableRim;\n"
+           "uniform vec3 cameraPosition;\n"
            "void main(){\n"
            "    vec4 base = fragColor;\n"
            "    float glow = clamp(glowIntensity, 0.0, 4.0);\n"
-           "    float wobble = 0.35 + 0.15 * sin(timeSeconds * 1.4);\n"
+           "    float minStrength = clamp(glowMinStrength, 0.0, 1.0);\n"
+           "    float speed = max(glowPulseSpeed, 0.05);\n"
+           "    float wobble = minStrength + (1.0 - minStrength) * (0.5 + 0.5 * sin(timeSeconds * "
+           "speed));\n"
            "    vec3 emissive = base.rgb * glow * wobble;\n"
-           "    finalColor = vec4(base.rgb + emissive, base.a);\n"
+           "    vec3 color = base.rgb + emissive;\n"
+           "    if (enableRim != 0) {\n"
+           "        vec3 normal = normalize(fragNormal);\n"
+           "        vec3 viewDir = normalize(cameraPosition - fragPosition);\n"
+           "        float ndotv = max(0.0, dot(normal, viewDir));\n"
+           "        float rimTerm = pow(clamp(1.0 - ndotv, 0.0, 1.0), max(rimPower, 0.0001));\n"
+           "        color += clamp(rimIntensity, 0.0, 8.0) * rimTerm * rimColor;\n"
+           "    }\n"
+           "    color = clamp(color, 0.0, 1.0);\n"
+           "    finalColor = vec4(color, base.a);\n"
            "}";
 #else
     return "#version 100\n"
            "precision mediump float;\n"
            "varying vec2 fragTexCoord;\n"
            "varying vec4 fragColor;\n"
+           "varying vec3 fragNormal;\n"
+           "varying vec3 fragPosition;\n"
            "uniform float glowIntensity;\n"
            "uniform float timeSeconds;\n"
+           "uniform float glowMinStrength;\n"
+           "uniform float glowPulseSpeed;\n"
+           "uniform float rimIntensity;\n"
+           "uniform float rimPower;\n"
+           "uniform vec3 rimColor;\n"
+           "uniform int enableRim;\n"
+           "uniform vec3 cameraPosition;\n"
            "void main(){\n"
            "    vec4 base = fragColor;\n"
            "    float glow = clamp(glowIntensity, 0.0, 4.0);\n"
-           "    float wobble = 0.35 + 0.15 * sin(timeSeconds * 1.4);\n"
+           "    float minStrength = clamp(glowMinStrength, 0.0, 1.0);\n"
+           "    float speed = max(glowPulseSpeed, 0.05);\n"
+           "    float wobble = minStrength + (1.0 - minStrength) * (0.5 + 0.5 * sin(timeSeconds * "
+           "speed));\n"
            "    vec3 emissive = base.rgb * glow * wobble;\n"
-           "    gl_FragColor = vec4(base.rgb + emissive, base.a);\n"
+           "    vec3 color = base.rgb + emissive;\n"
+           "    if (enableRim != 0) {\n"
+           "        vec3 normal = normalize(fragNormal);\n"
+           "        vec3 viewDir = normalize(cameraPosition - fragPosition);\n"
+           "        float ndotv = max(0.0, dot(normal, viewDir));\n"
+           "        float rimTerm = pow(clamp(1.0 - ndotv, 0.0, 1.0), max(rimPower, 0.0001));\n"
+           "        color += clamp(rimIntensity, 0.0, 8.0) * rimTerm * rimColor;\n"
+           "    }\n"
+           "    color = clamp(color, 0.0, 1.0);\n"
+           "    gl_FragColor = vec4(color, base.a);\n"
            "}";
 #endif
 }
@@ -258,6 +362,7 @@ static Color render_color_apply_intensity(Color color, float intensity)
 }
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+static Color render_apply_fog_color(const RenderState *state, Color color, float distance);
 static void render_draw_segment(RenderState *state, const Vector3 *a, const Vector3 *b,
                                 RenderColor color)
 {
@@ -267,6 +372,12 @@ static void render_draw_segment(RenderState *state, const Vector3 *a, const Vect
     }
     Color ray_color = render_color_to_raylib(color);
     float radius    = state->config.connection_radius;
+    if (state->active_camera)
+    {
+        Vector3 midpoint   = Vector3Scale(Vector3Add(*a, *b), 0.5f);
+        float fog_distance = Vector3Distance(state->active_camera->position, midpoint);
+        ray_color          = render_apply_fog_color(state, ray_color, fog_distance);
+    }
 
     if (radius > 0.0f)
     {
@@ -576,7 +687,6 @@ static bool render_find_person_position_with_index(const LayoutResult *layout, c
 
 static int render_select_sphere_segments(const RenderState *state, float distance)
 {
-    (void)state;
     if (!state || !state->config.enable_lod)
     {
         return 32;
@@ -598,6 +708,197 @@ static int render_select_sphere_segments(const RenderState *state, float distanc
     }
     return 20;
 }
+
+static Color render_apply_fog_color(const RenderState *state, Color color, float distance)
+{
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (!state || !state->config.enable_fog)
+    {
+        return color;
+    }
+    float start = state->config.fog_start_distance;
+    float end   = state->config.fog_end_distance;
+    if (!(end > start))
+    {
+        return color;
+    }
+    float t = (distance - start) / (end - start);
+    if (t <= 0.0f)
+    {
+        return color;
+    }
+    Color fog = render_color_to_raylib(state->config.fog_color);
+    if (t >= 1.0f)
+    {
+        return fog;
+    }
+    Color result;
+    result.r = (unsigned char)fminf(
+        255.0f, fmaxf(0.0f, (float)color.r + ((float)fog.r - (float)color.r) * t));
+    result.g = (unsigned char)fminf(
+        255.0f, fmaxf(0.0f, (float)color.g + ((float)fog.g - (float)color.g) * t));
+    result.b = (unsigned char)fminf(
+        255.0f, fmaxf(0.0f, (float)color.b + ((float)fog.b - (float)color.b) * t));
+    result.a = (unsigned char)fminf(
+        255.0f, fmaxf(0.0f, (float)color.a + ((float)fog.a - (float)color.a) * t));
+    return result;
+#else
+    (void)state;
+    (void)distance;
+    return color;
+#endif
+}
+
+static void render_draw_background_gradient(const RenderState *state)
+{
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (!state || !state->config.show_background_gradient)
+    {
+        return;
+    }
+    int width  = state->render_width;
+    int height = state->render_height;
+    if (width <= 0 || height <= 0)
+    {
+        width  = GetScreenWidth();
+        height = GetScreenHeight();
+    }
+    if (width <= 0 || height <= 0)
+    {
+        return;
+    }
+    Rectangle bounds = {0.0f, 0.0f, (float)width, (float)height};
+    Color top        = render_color_to_raylib(state->config.background_gradient_top);
+    Color bottom     = render_color_to_raylib(state->config.background_gradient_bottom);
+    DrawRectangleGradientEx(bounds, top, top, bottom, bottom);
+#else
+    (void)state;
+#endif
+}
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+static void render_color_as_vec3(RenderColor color, float out_values[3])
+{
+    if (!out_values)
+    {
+        return;
+    }
+    out_values[0] = (float)color.r / 255.0f;
+    out_values[1] = (float)color.g / 255.0f;
+    out_values[2] = (float)color.b / 255.0f;
+}
+
+static void render_apply_rim_overlay(const RenderState *state, const Vector3 *position,
+                                     float radius, float distance, int segments)
+{
+    if (!state || !position || !state->config.enable_rim_lighting)
+    {
+        return;
+    }
+    float rim_strength = state->config.rim_intensity;
+    if (!(rim_strength > 0.0f))
+    {
+        return;
+    }
+    Color rim_color  = render_color_to_raylib(state->config.rim_color);
+    rim_color        = render_apply_fog_color(state, rim_color, distance);
+    int rim_segments = segments;
+    if (rim_segments < 12)
+    {
+        rim_segments = 12;
+    }
+    float rim_radius = radius * (1.02f + fminf(rim_strength, 4.0f) * 0.06f);
+    BeginBlendMode(BLEND_ADD_COLORS);
+    rlDisableDepthMask();
+    DrawSphereEx(*position, rim_radius, rim_segments, rim_segments, rim_color);
+    rlEnableDepthMask();
+    EndBlendMode();
+}
+
+static void render_configure_glow_shader(RenderState *state, const Camera3D *camera)
+{
+    if (!state || !state->glow_shader_ready)
+    {
+        return;
+    }
+    /* Manual check: orbit the camera around a populated tree and confirm the pulse speed and rim
+     * highlights stay consistent. */
+    float glow_value = state->config.glow_intensity;
+    SetShaderValue(state->glow_shader, state->glow_intensity_loc, &glow_value,
+                   SHADER_UNIFORM_FLOAT);
+    if (state->glow_time_loc >= 0)
+    {
+        float time_seconds = (float)GetTime();
+        SetShaderValue(state->glow_shader, state->glow_time_loc, &time_seconds,
+                       SHADER_UNIFORM_FLOAT);
+    }
+    if (state->glow_min_strength_loc >= 0)
+    {
+        float min_strength = state->config.glow_min_strength;
+        if (min_strength < 0.0f)
+        {
+            min_strength = 0.0f;
+        }
+        if (min_strength > 1.0f)
+        {
+            min_strength = 1.0f;
+        }
+        SetShaderValue(state->glow_shader, state->glow_min_strength_loc, &min_strength,
+                       SHADER_UNIFORM_FLOAT);
+    }
+    if (state->glow_pulse_speed_loc >= 0)
+    {
+        float pulse_speed = state->config.glow_pulse_speed;
+        if (!(pulse_speed > 0.0f))
+        {
+            pulse_speed = 0.1f;
+        }
+        SetShaderValue(state->glow_shader, state->glow_pulse_speed_loc, &pulse_speed,
+                       SHADER_UNIFORM_FLOAT);
+    }
+    if (state->glow_rim_intensity_loc >= 0)
+    {
+        float rim_intensity = fmaxf(0.0f, state->config.rim_intensity);
+        SetShaderValue(state->glow_shader, state->glow_rim_intensity_loc, &rim_intensity,
+                       SHADER_UNIFORM_FLOAT);
+    }
+    if (state->glow_rim_power_loc >= 0)
+    {
+        float rim_power = state->config.rim_power;
+        if (!(rim_power >= 0.0f))
+        {
+            rim_power = 1.0f;
+        }
+        SetShaderValue(state->glow_shader, state->glow_rim_power_loc, &rim_power,
+                       SHADER_UNIFORM_FLOAT);
+    }
+    if (state->glow_rim_color_loc >= 0)
+    {
+        float rim_color_vec[3];
+        render_color_as_vec3(state->config.rim_color, rim_color_vec);
+        SetShaderValue(state->glow_shader, state->glow_rim_color_loc, rim_color_vec,
+                       SHADER_UNIFORM_VEC3);
+    }
+    if (state->glow_rim_enable_loc >= 0)
+    {
+        int enable_rim = state->config.enable_rim_lighting ? 1 : 0;
+        SetShaderValue(state->glow_shader, state->glow_rim_enable_loc, &enable_rim,
+                       SHADER_UNIFORM_INT);
+    }
+    if (state->glow_shader.locs[SHADER_LOC_VECTOR_VIEW] >= 0)
+    {
+        float view_position[3] = {0.0f, 0.0f, 0.0f};
+        if (camera)
+        {
+            view_position[0] = camera->position.x;
+            view_position[1] = camera->position.y;
+            view_position[2] = camera->position.z;
+        }
+        SetShaderValue(state->glow_shader, state->glow_shader.locs[SHADER_LOC_VECTOR_VIEW],
+                       view_position, SHADER_UNIFORM_VEC3);
+    }
+}
+#endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 static bool render_update_visibility(RenderState *state, const LayoutResult *layout,
@@ -838,49 +1139,50 @@ static void render_draw_sphere(RenderState *state, const LayoutResult *layout,
     {
         camera_distance = Vector3Distance(camera->position, position);
     }
+    base_color   = render_apply_fog_color(state, base_color, camera_distance);
     int segments = render_select_sphere_segments(state, camera_distance);
     if (segments < 12)
     {
         segments = 12;
     }
 
-    if (state->glow_shader_ready)
+    bool use_shader = state->glow_shader_ready;
+    if (use_shader)
     {
-        float glow_value = state->config.glow_intensity;
-        SetShaderValue(state->glow_shader, state->glow_intensity_loc, &glow_value,
-                       SHADER_UNIFORM_FLOAT);
-        if (state->glow_time_loc >= 0)
-        {
-            float time_seconds = (float)GetTime();
-            SetShaderValue(state->glow_shader, state->glow_time_loc, &time_seconds,
-                           SHADER_UNIFORM_FLOAT);
-        }
+        render_configure_glow_shader(state, camera);
         BeginShaderMode(state->glow_shader);
-        DrawSphereEx(position, base_radius, segments, segments, base_color);
+    }
+    DrawSphereEx(position, base_radius, segments, segments, base_color);
+    if (use_shader)
+    {
         EndShaderMode();
     }
     else
     {
-        DrawSphereEx(position, base_radius, segments, segments, base_color);
+        render_apply_rim_overlay(state, &position, base_radius, camera_distance, segments);
     }
 
     if (is_alive)
     {
         Color halo            = base_color;
         halo.a                = (unsigned char)((int)halo.a / 3);
-        float intensity_scale = 1.0f + state->config.glow_intensity * (is_hovered ? 0.55f : 0.4f);
+        float scale_seed      = 0.35f + state->config.glow_min_strength * 0.5f;
+        float hover_bonus     = is_hovered ? 0.2f : 0.0f;
+        float intensity_scale = 1.0f + state->config.glow_intensity * (scale_seed + hover_bonus);
         float glow_radius     = base_radius * intensity_scale;
         int halo_segments     = segments > 16 ? segments - 8 : segments;
         if (halo_segments < 12)
         {
             halo_segments = 12;
         }
+        halo = render_apply_fog_color(state, halo, camera_distance);
         DrawSphereEx(position, glow_radius, halo_segments, halo_segments, halo);
     }
 
     if (is_selected)
     {
         Color outline = render_color_to_raylib(state->config.selected_outline_color);
+        outline       = render_apply_fog_color(state, outline, camera_distance);
         rlDisableBackfaceCulling();
         rlDisableDepthMask();
         DrawSphereWires(position, base_radius * 1.02f, 18, 18, outline);
@@ -931,15 +1233,7 @@ static void render_draw_sphere_group(RenderState *state, const LayoutResult *lay
     bool use_shader = state->glow_shader_ready && is_alive;
     if (use_shader)
     {
-        float glow_value = state->config.glow_intensity;
-        SetShaderValue(state->glow_shader, state->glow_intensity_loc, &glow_value,
-                       SHADER_UNIFORM_FLOAT);
-        if (state->glow_time_loc >= 0)
-        {
-            float time_seconds = (float)GetTime();
-            SetShaderValue(state->glow_shader, state->glow_time_loc, &time_seconds,
-                           SHADER_UNIFORM_FLOAT);
-        }
+        render_configure_glow_shader(state, camera);
         BeginShaderMode(state->glow_shader);
     }
 
@@ -969,12 +1263,17 @@ static void render_draw_sphere_group(RenderState *state, const LayoutResult *lay
         float intensity = state->ambient_strength + (1.0f - state->ambient_strength) * diffuse;
         Color lit_color = render_color_apply_intensity(base_color, intensity);
         float distance  = Vector3Distance(camera->position, position);
+        lit_color       = render_apply_fog_color(state, lit_color, distance);
         int segments    = render_select_sphere_segments(state, distance);
         if (segments < 12)
         {
             segments = 12;
         }
         DrawSphereEx(position, base_radius, segments, segments, lit_color);
+        if (!use_shader)
+        {
+            render_apply_rim_overlay(state, &position, base_radius, distance, segments);
+        }
     }
 
     if (use_shader)
@@ -984,7 +1283,8 @@ static void render_draw_sphere_group(RenderState *state, const LayoutResult *lay
 
     if (is_alive)
     {
-        float intensity_scale = 1.0f + state->config.glow_intensity * 0.4f;
+        float scale_seed      = 0.35f + state->config.glow_min_strength * 0.45f;
+        float intensity_scale = 1.0f + state->config.glow_intensity * scale_seed;
         float glow_radius     = base_radius * intensity_scale;
         for (size_t index = 0; index < count; ++index)
         {
@@ -1013,6 +1313,7 @@ static void render_draw_sphere_group(RenderState *state, const LayoutResult *lay
             Color halo_color = render_color_apply_intensity(base_color, intensity);
             halo_color.a     = (unsigned char)((int)halo_color.a / 3);
             float distance   = Vector3Distance(camera->position, position);
+            halo_color       = render_apply_fog_color(state, halo_color, distance);
             int halo_segments = render_select_sphere_segments(state, distance);
             if (halo_segments > 16)
             {
@@ -1099,6 +1400,9 @@ static void render_draw_label(RenderState *state, const LayoutResult *layout,
     tether_color.a     = (unsigned char)((int)tether_color.a / 2);
     Vector3 tether_top = label_position;
     tether_top.y -= size.y * 0.5f;
+    Vector3 tether_mid    = Vector3Scale(Vector3Add(base_position, tether_top), 0.5f);
+    float tether_distance = Vector3Distance(camera->position, tether_mid);
+    tether_color          = render_apply_fog_color(state, tether_color, tether_distance);
     DrawLine3D(base_position, tether_top, tether_color);
 }
 #endif /* ANCESTRYTREE_HAVE_RAYLIB */
@@ -1122,6 +1426,8 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         render_copy_color(&state->config.connection_color_spouse, &config->connection_color_spouse);
         state->config.sphere_radius                 = config->sphere_radius;
         state->config.glow_intensity                = config->glow_intensity;
+        state->config.glow_min_strength             = config->glow_min_strength;
+        state->config.glow_pulse_speed              = config->glow_pulse_speed;
         state->config.connection_radius             = config->connection_radius;
         state->config.connection_antialiasing       = config->connection_antialiasing;
         state->config.connection_style_parent_child = config->connection_style_parent_child;
@@ -1137,6 +1443,18 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.lod_near_distance             = config->lod_near_distance;
         state->config.lod_far_distance              = config->lod_far_distance;
         state->config.culling_margin                = config->culling_margin;
+        state->config.show_background_gradient      = config->show_background_gradient;
+        render_copy_color(&state->config.background_gradient_top, &config->background_gradient_top);
+        render_copy_color(&state->config.background_gradient_bottom,
+                          &config->background_gradient_bottom);
+        state->config.enable_fog         = config->enable_fog;
+        state->config.fog_start_distance = config->fog_start_distance;
+        state->config.fog_end_distance   = config->fog_end_distance;
+        render_copy_color(&state->config.fog_color, &config->fog_color);
+        state->config.enable_rim_lighting = config->enable_rim_lighting;
+        state->config.rim_intensity       = config->rim_intensity;
+        state->config.rim_power           = config->rim_power;
+        render_copy_color(&state->config.rim_color, &config->rim_color);
     }
 
     if (!render_config_validate(&state->config))
@@ -1155,10 +1473,24 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         {
             state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] =
                 GetShaderLocation(state->glow_shader, "mvp");
-            state->glow_intensity_loc = GetShaderLocation(state->glow_shader, "glowIntensity");
-            state->glow_time_loc      = GetShaderLocation(state->glow_shader, "timeSeconds");
-            state->glow_shader_ready  = state->glow_intensity_loc >= 0 &&
-                                       state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] >= 0;
+            state->glow_shader.locs[SHADER_LOC_MATRIX_MODEL] =
+                GetShaderLocation(state->glow_shader, "matModel");
+            state->glow_shader.locs[SHADER_LOC_MATRIX_NORMAL] =
+                GetShaderLocation(state->glow_shader, "matNormal");
+            state->glow_shader.locs[SHADER_LOC_VECTOR_VIEW] =
+                GetShaderLocation(state->glow_shader, "cameraPosition");
+            state->glow_intensity_loc    = GetShaderLocation(state->glow_shader, "glowIntensity");
+            state->glow_time_loc         = GetShaderLocation(state->glow_shader, "timeSeconds");
+            state->glow_min_strength_loc = GetShaderLocation(state->glow_shader, "glowMinStrength");
+            state->glow_pulse_speed_loc  = GetShaderLocation(state->glow_shader, "glowPulseSpeed");
+            state->glow_rim_intensity_loc = GetShaderLocation(state->glow_shader, "rimIntensity");
+            state->glow_rim_power_loc     = GetShaderLocation(state->glow_shader, "rimPower");
+            state->glow_rim_color_loc     = GetShaderLocation(state->glow_shader, "rimColor");
+            state->glow_rim_enable_loc    = GetShaderLocation(state->glow_shader, "enableRim");
+            state->glow_shader_ready      = state->glow_intensity_loc >= 0 &&
+                                       state->glow_shader.locs[SHADER_LOC_MATRIX_MVP] >= 0 &&
+                                       state->glow_shader.locs[SHADER_LOC_MATRIX_MODEL] >= 0 &&
+                                       state->glow_shader.locs[SHADER_LOC_MATRIX_NORMAL] >= 0;
         }
         else
         {
@@ -1172,10 +1504,16 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
     }
     else
     {
-        state->glow_shader_ready  = false;
-        state->glow_shader.id     = 0;
-        state->glow_intensity_loc = -1;
-        state->glow_time_loc      = -1;
+        state->glow_shader_ready      = false;
+        state->glow_shader.id         = 0;
+        state->glow_intensity_loc     = -1;
+        state->glow_time_loc          = -1;
+        state->glow_min_strength_loc  = -1;
+        state->glow_pulse_speed_loc   = -1;
+        state->glow_rim_intensity_loc = -1;
+        state->glow_rim_power_loc     = -1;
+        state->glow_rim_color_loc     = -1;
+        state->glow_rim_enable_loc    = -1;
     }
 
     if (!state->label_system)
@@ -1494,10 +1832,24 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
     if (using_render_target)
     {
         BeginTextureMode(state->scene_target);
-        const Color transparent = {0, 0, 0, 0};
-        ClearBackground(transparent);
+        if (state->config.show_background_gradient)
+        {
+            Color base = render_color_to_raylib(state->config.background_gradient_bottom);
+            ClearBackground(base);
+            render_draw_background_gradient(state);
+        }
+        else
+        {
+            const Color transparent = {0, 0, 0, 0};
+            ClearBackground(transparent);
+        }
+    }
+    else if (state->config.show_background_gradient)
+    {
+        render_draw_background_gradient(state);
     }
 
+    state->active_camera = camera_data;
     BeginMode3D(*camera_data);
     render_apply_lighting(state);
     if (state->config.show_grid)
@@ -1569,6 +1921,7 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
     }
 
     EndMode3D();
+    state->active_camera = NULL;
 
     if (using_render_target)
     {

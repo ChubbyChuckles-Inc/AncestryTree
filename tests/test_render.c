@@ -32,6 +32,15 @@ TEST(test_render_config_default_is_valid)
     ASSERT_TRUE(config.enable_lod);
     ASSERT_TRUE(config.lod_far_distance > config.lod_near_distance);
     ASSERT_TRUE(config.culling_margin >= 0.0f);
+    ASSERT_TRUE(config.glow_min_strength >= 0.0f && config.glow_min_strength <= 1.0f);
+    ASSERT_TRUE(config.glow_pulse_speed > 0.0f);
+    ASSERT_TRUE(config.enable_rim_lighting);
+    ASSERT_TRUE(config.rim_intensity >= 0.0f);
+    ASSERT_TRUE(config.rim_power >= 0.5f);
+    ASSERT_TRUE(config.show_background_gradient);
+    ASSERT_TRUE(config.enable_fog);
+    ASSERT_TRUE(config.fog_start_distance >= 0.0f);
+    ASSERT_TRUE(config.fog_end_distance > config.fog_start_distance);
 }
 
 TEST(test_render_find_person_position_returns_expected_coordinates)
@@ -167,6 +176,45 @@ TEST(test_render_config_validate_rejects_invalid_style)
     config                = render_config_default();
     config.culling_margin = -1.0f;
     ASSERT_FALSE(render_config_validate(&config));
+    config                   = render_config_default();
+    config.glow_min_strength = 1.2f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                  = render_config_default();
+    config.glow_pulse_speed = 0.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                    = render_config_default();
+    config.enable_fog         = true;
+    config.fog_start_distance = -1.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                    = render_config_default();
+    config.enable_fog         = true;
+    config.fog_start_distance = 12.0f;
+    config.fog_end_distance   = 10.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config               = render_config_default();
+    config.rim_intensity = -0.4f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config           = render_config_default();
+    config.rim_power = 0.3f;
+    ASSERT_FALSE(render_config_validate(&config));
+}
+
+TEST(test_render_config_validate_allows_disabled_fog_distance_ranges)
+{
+    RenderConfig config       = render_config_default();
+    config.enable_fog         = false;
+    config.fog_start_distance = -10.0f;
+    config.fog_end_distance   = -5.0f;
+    ASSERT_TRUE(render_config_validate(&config));
+}
+
+TEST(test_render_config_validate_allows_rim_lighting_toggle)
+{
+    RenderConfig config        = render_config_default();
+    config.enable_rim_lighting = false;
+    config.rim_intensity       = 0.0f;
+    config.rim_power           = 1.0f;
+    ASSERT_TRUE(render_config_validate(&config));
 }
 
 TEST(test_render_batcher_plan_groups_alive_and_deceased)

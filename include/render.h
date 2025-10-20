@@ -34,6 +34,8 @@ typedef struct RenderConfig
 {
     float sphere_radius;
     float glow_intensity;
+    float glow_min_strength;
+    float glow_pulse_speed;
     float connection_radius;
     bool connection_antialiasing;
     RenderConnectionStyle connection_style_parent_child;
@@ -54,6 +56,17 @@ typedef struct RenderConfig
     float lod_near_distance;
     float lod_far_distance;
     float culling_margin;
+    bool show_background_gradient;
+    RenderColor background_gradient_top;
+    RenderColor background_gradient_bottom;
+    bool enable_fog;
+    float fog_start_distance;
+    float fog_end_distance;
+    RenderColor fog_color;
+    bool enable_rim_lighting;
+    float rim_intensity;
+    float rim_power;
+    RenderColor rim_color;
 } RenderConfig;
 
 typedef struct RenderConnectionSegment
@@ -80,6 +93,12 @@ typedef struct RenderState
     struct Shader glow_shader;
     int glow_intensity_loc;
     int glow_time_loc;
+    int glow_min_strength_loc;
+    int glow_pulse_speed_loc;
+    int glow_rim_intensity_loc;
+    int glow_rim_power_loc;
+    int glow_rim_color_loc;
+    int glow_rim_enable_loc;
     bool glow_shader_ready;
     float ambient_strength;
     float light_direction[3];
@@ -87,6 +106,7 @@ typedef struct RenderState
     struct RenderLabelSystem *label_system;
     bool label_system_ready;
     float label_system_font_size_applied;
+    const Camera3D *active_camera;
 #endif
 } RenderState;
 
