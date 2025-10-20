@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Startup bootstrap planner that deterministically selects between CLI-specified trees, bundled samples, and placeholder holograms with new unit tests covering each scenario and improved logging when falling back.
+- Adaptive Nuklear initialisation that scales fonts to the active render resolution, attempts to load preferred UI typefaces, falls back gracefully to built-in glyphs, and adds regression tests for the scaling heuristics.
+
 - Cross-platform file dialog integration for opening and saving trees, using Win32 common dialogs, AppleScript-backed panels on macOS, and zenity/kdialog fallbacks on Linux, with `.json` extension enforcement and new unit tests for the dialog helpers.
 - Placeholder holographic preview SVG (`docs/preview-placeholder.svg`) linked from the README until captured screenshots and GIFs are published.
 - Add-person workflow now routes the Nuklear panel through AppState commands, importing profile/certificate assets, focusing the new holographic node, and shipping regression tests for person creation validation.

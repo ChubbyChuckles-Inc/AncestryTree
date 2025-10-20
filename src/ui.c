@@ -8,6 +8,7 @@
 #include "settings.h"
 #include "tree.h"
 #include "person.h"
+#include "ui_scaling.h"
 #include "at_memory.h"
 #include "at_date.h"
 #include "timeline.h"
@@ -36,6 +37,7 @@ typedef struct UIInternal
     struct nk_context ctx;
     struct nk_user_font font;
     Font rl_font;
+    bool font_owned;
     float font_size;
     bool scissor_active;
     bool auto_orbit;
@@ -2004,8 +2006,40 @@ bool ui_init(UIContext *ui, int width, int height)
     {
         return false;
     }
-    internal->rl_font = GetFontDefault();
-    internal->font_size = (float)internal->rl_font.baseSize;
+    internal->font_owned = false;
+    float computed_font_size = ui_scaling_default_font_size(height);
+    if (!(computed_font_size > 0.0f))
+    {
+        computed_font_size = 20.0f;
+    }
+
+    const char *font_candidates[] = {
+        "assets/fonts/AncestryTree-UI.ttf",
+        "assets/fonts/Roboto-Regular.ttf",
+        "assets/fonts/OpenSans-Regular.ttf"};
+    bool font_loaded = false;
+    for (size_t index = 0U; index < sizeof(font_candidates) / sizeof(font_candidates[0]); ++index)
+    {
+        const char *candidate = font_candidates[index];
+        if (!candidate || candidate[0] == '\0' || !FileExists(candidate))
+        {
+            continue;
+        }
+        Font loaded = LoadFontEx(candidate, (int)ceilf(computed_font_size), NULL, 0);
+        if (loaded.texture.id != 0)
+        {
+            internal->rl_font = loaded;
+            internal->font_owned = true;
+            font_loaded = true;
+            SetTextureFilter(internal->rl_font.texture, TEXTURE_FILTER_BILINEAR);
+            break;
+        }
+    }
+    if (!font_loaded)
+    {
+        internal->rl_font = GetFontDefault();
+    }
+    internal->font_size = computed_font_size;
 
     internal->font.userdata = nk_handle_ptr(&internal->rl_font);
     internal->font.height = internal->font_size;
@@ -2049,6 +2083,8 @@ bool ui_init(UIContext *ui, int width, int height)
 
     ui->impl = internal;
     ui->available = true;
+    /* Manual QA: Run the prototype at 720p, 1080p, and 4K to verify font legibility and confirm warning logs fire
+     * when custom font assets are absent. */
     return true;
 #else
     (void)width;
@@ -2079,6 +2115,10 @@ void ui_cleanup(UIContext *ui)
     if (internal)
     {
         nk_free(&internal->ctx);
+        if (internal->font_owned)
+        {
+            UnloadFont(internal->rl_font);
+        }
         AT_FREE(internal);
     }
 #endif

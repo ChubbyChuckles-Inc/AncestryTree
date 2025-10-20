@@ -33,6 +33,8 @@ void register_error_tests(TestRegistry *registry);
 void register_assets_tests(TestRegistry *registry);
 void register_cli_tests(TestRegistry *registry);
 void register_file_dialog_tests(TestRegistry *registry);
+void register_bootstrap_tests(TestRegistry *registry);
+void register_ui_scaling_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -71,6 +73,8 @@ int main(void)
     register_assets_tests(&registry);
     register_cli_tests(&registry);
     register_file_dialog_tests(&registry);
+    register_bootstrap_tests(&registry);
+    register_ui_scaling_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)

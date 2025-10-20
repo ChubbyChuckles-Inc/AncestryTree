@@ -1,4 +1,5 @@
 #include "app.h"
+#include "app_bootstrap.h"
 #include "app_cli.h"
 #include "assets.h"
 #include "at_log.h"
@@ -110,24 +111,6 @@ static FamilyTree *app_create_placeholder_tree(void);
 static FamilyTree *app_auto_save_tree_supplier(void *user_data);
 static void app_apply_settings(const Settings *settings, RenderState *render_state, CameraController *camera,
                                PersistenceAutoSave *auto_save);
-
-static void app_copy_string(char *destination, size_t capacity, const char *source)
-{
-    if (!destination || capacity == 0U)
-    {
-        return;
-    }
-    if (!source)
-    {
-        destination[0] = '\0';
-        return;
-    }
-#if defined(_MSC_VER)
-    (void)strncpy_s(destination, capacity, source, _TRUNCATE);
-#else
-    (void)snprintf(destination, capacity, "%s", source);
-#endif
-}
 
 static void app_file_state_clear(AppFileState *state)
 {
@@ -1963,59 +1946,87 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     initial_warning[0] = '\0';
     bool warning_pending = false;
 
-    if (options && options->tree_path[0] != '\0')
+    char sample_tree_path[512];
+    sample_tree_path[0] = '\0';
+    bool sample_tree_available = app_try_find_asset("assets/example_tree.json", sample_tree_path,
+                                                    sizeof(sample_tree_path));
+
+    AppLaunchOptions default_options;
+    memset(&default_options, 0, sizeof(default_options));
+    AppLaunchOptions const *effective_options = options ? options : &default_options;
+
+    AppStartupDecision startup_decision;
+    char startup_message[256];
+    startup_message[0] = '\0';
+    if (!app_bootstrap_decide_tree_source(effective_options,
+                                          sample_tree_available ? sample_tree_path : NULL, &startup_decision,
+                                          startup_message, sizeof(startup_message)))
     {
-        AT_LOG(logger, AT_LOG_INFO, "Loading tree from %s", options->tree_path);
-        tree = persistence_tree_load(options->tree_path, error_buffer, sizeof(error_buffer));
+        AT_LOG(logger, AT_LOG_ERROR, "%s", (startup_message[0] != '\0') ? startup_message : "Unable to determine startup plan.");
+        graphics_window_shutdown(&graphics_state);
+        return 1;
+    }
+    if (startup_message[0] != '\0')
+    {
+        AT_LOG(logger, AT_LOG_INFO, "%s", startup_message);
+    }
+
+    switch (startup_decision.source)
+    {
+    case APP_STARTUP_SOURCE_CLI_PATH:
+        AT_LOG(logger, AT_LOG_INFO, "Loading tree from %s", startup_decision.resolved_path);
+        tree = persistence_tree_load(startup_decision.resolved_path, error_buffer, sizeof(error_buffer));
         if (!tree)
         {
-            AT_LOG(logger, AT_LOG_ERROR, "Failed to load tree '%s' (%s).", options->tree_path, error_buffer);
+            AT_LOG(logger, AT_LOG_ERROR, "Failed to load tree '%s' (%s).", startup_decision.resolved_path,
+                   error_buffer);
             (void)snprintf(initial_warning, sizeof(initial_warning),
-                           "Startup load failed for '%s'. Placeholder data will be used.", options->tree_path);
+                           "Startup load failed for '%s'. Placeholder data will be used.",
+                           startup_decision.resolved_path);
             warning_pending = true;
         }
         else
         {
             tree_loaded_from_cli = true;
-            app_file_state_set(&file_state, options->tree_path);
-            (void)snprintf(initial_status, sizeof(initial_status), "Loaded tree from %s.", options->tree_path);
+            app_file_state_set(&file_state, startup_decision.resolved_path);
+            (void)snprintf(initial_status, sizeof(initial_status), "Loaded tree from %s.",
+                           startup_decision.resolved_path);
         }
-    }
-
-    if (!tree && (!options || !options->disable_sample_tree))
-    {
-        char tree_path[512];
-        if (app_try_find_asset("assets/example_tree.json", tree_path, sizeof(tree_path)))
+        break;
+    case APP_STARTUP_SOURCE_SAMPLE_ASSET:
+        AT_LOG(logger, AT_LOG_INFO, "Loading sample tree from %s", startup_decision.resolved_path);
+        tree = persistence_tree_load(startup_decision.resolved_path, error_buffer, sizeof(error_buffer));
+        if (!tree)
         {
-            AT_LOG(logger, AT_LOG_INFO, "Loading sample tree from %s", tree_path);
-            tree = persistence_tree_load(tree_path, error_buffer, sizeof(error_buffer));
-            if (!tree)
+            AT_LOG(logger, AT_LOG_WARN, "Failed to load sample tree (%s). Using placeholder data.",
+                   error_buffer);
+            if (!warning_pending)
             {
-                AT_LOG(logger, AT_LOG_WARN, "Failed to load sample tree (%s). Using placeholder data.",
-                       error_buffer);
-                if (!warning_pending)
-                {
-                    (void)snprintf(initial_warning, sizeof(initial_warning),
-                                   "Failed to load bundled sample tree (%s). Placeholder data will be used.",
-                                   error_buffer);
-                    warning_pending = true;
-                }
-            }
-            else
-            {
-                tree_loaded_from_asset = true;
-                app_file_state_set(&file_state, tree_path);
-                if (initial_status[0] == '\0')
-                {
-                    (void)snprintf(initial_status, sizeof(initial_status), "Sample tree loaded.");
-                }
+                (void)snprintf(initial_warning, sizeof(initial_warning),
+                               "Failed to load bundled sample tree (%s). Placeholder data will be used.",
+                               error_buffer);
+                warning_pending = true;
             }
         }
         else
         {
-            AT_LOG(logger, AT_LOG_WARN, "Sample tree asset not found; using placeholder data.");
+            tree_loaded_from_asset = true;
+            app_file_state_set(&file_state, startup_decision.resolved_path);
+            if (initial_status[0] == '\0')
+            {
+                (void)snprintf(initial_status, sizeof(initial_status), "Sample tree loaded.");
+            }
         }
+        break;
+    case APP_STARTUP_SOURCE_PLACEHOLDER:
+        break;
+    default:
+        AT_LOG(logger, AT_LOG_WARN, "Unrecognised startup source; falling back to placeholder hologram.");
+        break;
     }
+
+    /* Manual QA: exercise `--load`, `--no-sample`, and default launches to ensure the startup planner selects
+     * the expected tree source and reports placeholder fallbacks via the status banner. */
 
     if (!tree)
     {

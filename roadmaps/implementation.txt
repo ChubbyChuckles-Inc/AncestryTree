@@ -381,7 +381,7 @@ PHASE 6: USER INTERFACE (NUKLEAR)
 ================================================================================
 
 6.1 Nuklear Integration
-  [ ] Implement ui_init() in src/ui.c
+    [x] Implement ui_init() in src/ui.c
       [x] Initialize Nuklear context
       [x] Set up raylib backend
       [x] Load UI fonts
@@ -499,16 +499,16 @@ PHASE 7: APPLICATION LOGIC & STATE MANAGEMENT
     [x] Implement app_state_cleanup() function
 
 7.2 Main Loop
-  [ ] Implement main() in src/main.c
-      [ ] Parse command line arguments
-      [ ] Initialize all subsystems
-      [ ] Load tree from file or create new
-      [ ] Enter main loop
-      [ ] Handle events
-      [ ] Update application state
-      [ ] Render frame
-      [ ] Handle cleanup on exit
-  [ ] Implement proper error handling throughout
+    [x] Implement main() in src/main.c
+            [x] Parse command line arguments
+            [x] Initialize all subsystems
+            [x] Load tree from file or create new
+            [x] Enter main loop
+            [x] Handle events
+            [x] Update application state
+            [x] Render frame
+            [x] Handle cleanup on exit
+    [x] Implement proper error handling throughout
 
 7.3 Event Handling
     [x] Implement event_process() function
