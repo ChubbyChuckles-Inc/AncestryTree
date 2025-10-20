@@ -1,4 +1,5 @@
 #include "test_framework.h"
+#include "at_memory.h"
 
 #include <stdio.h>
 
@@ -35,6 +36,7 @@ void register_cli_tests(TestRegistry *registry);
 void register_file_dialog_tests(TestRegistry *registry);
 void register_bootstrap_tests(TestRegistry *registry);
 void register_ui_scaling_tests(TestRegistry *registry);
+void register_memory_suite_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -42,8 +44,13 @@ int main(void)
     TestCase cases[192];
     test_registry_init(&registry, cases, 192);
 
+#if AT_MEMORY_ENABLE_TRACKING
+    at_memory_reset_tracking();
+#endif
+
     register_string_tests(&registry);
     register_memory_tests(&registry);
+    register_memory_suite_tests(&registry);
     register_log_tests(&registry);
     register_person_tests(&registry);
     register_tree_tests(&registry);
@@ -80,7 +87,34 @@ int main(void)
     if (result.failures != 0)
     {
         fprintf(stderr, "%d test(s) failed.\n", result.failures);
+#if AT_MEMORY_ENABLE_TRACKING
+        AtMemoryStats failure_stats;
+        at_memory_get_stats(&failure_stats);
+        if (failure_stats.outstanding_allocations != 0U)
+        {
+            fprintf(stderr,
+                    "Detected %zu outstanding allocation(s) totalling %zu bytes while tests failed.\n",
+                    failure_stats.outstanding_allocations,
+                    failure_stats.outstanding_bytes);
+            at_memory_report_leaks();
+        }
+#endif
         return 1;
     }
+
+#if AT_MEMORY_ENABLE_TRACKING
+    AtMemoryStats stats;
+    at_memory_get_stats(&stats);
+    if (stats.outstanding_allocations != 0U || stats.outstanding_bytes != 0U)
+    {
+        fprintf(stderr,
+                "Detected %zu outstanding allocation(s) totalling %zu bytes after tests completed.\n",
+                stats.outstanding_allocations,
+                stats.outstanding_bytes);
+        at_memory_report_leaks();
+        return 1;
+    }
+#endif
+
     return 0;
 }

@@ -129,4 +129,33 @@ if(ANCESTRYTREE_BUILD_TESTS)
         target_link_libraries(ancestrytree_tests PRIVATE m pthread dl rt X11)
     endif()
     add_test(NAME ancestrytree_tests COMMAND ancestrytree_tests)
+
+    if(UNIX AND NOT APPLE)
+        find_program(ANCESTRYTREE_VALGRIND_EXECUTABLE valgrind)
+        if(ANCESTRYTREE_VALGRIND_EXECUTABLE)
+            add_test(NAME ancestrytree_memory_check
+                COMMAND ${ANCESTRYTREE_VALGRIND_EXECUTABLE}
+                    --leak-check=full
+                    --show-leak-kinds=all
+                    --error-exitcode=1
+                    --track-origins=yes
+                    $<TARGET_FILE:ancestrytree_tests>)
+            set_tests_properties(ancestrytree_memory_check PROPERTIES
+                PASS_REGULAR_EXPRESSION "All heap blocks were freed|ERROR SUMMARY: 0 errors")
+        else()
+            message(STATUS "Valgrind not available; memory leak check test disabled.")
+        endif()
+    elseif(WIN32)
+        find_program(ANCESTRYTREE_DRMEMORY_EXECUTABLE NAMES drmemory drmemory.exe
+            HINTS $ENV{DRMEMORY_HOME} $ENV{DRMEMORY_HOME}/bin)
+        if(ANCESTRYTREE_DRMEMORY_EXECUTABLE)
+            add_test(NAME ancestrytree_memory_check
+                COMMAND ${ANCESTRYTREE_DRMEMORY_EXECUTABLE}
+                    -batch
+                    -exit_code_if_errors 1
+                    $<TARGET_FILE:ancestrytree_tests>)
+        else()
+            message(STATUS "Dr. Memory not available; memory leak check test disabled.")
+        endif()
+    endif()
 endif()

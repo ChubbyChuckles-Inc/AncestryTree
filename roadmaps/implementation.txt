@@ -620,34 +620,34 @@ PHASE 8: TESTING FRAMEWORK & TEST SUITE
     [x] Test undo/redo workflow
 
 8.7 Memory Leak Tests
-  [ ] Integrate Valgrind for Linux
-  [ ] Integrate Dr. Memory for Windows
-  [ ] Create memory test suite
-      [ ] Run all tests under memory checker
-      [ ] Verify no leaks
-      [ ] Verify no invalid accesses
+    [x] Integrate Valgrind for Linux
+    [x] Integrate Dr. Memory for Windows
+    [x] Create memory test suite
+            [x] Run all tests under memory checker
+            [x] Verify no leaks
+            [x] Verify no invalid accesses
 
 ================================================================================
 PHASE 9: CI/CD & AUTOMATION (GITHUB ACTIONS)
 ================================================================================
 
 9.1 Build Workflow
-  [ ] Create .github/workflows/build.yml
-      [ ] Trigger on push and pull request
-      [ ] Matrix strategy for platforms (Windows, Linux, macOS)
-      [ ] Matrix strategy for configurations (Debug, Release)
-      [ ] Checkout code
-      [ ] Install dependencies (raylib)
-      [ ] Build project with Make or CMake
-      [ ] Upload build artifacts
+    [x] Create .github/workflows/build.yml
+            [x] Trigger on push and pull request
+            [x] Matrix strategy for platforms (Windows, Linux, macOS)
+            [x] Matrix strategy for configurations (Debug, Release)
+            [x] Checkout code
+            [x] Install dependencies (raylib)
+            [x] Build project with Make or CMake
+            [x] Upload build artifacts
 
 9.2 Test Workflow
-  [ ] Create .github/workflows/test.yml
-      [ ] Run after build workflow
-      [ ] Run test suite on all platforms
-      [ ] Generate coverage reports (gcov/lcov)
-      [ ] Upload coverage to Codecov/Coveralls
-      [ ] Fail workflow if tests fail
+    [x] Create .github/workflows/test.yml
+            [x] Run after build workflow
+            [x] Run test suite on all platforms
+            [ ] Generate coverage reports (gcov/lcov)
+            [ ] Upload coverage to Codecov/Coveralls
+            [x] Fail workflow if tests fail
 
 9.3 Release Workflow
   [ ] Create .github/workflows/release.yml
