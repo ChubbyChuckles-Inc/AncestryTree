@@ -21,6 +21,7 @@ typedef enum UIEventType
     UI_EVENT_OPEN_TREE,
     UI_EVENT_SAVE_TREE,
     UI_EVENT_SAVE_TREE_AS,
+    UI_EVENT_DELETE_PERSON,
     UI_EVENT_UNDO,
     UI_EVENT_REDO,
     UI_EVENT_RESET_CAMERA,
@@ -86,6 +87,28 @@ typedef struct UIAddPersonRequest
     uint32_t spouse_id;
 } UIAddPersonRequest;
 
+#define UI_EDIT_PERSON_MAX_SPOUSES 4U
+
+typedef struct UIEditPersonRequest
+{
+    uint32_t person_id;
+    char first[64];
+    char middle[64];
+    char last[64];
+    char birth_date[32];
+    char birth_location[96];
+    bool has_death;
+    char death_date[32];
+    char death_location[96];
+    bool update_father;
+    uint32_t father_id;
+    bool update_mother;
+    uint32_t mother_id;
+    bool update_spouses;
+    uint32_t spouse_ids[UI_EDIT_PERSON_MAX_SPOUSES];
+    size_t spouse_count;
+} UIEditPersonRequest;
+
 bool ui_init(UIContext *ui, int width, int height);
 void ui_resize(UIContext *ui, int width, int height);
 void ui_cleanup(UIContext *ui);
@@ -105,6 +128,9 @@ bool ui_notify_status(UIContext *ui, const char *message);
 bool ui_handle_escape(UIContext *ui);
 bool ui_show_error_dialog(UIContext *ui, const char *title, const char *message);
 bool ui_consume_add_person_request(UIContext *ui, UIAddPersonRequest *out_request);
+bool ui_open_edit_person_panel(UIContext *ui, const struct Person *person);
+bool ui_consume_edit_person_request(UIContext *ui, UIEditPersonRequest *out_request);
+bool ui_pointer_over_ui(const UIContext *ui);
 
 /* Manual validation checklist (requires raylib + Nuklear):
  * 1. Open the "Add Person" panel from the Edit menu and populate name, birth, parents, spouse, and timeline.

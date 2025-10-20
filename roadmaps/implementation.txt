@@ -427,15 +427,15 @@ PHASE 6: USER INTERFACE (NUKLEAR)
       [x] Save tree
 
 6.4 Edit Person Panel
-  [ ] Implement edit_person_panel_render() function
-      [ ] Similar to add panel but pre-filled
-      [ ] Delete person button (with confirmation)
-      [ ] Relationship editing
-  [ ] Implement edit_person_save() function
-      [ ] Update existing Person object
-      [ ] Validate relationships
-      [ ] Update tree layout if needed
-      [ ] Save tree
+  [x] Implement edit_person_panel_render() function
+      [x] Similar to add panel but pre-filled
+      [x] Delete person button (with confirmation)
+      [x] Relationship editing
+  [x] Implement edit_person_save() function
+      [x] Update existing Person object
+      [x] Validate relationships
+      [x] Update tree layout if needed
+      [x] Save tree
 
 6.5 File Browser Dialog
   [ ] Implement file_dialog_open() function

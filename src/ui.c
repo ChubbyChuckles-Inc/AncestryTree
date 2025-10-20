@@ -7,6 +7,7 @@
 #include "search.h"
 #include "settings.h"
 #include "tree.h"
+#include "person.h"
 #include "at_memory.h"
 #include "at_date.h"
 #include "timeline.h"
@@ -43,6 +44,7 @@ typedef struct UIInternal
     bool show_settings_window;
     bool show_search_panel;
     bool show_add_person_panel;
+    bool show_edit_person_panel;
     bool show_exit_prompt;
     bool show_error_dialog;
     char status_message[128];
@@ -72,6 +74,14 @@ typedef struct UIInternal
         char new_certificate_path[128];
         char error_message[192];
     } add_person_form;
+    UIEditPersonRequest edit_person_request;
+    bool edit_person_request_pending;
+    struct
+    {
+        UIEditPersonRequest draft;
+        char error_message[192];
+        bool confirm_delete;
+    } edit_person_form;
 #else
     int unused;
 #endif
@@ -126,6 +136,8 @@ static const UIInternal *ui_internal_const_cast(const UIContext *ui)
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
 
+static void ui_compose_person_name(const Person *person, char *buffer, size_t capacity);
+
 static void ui_add_person_form_reset(UIInternal *internal)
 {
     if (!internal)
@@ -157,6 +169,51 @@ static void ui_add_person_set_error(UIInternal *internal, const char *message)
     {
         internal->add_person_form.error_message[0] = '\0';
     }
+}
+
+static void ui_edit_person_form_reset(UIInternal *internal)
+{
+    if (!internal)
+    {
+        return;
+    }
+    memset(&internal->edit_person_form.draft, 0, sizeof(UIEditPersonRequest));
+    internal->edit_person_form.draft.update_father = true;
+    internal->edit_person_form.draft.update_mother = true;
+    internal->edit_person_form.draft.update_spouses = true;
+    internal->edit_person_form.draft.has_death = false;
+    internal->edit_person_form.error_message[0] = '\0';
+    internal->edit_person_form.confirm_delete = false;
+}
+
+static void ui_edit_person_set_error(UIInternal *internal, const char *message)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (message)
+    {
+        (void)snprintf(internal->edit_person_form.error_message,
+                       sizeof(internal->edit_person_form.error_message), "%s", message);
+    }
+    else
+    {
+        internal->edit_person_form.error_message[0] = '\0';
+    }
+}
+
+static void ui_edit_person_remove_spouse(UIEditPersonRequest *request, size_t index)
+{
+    if (!request || index >= request->spouse_count)
+    {
+        return;
+    }
+    for (size_t shift = index + 1U; shift < request->spouse_count; ++shift)
+    {
+        request->spouse_ids[shift - 1U] = request->spouse_ids[shift];
+    }
+    request->spouse_count -= 1U;
 }
 
 static const char *ui_timeline_type_label(TimelineEventType type)
@@ -278,6 +335,220 @@ static bool ui_add_person_validate(UIInternal *internal, const FamilyTree *tree,
         }
     }
     return true;
+}
+
+static bool ui_edit_person_validate(UIInternal *internal, const FamilyTree *tree, char *message,
+                                    size_t message_capacity)
+{
+    if (!internal)
+    {
+        return false;
+    }
+    UIEditPersonRequest *draft = &internal->edit_person_form.draft;
+    if (draft->person_id == 0U)
+    {
+        (void)snprintf(message, message_capacity, "No person selected for editing.");
+        return false;
+    }
+    if (draft->first[0] == '\0' || draft->last[0] == '\0')
+    {
+        (void)snprintf(message, message_capacity, "First and last names are required.");
+        return false;
+    }
+    if (draft->birth_date[0] == '\0' || !at_date_is_valid_iso8601(draft->birth_date))
+    {
+        (void)snprintf(message, message_capacity, "Enter a valid birth date (YYYY-MM-DD).");
+        return false;
+    }
+    if (draft->has_death)
+    {
+        if (draft->death_date[0] == '\0')
+        {
+            (void)snprintf(message, message_capacity, "Deceased profiles require a death date.");
+            return false;
+        }
+        if (!at_date_is_valid_iso8601(draft->death_date))
+        {
+            (void)snprintf(message, message_capacity, "Enter a valid death date (YYYY-MM-DD).");
+            return false;
+        }
+    }
+    else
+    {
+        draft->death_date[0] = '\0';
+        draft->death_location[0] = '\0';
+    }
+
+    if (draft->update_father)
+    {
+        if (draft->father_id == draft->person_id)
+        {
+            (void)snprintf(message, message_capacity, "A person cannot be their own father.");
+            return false;
+        }
+        if (draft->father_id != 0U && tree && !family_tree_find_person(tree, draft->father_id))
+        {
+            (void)snprintf(message, message_capacity, "Selected father no longer exists in the tree.");
+            return false;
+        }
+    }
+    if (draft->update_mother)
+    {
+        if (draft->mother_id == draft->person_id)
+        {
+            (void)snprintf(message, message_capacity, "A person cannot be their own mother.");
+            return false;
+        }
+        if (draft->mother_id != 0U && tree && !family_tree_find_person(tree, draft->mother_id))
+        {
+            (void)snprintf(message, message_capacity, "Selected mother no longer exists in the tree.");
+            return false;
+        }
+    }
+
+    if (draft->update_spouses)
+    {
+        if (draft->spouse_count > UI_EDIT_PERSON_MAX_SPOUSES)
+        {
+            (void)snprintf(message, message_capacity, "Spouse limit exceeded.");
+            return false;
+        }
+        for (size_t outer = 0U; outer < draft->spouse_count; ++outer)
+        {
+            uint32_t spouse_id = draft->spouse_ids[outer];
+            if (spouse_id == 0U)
+            {
+                continue;
+            }
+            if (spouse_id == draft->person_id)
+            {
+                (void)snprintf(message, message_capacity, "A person cannot be listed as their own spouse.");
+                return false;
+            }
+            if (tree && !family_tree_find_person(tree, spouse_id))
+            {
+                (void)snprintf(message, message_capacity, "Spouse selection %u is not present in the tree.",
+                               spouse_id);
+                return false;
+            }
+            for (size_t inner = outer + 1U; inner < draft->spouse_count; ++inner)
+            {
+                if (spouse_id != 0U && spouse_id == draft->spouse_ids[inner])
+                {
+                    (void)snprintf(message, message_capacity, "Duplicate spouse selections detected.");
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+static void ui_edit_person_populate(UIInternal *internal, const Person *person)
+{
+    if (!internal)
+    {
+        return;
+    }
+    ui_edit_person_form_reset(internal);
+    if (!person)
+    {
+        ui_edit_person_set_error(internal, "Select a person to edit.");
+        internal->show_edit_person_panel = false;
+        return;
+    }
+
+    UIEditPersonRequest *draft = &internal->edit_person_form.draft;
+    draft->person_id = person->id;
+
+    if (person->name.first)
+    {
+        (void)snprintf(draft->first, sizeof(draft->first), "%s", person->name.first);
+    }
+    if (person->name.middle)
+    {
+        (void)snprintf(draft->middle, sizeof(draft->middle), "%s", person->name.middle);
+    }
+    if (person->name.last)
+    {
+        (void)snprintf(draft->last, sizeof(draft->last), "%s", person->name.last);
+    }
+
+    if (person->dates.birth_date)
+    {
+        (void)snprintf(draft->birth_date, sizeof(draft->birth_date), "%s", person->dates.birth_date);
+    }
+    if (person->dates.birth_location)
+    {
+        (void)snprintf(draft->birth_location, sizeof(draft->birth_location), "%s", person->dates.birth_location);
+    }
+
+    if (!person->is_alive && person->dates.death_date)
+    {
+        draft->has_death = true;
+        (void)snprintf(draft->death_date, sizeof(draft->death_date), "%s", person->dates.death_date);
+        if (person->dates.death_location)
+        {
+            (void)snprintf(draft->death_location, sizeof(draft->death_location), "%s",
+                           person->dates.death_location);
+        }
+    }
+    else
+    {
+        draft->has_death = false;
+        draft->death_date[0] = '\0';
+        draft->death_location[0] = '\0';
+    }
+
+    draft->update_father = true;
+    draft->father_id = (person->parents[PERSON_PARENT_FATHER] != NULL) ? person->parents[PERSON_PARENT_FATHER]->id : 0U;
+    draft->update_mother = true;
+    draft->mother_id = (person->parents[PERSON_PARENT_MOTHER] != NULL) ? person->parents[PERSON_PARENT_MOTHER]->id : 0U;
+
+    draft->update_spouses = true;
+    draft->spouse_count = 0U;
+    size_t limit = person->spouses_count;
+    if (limit > UI_EDIT_PERSON_MAX_SPOUSES)
+    {
+        limit = UI_EDIT_PERSON_MAX_SPOUSES;
+    }
+    for (size_t index = 0U; index < limit; ++index)
+    {
+        PersonSpouseRecord *record = &person->spouses[index];
+        if (!record || !record->partner)
+        {
+            continue;
+        }
+        draft->spouse_ids[draft->spouse_count++] = record->partner->id;
+    }
+
+    ui_edit_person_set_error(internal, NULL);
+    internal->show_edit_person_panel = true;
+}
+
+static const char *ui_edit_person_relationship_label(const FamilyTree *tree, uint32_t relation_id, char *buffer,
+                                                     size_t capacity)
+{
+    if (relation_id == 0U)
+    {
+        return "None";
+    }
+    if (!tree)
+    {
+        (void)snprintf(buffer, capacity, "(#%u)", relation_id);
+        return buffer;
+    }
+    Person *relation = family_tree_find_person(tree, relation_id);
+    if (!relation)
+    {
+        (void)snprintf(buffer, capacity, "Missing (#%u)", relation_id);
+        return buffer;
+    }
+    char name_buffer[128];
+    ui_compose_person_name(relation, name_buffer, sizeof(name_buffer));
+    (void)snprintf(buffer, capacity, "%s (#%u)", name_buffer, relation->id);
+    return buffer;
 }
 
 static const char *ui_connection_style_label(RenderConnectionStyle style)
@@ -1760,6 +2031,11 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->add_person_request_pending = false;
     memset(&internal->add_person_request, 0, sizeof(UIAddPersonRequest));
     ui_add_person_form_reset(internal);
+    internal->show_edit_person_panel = false;
+    internal->edit_person_request_pending = false;
+    memset(&internal->edit_person_request, 0, sizeof(UIEditPersonRequest));
+    memset(&internal->edit_person_form, 0, sizeof(internal->edit_person_form));
+    ui_edit_person_form_reset(internal);
 
     if (!nk_init_default(&internal->ctx, &internal->font))
     {
@@ -1967,6 +2243,16 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree, con
         nk_labelf(ctx, NK_TEXT_LEFT, "Selected: %s", selected_person ? name_buffer : "(none)");
         ui_compose_person_name(hovered_person, name_buffer, sizeof(name_buffer));
         nk_labelf(ctx, NK_TEXT_LEFT, "Hovered: %s", hovered_person ? name_buffer : "(none)");
+
+        if (selected_person)
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_button_label(ctx, "Edit Selected..."))
+            {
+                ui_edit_person_populate(internal, selected_person);
+                ui_internal_set_status(internal, "Edit panel opened for selected hologram.");
+            }
+        }
 
         if (internal->status_timer > 0.0f && internal->status_message[0] != '\0')
         {
@@ -2477,6 +2763,321 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
     nk_end(ctx);
 }
 
+static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+{
+    if (!internal || !ui || !internal->show_edit_person_panel)
+    {
+        return;
+    }
+    UIEditPersonRequest *draft = &internal->edit_person_form.draft;
+    struct nk_context *ctx = &internal->ctx;
+    float width = 420.0f;
+    float height = (float)ui->height - 80.0f;
+    if (height < 360.0f)
+    {
+        height = 360.0f;
+    }
+    float x = (float)ui->width - width - 24.0f;
+    if (x < 18.0f)
+    {
+        x = 18.0f;
+    }
+    struct nk_rect bounds = nk_rect(x, 48.0f, width, height);
+    if (nk_begin(ctx, "Edit Person##Panel", bounds,
+                 NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_TITLE | NK_WINDOW_SCROLL_AUTO_HIDE))
+    {
+        nk_layout_row_dynamic(ctx, 26.0f, 1);
+        nk_label(ctx, "Edit Holographic Profile", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_labelf(ctx, NK_TEXT_LEFT, "Person ID: %u", draft->person_id);
+
+        if (internal->edit_person_form.error_message[0] != '\0')
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            nk_label_colored(ctx, internal->edit_person_form.error_message, NK_TEXT_LEFT, nk_rgb(230, 80, 80));
+        }
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "First", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->first, (int)sizeof(draft->first), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Middle", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->middle, (int)sizeof(draft->middle),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Last", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->last, (int)sizeof(draft->last), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Birth Date", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_date, (int)sizeof(draft->birth_date),
+                                       nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Birthplace", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_location,
+                                       (int)sizeof(draft->birth_location), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_bool deceased = draft->has_death ? nk_true : nk_false;
+        deceased = nk_check_label(ctx, "Person is deceased", deceased);
+        draft->has_death = (deceased == nk_true);
+
+        if (draft->has_death)
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Death Date", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_date, (int)sizeof(draft->death_date),
+                                           nk_filter_default);
+            nk_layout_row_end(ctx);
+
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Death Place", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_location,
+                                           (int)sizeof(draft->death_location), nk_filter_default);
+            nk_layout_row_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Relationships", NK_TEXT_LEFT);
+
+        char label_buffer[160];
+        const char *father_label = ui_edit_person_relationship_label(tree, draft->father_id, label_buffer,
+                                                                     sizeof(label_buffer));
+        if (nk_group_begin(ctx, "EditFatherGroup", NK_WINDOW_NO_SCROLLBAR))
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Father", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            if (nk_combo_begin_label(ctx, father_label, nk_vec2(260.0f, 260.0f)))
+            {
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                {
+                    draft->father_id = 0U;
+                }
+                if (tree)
+                {
+                    for (size_t index = 0U; index < tree->person_count; ++index)
+                    {
+                        Person *candidate = tree->persons[index];
+                        if (!candidate || candidate->id == draft->person_id)
+                        {
+                            continue;
+                        }
+                        char name_buffer[128];
+                        ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
+                        (void)snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, candidate->id);
+                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        {
+                            draft->father_id = candidate->id;
+                        }
+                    }
+                }
+                nk_combo_end(ctx);
+            }
+            nk_layout_row_end(ctx);
+            nk_group_end(ctx);
+        }
+
+        const char *mother_label = ui_edit_person_relationship_label(tree, draft->mother_id, label_buffer,
+                                                                     sizeof(label_buffer));
+        if (nk_group_begin(ctx, "EditMotherGroup", NK_WINDOW_NO_SCROLLBAR))
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, 100.0f);
+            nk_label(ctx, "Mother", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 120.0f);
+            if (nk_combo_begin_label(ctx, mother_label, nk_vec2(260.0f, 260.0f)))
+            {
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                {
+                    draft->mother_id = 0U;
+                }
+                if (tree)
+                {
+                    for (size_t index = 0U; index < tree->person_count; ++index)
+                    {
+                        Person *candidate = tree->persons[index];
+                        if (!candidate || candidate->id == draft->person_id)
+                        {
+                            continue;
+                        }
+                        char name_buffer[128];
+                        ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
+                        (void)snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, candidate->id);
+                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        {
+                            draft->mother_id = candidate->id;
+                        }
+                    }
+                }
+                nk_combo_end(ctx);
+            }
+            nk_layout_row_end(ctx);
+            nk_group_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Spouses", NK_TEXT_LEFT);
+        for (size_t index = 0U; index < draft->spouse_count; ++index)
+        {
+            uint32_t spouse_id = draft->spouse_ids[index];
+            const char *spouse_label = ui_edit_person_relationship_label(tree, spouse_id, label_buffer,
+                                                                         sizeof(label_buffer));
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, width - 120.0f);
+            if (nk_combo_begin_label(ctx, spouse_label, nk_vec2(260.0f, 300.0f)))
+            {
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                {
+                    draft->spouse_ids[index] = 0U;
+                }
+                if (tree)
+                {
+                    for (size_t candidate_index = 0U; candidate_index < tree->person_count; ++candidate_index)
+                    {
+                        Person *candidate = tree->persons[candidate_index];
+                        if (!candidate || candidate->id == draft->person_id)
+                        {
+                            continue;
+                        }
+                        char name_buffer[128];
+                        ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
+                        (void)snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer, candidate->id);
+                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        {
+                            draft->spouse_ids[index] = candidate->id;
+                        }
+                    }
+                }
+                nk_combo_end(ctx);
+            }
+            nk_layout_row_push(ctx, 60.0f);
+            if (nk_button_label(ctx, "Remove"))
+            {
+                ui_edit_person_remove_spouse(draft, index);
+                --index;
+            }
+            nk_layout_row_end(ctx);
+        }
+
+        if (draft->spouse_count < UI_EDIT_PERSON_MAX_SPOUSES)
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_button_label(ctx, "Add Spouse Slot"))
+            {
+                draft->spouse_ids[draft->spouse_count] = 0U;
+                draft->spouse_count += 1U;
+            }
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 30.0f, 2);
+        if (nk_button_label(ctx, "Save Changes"))
+        {
+            char message[192];
+            message[0] = '\0';
+            if (ui_edit_person_validate(internal, tree, message, sizeof(message)))
+            {
+                internal->edit_person_request = *draft;
+                internal->edit_person_request_pending = true;
+                internal->show_edit_person_panel = false;
+                internal->edit_person_form.confirm_delete = false;
+                ui_edit_person_set_error(internal, NULL);
+                ui_edit_person_form_reset(internal);
+                ui_internal_set_status(internal, "Edit-person request queued.");
+            }
+            else
+            {
+                ui_edit_person_set_error(internal, message);
+            }
+        }
+        if (nk_button_label(ctx, "Cancel"))
+        {
+            internal->show_edit_person_panel = false;
+            internal->edit_person_form.confirm_delete = false;
+            ui_edit_person_set_error(internal, NULL);
+            ui_edit_person_form_reset(internal);
+            ui_internal_set_status(internal, "Edit panel closed.");
+        }
+
+        nk_layout_row_dynamic(ctx, internal->edit_person_form.confirm_delete ? 26.0f : 24.0f,
+                              internal->edit_person_form.confirm_delete ? 2 : 1);
+        if (!internal->edit_person_form.confirm_delete)
+        {
+            if (nk_button_label(ctx, "Delete Person..."))
+            {
+                internal->edit_person_form.confirm_delete = true;
+                ui_internal_set_status(internal, "Confirm deletion to remove profile.");
+            }
+        }
+        else
+        {
+            if (nk_button_label(ctx, "Confirm Delete"))
+            {
+                if (draft->person_id != 0U && ui_event_enqueue_with_u32(ui, UI_EVENT_DELETE_PERSON, draft->person_id))
+                {
+                    internal->show_edit_person_panel = false;
+                    ui_edit_person_set_error(internal, NULL);
+                    ui_edit_person_form_reset(internal);
+                    internal->edit_person_form.confirm_delete = false;
+                    ui_internal_set_status(internal, "Delete request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; delete aborted.");
+                }
+            }
+            if (nk_button_label(ctx, "Keep Person"))
+            {
+                internal->edit_person_form.confirm_delete = false;
+                ui_internal_set_status(internal, "Deletion cancelled.");
+            }
+        }
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, "Edit Person##Panel"))
+    {
+        internal->show_edit_person_panel = false;
+        internal->edit_person_form.confirm_delete = false;
+        ui_edit_person_set_error(internal, NULL);
+        ui_edit_person_form_reset(internal);
+    }
+}
+
 #endif /* ANCESTRYTREE_HAVE_RAYLIB && ANCESTRYTREE_HAVE_NUKLEAR */
 
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
@@ -2506,6 +3107,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     ui_draw_help_window(internal, ui);
     ui_draw_search_panel(internal, ui, tree);
     ui_draw_add_person_panel(internal, ui, tree);
+    ui_draw_edit_person_panel(internal, ui, tree);
     ui_draw_settings_window(internal, ui, settings, settings_dirty);
     ui_draw_exit_prompt(internal, ui);
     ui_draw_error_dialog(internal, ui);
@@ -2694,6 +3296,14 @@ bool ui_handle_escape(UIContext *ui)
         ui_add_person_form_reset(internal);
         dismissed = true;
     }
+    if (internal->show_edit_person_panel)
+    {
+        internal->show_edit_person_panel = false;
+        internal->edit_person_form.confirm_delete = false;
+        ui_edit_person_set_error(internal, NULL);
+        ui_edit_person_form_reset(internal);
+        dismissed = true;
+    }
     if (internal->show_settings_window)
     {
         internal->show_settings_window = false;
@@ -2728,6 +3338,86 @@ bool ui_consume_add_person_request(UIContext *ui, UIAddPersonRequest *out_reques
 #else
     (void)ui;
     (void)out_request;
+    return false;
+#endif
+}
+
+bool ui_open_edit_person_panel(UIContext *ui, const Person *person)
+{
+    if (!ui || !ui->available)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return false;
+    }
+    ui_edit_person_populate(internal, person);
+    if (person)
+    {
+        ui_internal_set_status(internal, "Edit panel opened for selected hologram.");
+    }
+    return person != NULL;
+#else
+    (void)person;
+    return false;
+#endif
+}
+
+bool ui_consume_edit_person_request(UIContext *ui, UIEditPersonRequest *out_request)
+{
+    if (!ui || !out_request)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal || !internal->edit_person_request_pending)
+    {
+        return false;
+    }
+    *out_request = internal->edit_person_request;
+    memset(&internal->edit_person_request, 0, sizeof(UIEditPersonRequest));
+    internal->edit_person_request_pending = false;
+    return true;
+#else
+    (void)ui;
+    (void)out_request;
+    return false;
+#endif
+}
+
+bool ui_pointer_over_ui(const UIContext *ui)
+{
+    if (!ui || !ui->available)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    const UIInternal *internal = ui_internal_const_cast(ui);
+    if (!internal)
+    {
+        return false;
+    }
+    const struct nk_context *ctx = &internal->ctx;
+    if (nk_item_is_any_active(ctx))
+    {
+        return true;
+    }
+    if (nk_window_is_any_hovered(ctx))
+    {
+        return true;
+    }
+    const struct nk_mouse *mouse = &ctx->input.mouse;
+    if ((mouse->grab != 0) || (mouse->grabbed != 0))
+    {
+        return true;
+    }
+    return false;
+#else
+    (void)ui;
     return false;
 #endif
 }

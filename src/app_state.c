@@ -1387,13 +1387,27 @@ static bool app_command_person_apply_parent(FamilyTree *tree, Person *person, Pe
             return false;
         }
     }
+    if (!person_add_child(parent, person))
+    {
+        return false;
+    }
     if (!person_set_parent(person, parent, slot))
     {
         return false;
     }
-    if (!person_add_child(parent, person))
+    for (size_t other_slot = 0U; other_slot < 2U; ++other_slot)
     {
-        return false;
+        if (other_slot == (size_t)slot)
+        {
+            continue;
+        }
+        if (person->parents[other_slot] == parent)
+        {
+            if (!person_clear_parent(person, (PersonParentSlot)other_slot))
+            {
+                return false;
+            }
+        }
     }
     return true;
 }
@@ -1562,6 +1576,8 @@ static bool app_command_edit_person_execute(AppCommand *command, AppState *state
         return false;
     }
     self->applied_new_state = true;
+    state->selected_person = person;
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     return true;
 }
@@ -1583,6 +1599,8 @@ static bool app_command_edit_person_undo(AppCommand *command, AppState *state)
         return false;
     }
     self->applied_new_state = false;
+    state->selected_person = person;
+    app_state_refresh_layout(state, state->active_layout_algorithm, false);
     state->tree_dirty = true;
     return true;
 }

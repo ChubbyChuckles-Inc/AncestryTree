@@ -644,6 +644,70 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             app_report_status(ui, logger, message);
         }
         break;
+    case UI_EVENT_DELETE_PERSON:
+    {
+        uint32_t person_id = event->param_u32;
+        if (!app_state || person_id == 0U)
+        {
+            app_report_error(ui, logger, "Invalid delete request.");
+            break;
+        }
+        char name_buffer[128];
+        name_buffer[0] = '\0';
+        if (tree && *tree)
+        {
+            Person *target = family_tree_find_person(*tree, person_id);
+            if (target && !person_format_display_name(target, name_buffer, sizeof(name_buffer)))
+            {
+                (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", target->id);
+            }
+        }
+        AppCommand *command = app_command_create_delete_person(person_id);
+        if (!command)
+        {
+            app_report_error(ui, logger, "Failed to build delete command.");
+            break;
+        }
+        char delete_error[256];
+        delete_error[0] = '\0';
+        if (!app_state_push_command(app_state, command, delete_error, sizeof(delete_error)))
+        {
+            char message[256];
+            if (delete_error[0] != '\0')
+            {
+                (void)snprintf(message, sizeof(message), "Unable to delete person: %s", delete_error);
+            }
+            else
+            {
+                (void)snprintf(message, sizeof(message), "Unable to delete person due to an unknown error.");
+            }
+            app_report_error(ui, logger, message);
+            break;
+        }
+        if (interaction_state)
+        {
+            interaction_clear_selection(interaction_state);
+        }
+        if (auto_save)
+        {
+            persistence_auto_save_mark_dirty(auto_save);
+        }
+        char status_message[192];
+        if (name_buffer[0] != '\0')
+        {
+            (void)snprintf(status_message, sizeof(status_message), "Deleted profile for %s.", name_buffer);
+        }
+        else
+        {
+            (void)snprintf(status_message, sizeof(status_message), "Deleted person #%u.", person_id);
+        }
+        app_report_status(ui, logger, status_message);
+        if (logger)
+        {
+            AT_LOG(logger, AT_LOG_INFO, "Deleted person %u via Edit Person panel", person_id);
+        }
+    }
+    break;
     case UI_EVENT_SAVE_SETTINGS:
     {
         if (!settings || !settings_path)
@@ -1102,6 +1166,147 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
     }
 }
 
+static void app_process_edit_person_requests(UIContext *ui, AppState *app_state, FamilyTree **tree,
+                                             LayoutResult *layout, InteractionState *interaction_state,
+                                             CameraController *camera, PersistenceAutoSave *auto_save,
+                                             AtLogger *logger)
+{
+    if (!ui)
+    {
+        return;
+    }
+
+    UIEditPersonRequest request;
+    while (ui_consume_edit_person_request(ui, &request))
+    {
+        if (!app_state || !tree || !layout || !interaction_state || !*tree)
+        {
+            app_report_error(ui, logger, "Cannot edit person: application state unavailable.");
+            continue;
+        }
+        if (request.person_id == 0U)
+        {
+            app_report_error(ui, logger, "Invalid edit request (missing person identifier).");
+            continue;
+        }
+
+        Person *person = family_tree_find_person(*tree, request.person_id);
+        if (!person)
+        {
+            char message[256];
+            (void)snprintf(message, sizeof(message), "Person %u not found in current tree.", request.person_id);
+            app_report_error(ui, logger, message);
+            continue;
+        }
+
+        AppPersonEditData edit_data;
+        memset(&edit_data, 0, sizeof(edit_data));
+        edit_data.first = request.first;
+        edit_data.middle = (request.middle[0] != '\0') ? request.middle : NULL;
+        edit_data.last = request.last;
+        edit_data.birth_date = request.birth_date;
+        edit_data.birth_location = (request.birth_location[0] != '\0') ? request.birth_location : NULL;
+        if (request.has_death)
+        {
+            edit_data.clear_death = false;
+            edit_data.death_date = request.death_date;
+            edit_data.death_location = (request.death_location[0] != '\0') ? request.death_location : NULL;
+        }
+        else
+        {
+            edit_data.clear_death = true;
+            edit_data.death_date = NULL;
+            edit_data.death_location = NULL;
+        }
+
+        edit_data.relationships.apply_father = request.update_father;
+        edit_data.relationships.father_id = request.father_id;
+        edit_data.relationships.apply_mother = request.update_mother;
+        edit_data.relationships.mother_id = request.mother_id;
+        edit_data.relationships.apply_spouses = request.update_spouses;
+        size_t spouse_count = request.spouse_count;
+        if (spouse_count > APP_PERSON_EDIT_MAX_SPOUSES)
+        {
+            spouse_count = APP_PERSON_EDIT_MAX_SPOUSES;
+        }
+        edit_data.relationships.spouse_count = spouse_count;
+        for (size_t index = 0U; index < spouse_count; ++index)
+        {
+            edit_data.relationships.spouse_ids[index] = request.spouse_ids[index];
+        }
+        for (size_t index = spouse_count; index < APP_PERSON_EDIT_MAX_SPOUSES; ++index)
+        {
+            edit_data.relationships.spouse_ids[index] = 0U;
+        }
+
+        AppCommand *command = app_command_create_edit_person(request.person_id, &edit_data);
+        if (!command)
+        {
+            app_report_error(ui, logger, "Failed to build edit command.");
+            continue;
+        }
+
+        char error_buffer[256];
+        error_buffer[0] = '\0';
+        if (!app_state_push_command(app_state, command, error_buffer, sizeof(error_buffer)))
+        {
+            char message[256];
+            if (error_buffer[0] != '\0')
+            {
+                (void)snprintf(message, sizeof(message), "Unable to edit person: %s", error_buffer);
+            }
+            else
+            {
+                (void)snprintf(message, sizeof(message), "Unable to edit person due to an unknown error.");
+            }
+            app_report_error(ui, logger, message);
+            continue;
+        }
+
+        Person *updated = family_tree_find_person(*tree, request.person_id);
+        if (interaction_state)
+        {
+            interaction_select_person(interaction_state, updated ? updated : person);
+        }
+
+        if (camera && layout && layout->nodes && updated)
+        {
+            for (size_t index = 0U; index < layout->count; ++index)
+            {
+                if (layout->nodes[index].person == updated)
+                {
+                    float radius = camera->config.default_radius;
+                    if (!(radius > 0.0f))
+                    {
+                        radius = 14.0f;
+                    }
+                    camera_controller_focus(camera, layout->nodes[index].position, radius);
+                    break;
+                }
+            }
+        }
+
+        if (auto_save)
+        {
+            persistence_auto_save_mark_dirty(auto_save);
+        }
+
+        char name_buffer[128];
+        Person *label_person = updated ? updated : person;
+        if (!label_person || !person_format_display_name(label_person, name_buffer, sizeof(name_buffer)))
+        {
+            (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", request.person_id);
+        }
+        char status_message[192];
+        (void)snprintf(status_message, sizeof(status_message), "Updated profile for %s.", name_buffer);
+        app_report_status(ui, logger, status_message);
+        if (logger)
+        {
+            AT_LOG(logger, AT_LOG_INFO, "Edited person %u via Edit Person panel", request.person_id);
+        }
+    }
+}
+
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                       LayoutResult *layout, InteractionState *interaction_state,
                                       RenderState *render_state, CameraController *camera, AtLogger *logger,
@@ -1177,6 +1382,8 @@ static void event_queue_handler(void *user_data, float delta_seconds)
                                  payload->auto_save, payload->settings_revision, payload->app_state);
     app_process_add_person_requests(payload->ui, payload->app_state, payload->tree, payload->layout,
                                     payload->interaction_state, payload->camera, payload->auto_save, payload->logger);
+    app_process_edit_person_requests(payload->ui, payload->app_state, payload->tree, payload->layout,
+                                     payload->interaction_state, payload->camera, payload->auto_save, payload->logger);
 }
 
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,

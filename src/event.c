@@ -71,7 +71,8 @@ void event_process(EventProcessContext *context, EventProcessPhase phase, float 
         {
             Vector2 mouse = GetMousePosition();
             interaction_update_hover(context->interaction_state, context->layout, context->camera, mouse.x, mouse.y);
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            bool pointer_over_ui = (context->ui != NULL) && ui_pointer_over_ui(context->ui);
+            if (!pointer_over_ui && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 bool keep_selection = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
                 interaction_select_at_cursor(context->interaction_state, context->layout, context->camera, mouse.x,
