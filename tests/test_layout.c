@@ -60,7 +60,7 @@ TEST(test_layout_descendants_positioned_on_lower_levels)
     LayoutResult result = layout_calculate(tree);
     ASSERT_EQ(result.count, tree->person_count);
 
-    LayoutNode *root_node = NULL;
+    LayoutNode *root_node  = NULL;
     LayoutNode *child_node = NULL;
     for (size_t index = 0U; index < result.count; ++index)
     {
@@ -91,7 +91,7 @@ static FamilyTree *layout_create_spouse_tree(void)
     }
 
     Person *alex = person_create(100U);
-    Person *sam = person_create(101U);
+    Person *sam  = person_create(101U);
     if (!alex || !sam)
     {
         person_destroy(alex);
@@ -154,8 +154,8 @@ static FamilyTree *layout_create_small_family_tree(void)
     {
         return NULL;
     }
-    Person *parent = person_create(210U);
-    Person *left_child = person_create(211U);
+    Person *parent      = person_create(210U);
+    Person *left_child  = person_create(211U);
     Person *right_child = person_create(212U);
     if (!parent || !left_child || !right_child)
     {
@@ -222,7 +222,7 @@ static FamilyTree *layout_create_generation_tree(size_t generations, size_t bran
         return NULL;
     }
 
-    uint32_t next_id = 301U;
+    uint32_t next_id             = 301U;
     Person **previous_generation = (Person **)calloc(branching, sizeof(Person *));
     if (!previous_generation)
     {
@@ -230,11 +230,11 @@ static FamilyTree *layout_create_generation_tree(size_t generations, size_t bran
         return NULL;
     }
     previous_generation[0] = current_parent;
-    size_t previous_count = 1U;
+    size_t previous_count  = 1U;
 
     for (size_t generation = 1U; generation < generations; ++generation)
     {
-        size_t new_count = previous_count * branching;
+        size_t new_count         = previous_count * branching;
         Person **next_generation = (Person **)calloc(new_count, sizeof(Person *));
         if (!next_generation)
         {
@@ -276,7 +276,7 @@ static FamilyTree *layout_create_generation_tree(size_t generations, size_t bran
         }
         free(previous_generation);
         previous_generation = next_generation;
-        previous_count = cursor;
+        previous_count      = cursor;
     }
 
     free(previous_generation);
@@ -290,9 +290,9 @@ static FamilyTree *layout_create_complex_tree(void)
     {
         return NULL;
     }
-    Person *parent_a = person_create(400U);
-    Person *parent_b = person_create(401U);
-    Person *parent_c = person_create(402U);
+    Person *parent_a  = person_create(400U);
+    Person *parent_b  = person_create(401U);
+    Person *parent_c  = person_create(402U);
     Person *child_one = person_create(403U);
     Person *child_two = person_create(404U);
     if (!parent_a || !parent_b || !parent_c || !child_one || !child_two)
@@ -399,8 +399,8 @@ TEST(test_layout_small_family_balanced_around_parent)
     ASSERT_EQ(result.count, tree->person_count);
 
     const LayoutNode *parent_node = NULL;
-    const LayoutNode *left_node = NULL;
-    const LayoutNode *right_node = NULL;
+    const LayoutNode *left_node   = NULL;
+    const LayoutNode *right_node  = NULL;
     for (size_t index = 0U; index < result.count; ++index)
     {
         const Person *person = result.nodes[index].person;
@@ -445,7 +445,7 @@ TEST(test_layout_spouses_positioned_side_by_side)
     ASSERT_EQ(result.count, tree->person_count);
 
     const LayoutNode *alex_node = NULL;
-    const LayoutNode *sam_node = NULL;
+    const LayoutNode *sam_node  = NULL;
     for (size_t index = 0U; index < result.count; ++index)
     {
         if (!result.nodes[index].person)
@@ -466,7 +466,8 @@ TEST(test_layout_spouses_positioned_side_by_side)
     ASSERT_NOT_NULL(sam_node);
     ASSERT_FLOAT_NEAR(alex_node->position[1], sam_node->position[1], 0.0001f);
     const float expected_spacing = 2.0f;
-    ASSERT_FLOAT_NEAR(fabsf(alex_node->position[0] - sam_node->position[0]), expected_spacing, 0.001f);
+    ASSERT_FLOAT_NEAR(fabsf(alex_node->position[0] - sam_node->position[0]), expected_spacing,
+                      0.001f);
 
     layout_result_destroy(&result);
     family_tree_destroy(tree);
@@ -496,7 +497,7 @@ TEST(test_layout_multiple_generations_stack_levels)
     ASSERT_EQ(result.count, tree->person_count);
 
     float highest_level = -INFINITY;
-    float lowest_level = INFINITY;
+    float lowest_level  = INFINITY;
     for (size_t index = 0U; index < result.count; ++index)
     {
         float level = result.nodes[index].position[1];
@@ -561,11 +562,11 @@ TEST(test_layout_complex_relationships_remain_finite)
 
 TEST(test_layout_force_directed_preserves_levels)
 {
-    FamilyTree *tree = test_build_sample_tree();
+    FamilyTree *tree = layout_create_small_family_tree();
     ASSERT_NOT_NULL(tree);
 
     LayoutResult hierarchical = layout_calculate(tree);
-    LayoutResult force = layout_calculate_force_directed(tree);
+    LayoutResult force        = layout_calculate_force_directed(tree);
     ASSERT_EQ(force.count, hierarchical.count);
 
     bool any_moved = false;
@@ -595,16 +596,16 @@ TEST(test_layout_animate_interpolates_between_layouts)
     FamilyTree *tree = test_build_sample_tree();
     ASSERT_NOT_NULL(tree);
 
-    LayoutResult start = layout_calculate(tree);
-    LayoutResult target = layout_calculate_force_directed(tree);
+    LayoutResult start   = layout_calculate(tree);
+    LayoutResult target  = layout_calculate_force_directed(tree);
     LayoutResult blended = {0};
 
     ASSERT_TRUE(layout_animate(&start, &target, 0.5f, &blended));
     ASSERT_EQ(blended.count, target.count);
 
-    const LayoutNode *start_root = find_node_by_id(&start, 1U);
+    const LayoutNode *start_root  = find_node_by_id(&start, 1U);
     const LayoutNode *target_root = find_node_by_id(&target, 1U);
-    const LayoutNode *blend_root = find_node_by_id(&blended, 1U);
+    const LayoutNode *blend_root  = find_node_by_id(&blended, 1U);
     ASSERT_NOT_NULL(start_root);
     ASSERT_NOT_NULL(target_root);
     ASSERT_NOT_NULL(blend_root);
@@ -621,6 +622,88 @@ TEST(test_layout_animate_interpolates_between_layouts)
     family_tree_destroy(tree);
 }
 
+TEST(test_layout_cache_invalidation_on_structure_change)
+{
+    LayoutCache cache;
+    layout_cache_init(&cache);
+
+    FamilyTree *tree = layout_create_small_family_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult initial_layout;
+    ASSERT_TRUE(
+        layout_cache_calculate(&cache, tree, LAYOUT_ALGORITHM_HIERARCHICAL, &initial_layout));
+    ASSERT_EQ(initial_layout.count, tree->person_count);
+
+    size_t original_count = initial_layout.count;
+    layout_result_destroy(&initial_layout);
+
+    Person *parent = tree->persons[0];
+    ASSERT_NOT_NULL(parent);
+
+    Person *new_child = person_create(999U);
+    ASSERT_NOT_NULL(new_child);
+    person_set_name(new_child, "New", NULL, "Child");
+    person_set_birth(new_child, "2015-05-05", "Base");
+    ASSERT_TRUE(person_add_child(parent, new_child));
+    ASSERT_TRUE(family_tree_add_person(tree, new_child));
+
+    LayoutResult updated_layout;
+    ASSERT_TRUE(
+        layout_cache_calculate(&cache, tree, LAYOUT_ALGORITHM_HIERARCHICAL, &updated_layout));
+    ASSERT_EQ(updated_layout.count, tree->person_count);
+    ASSERT_EQ(updated_layout.count, original_count + 1U);
+
+    layout_result_destroy(&updated_layout);
+    layout_cache_reset(&cache);
+    family_tree_destroy(tree);
+}
+
+TEST(test_layout_cache_handles_multiple_algorithms)
+{
+    LayoutCache cache;
+    layout_cache_init(&cache);
+
+    FamilyTree *tree = test_build_sample_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult hierarchical_layout;
+    ASSERT_TRUE(
+        layout_cache_calculate(&cache, tree, LAYOUT_ALGORITHM_HIERARCHICAL, &hierarchical_layout));
+    ASSERT_EQ(hierarchical_layout.count, tree->person_count);
+
+    LayoutResult force_layout;
+    ASSERT_TRUE(
+        layout_cache_calculate(&cache, tree, LAYOUT_ALGORITHM_FORCE_DIRECTED, &force_layout));
+    ASSERT_EQ(force_layout.count, tree->person_count);
+
+    bool hierarchical_cached = false;
+    bool force_cached        = false;
+    for (size_t index = 0U; index < cache.count && index < LAYOUT_CACHE_MAX_ENTRIES; ++index)
+    {
+        if (!cache.entries[index].valid)
+        {
+            continue;
+        }
+        if (cache.entries[index].algorithm == LAYOUT_ALGORITHM_HIERARCHICAL)
+        {
+            hierarchical_cached = true;
+        }
+        else if (cache.entries[index].algorithm == LAYOUT_ALGORITHM_FORCE_DIRECTED)
+        {
+            force_cached = true;
+        }
+    }
+
+    ASSERT_TRUE(hierarchical_cached);
+    ASSERT_TRUE(force_cached);
+
+    layout_result_destroy(&hierarchical_layout);
+    layout_result_destroy(&force_layout);
+    layout_cache_reset(&cache);
+    family_tree_destroy(tree);
+}
+
 void register_layout_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_layout_assigns_positions_for_all_persons);
@@ -632,4 +715,8 @@ void register_layout_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_layout_multiple_generations_stack_levels);
     REGISTER_TEST(registry, test_layout_large_family_has_unique_horizontal_spacing);
     REGISTER_TEST(registry, test_layout_complex_relationships_remain_finite);
+    REGISTER_TEST(registry, test_layout_force_directed_preserves_levels);
+    REGISTER_TEST(registry, test_layout_animate_interpolates_between_layouts);
+    REGISTER_TEST(registry, test_layout_cache_invalidation_on_structure_change);
+    REGISTER_TEST(registry, test_layout_cache_handles_multiple_algorithms);
 }

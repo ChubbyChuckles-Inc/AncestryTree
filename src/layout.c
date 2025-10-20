@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -75,8 +76,8 @@ void layout_result_move(LayoutResult *destination, LayoutResult *source)
     layout_result_destroy(destination);
     destination->nodes = source->nodes;
     destination->count = source->count;
-    source->nodes = NULL;
-    source->count = 0U;
+    source->nodes      = NULL;
+    source->count      = 0U;
 }
 
 static bool layout_allocate_nodes(LayoutResult *result, size_t count)
@@ -94,7 +95,225 @@ static bool layout_allocate_nodes(LayoutResult *result, size_t count)
     return true;
 }
 
-static size_t layout_collect_generation(Person **buffer, size_t capacity, const Person *const *previous_generation,
+void layout_cache_init(LayoutCache *cache)
+{
+    if (!cache)
+    {
+        return;
+    }
+    cache->count      = 0U;
+    cache->next_index = 0U;
+    for (size_t index = 0U; index < LAYOUT_CACHE_MAX_ENTRIES; ++index)
+    {
+        cache->entries[index].algorithm    = LAYOUT_ALGORITHM_HIERARCHICAL;
+        cache->entries[index].signature    = 0U;
+        cache->entries[index].layout.nodes = NULL;
+        cache->entries[index].layout.count = 0U;
+        cache->entries[index].valid        = false;
+    }
+}
+
+void layout_cache_reset(LayoutCache *cache)
+{
+    if (!cache)
+    {
+        return;
+    }
+    for (size_t index = 0U; index < LAYOUT_CACHE_MAX_ENTRIES; ++index)
+    {
+        if (cache->entries[index].valid)
+        {
+            layout_result_destroy(&cache->entries[index].layout);
+        }
+        cache->entries[index].layout.nodes = NULL;
+        cache->entries[index].layout.count = 0U;
+        cache->entries[index].signature    = 0U;
+        cache->entries[index].algorithm    = LAYOUT_ALGORITHM_HIERARCHICAL;
+        cache->entries[index].valid        = false;
+    }
+    cache->count      = 0U;
+    cache->next_index = 0U;
+}
+
+void layout_cache_invalidate(LayoutCache *cache) { layout_cache_reset(cache); }
+
+static uint64_t layout_hash_mix(uint64_t hash, uint64_t value)
+{
+    const uint64_t prime = 1099511628211ULL;
+    hash ^= value;
+    hash *= prime;
+    return hash;
+}
+
+static uint64_t layout_person_signature(uint64_t hash, const Person *person)
+{
+    if (!person)
+    {
+        return layout_hash_mix(hash, 0ULL);
+    }
+
+    hash = layout_hash_mix(hash, (uint64_t)person->id);
+    hash = layout_hash_mix(hash, (uint64_t)(person->is_alive ? 1U : 0U));
+
+    for (size_t parent_index = 0U; parent_index < 2U; ++parent_index)
+    {
+        const Person *parent = person->parents[parent_index];
+        uint64_t parent_id   = parent ? (uint64_t)parent->id : 0ULL;
+        hash                 = layout_hash_mix(hash, parent_id);
+    }
+
+    hash = layout_hash_mix(hash, (uint64_t)person->children_count);
+    for (size_t child_index = 0U; child_index < person->children_count; ++child_index)
+    {
+        const Person *child = person->children[child_index];
+        uint64_t child_id   = child ? (uint64_t)child->id : 0ULL;
+        hash                = layout_hash_mix(hash, child_id);
+    }
+
+    hash = layout_hash_mix(hash, (uint64_t)person->spouses_count);
+    for (size_t spouse_index = 0U; spouse_index < person->spouses_count; ++spouse_index)
+    {
+        const Person *partner = person->spouses[spouse_index].partner;
+        uint64_t partner_id   = partner ? (uint64_t)partner->id : 0ULL;
+        hash                  = layout_hash_mix(hash, partner_id);
+    }
+
+    return hash;
+}
+
+static uint64_t layout_tree_signature(const FamilyTree *tree)
+{
+    const uint64_t offset = 1469598103934665603ULL;
+    if (!tree)
+    {
+        return offset;
+    }
+
+    uint64_t hash = layout_hash_mix(offset, (uint64_t)tree->person_count);
+    for (size_t index = 0U; index < tree->person_count; ++index)
+    {
+        hash = layout_person_signature(hash, tree->persons[index]);
+    }
+    return hash;
+}
+
+static LayoutCacheEntry *layout_cache_find(LayoutCache *cache, uint64_t signature,
+                                           LayoutAlgorithm algorithm)
+{
+    if (!cache)
+    {
+        return NULL;
+    }
+    for (size_t index = 0U; index < cache->count && index < LAYOUT_CACHE_MAX_ENTRIES; ++index)
+    {
+        LayoutCacheEntry *entry = &cache->entries[index];
+        if (!entry->valid)
+        {
+            continue;
+        }
+        if (entry->signature == signature && entry->algorithm == algorithm)
+        {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+static LayoutCacheEntry *layout_cache_store(LayoutCache *cache, LayoutAlgorithm algorithm,
+                                            uint64_t signature, LayoutResult *layout)
+{
+    if (!cache || !layout)
+    {
+        return NULL;
+    }
+
+    LayoutCacheEntry *entry = NULL;
+    for (size_t index = 0U; index < cache->count; ++index)
+    {
+        LayoutCacheEntry *candidate = &cache->entries[index];
+        if (!candidate->valid || candidate->algorithm == algorithm)
+        {
+            entry = candidate;
+            break;
+        }
+    }
+
+    if (!entry)
+    {
+        if (cache->count < LAYOUT_CACHE_MAX_ENTRIES)
+        {
+            entry = &cache->entries[cache->count++];
+        }
+        else
+        {
+            size_t slot       = cache->next_index % LAYOUT_CACHE_MAX_ENTRIES;
+            cache->next_index = (cache->next_index + 1U) % LAYOUT_CACHE_MAX_ENTRIES;
+            entry             = &cache->entries[slot];
+        }
+    }
+
+    layout_result_destroy(&entry->layout);
+    layout_result_move(&entry->layout, layout);
+    entry->algorithm = algorithm;
+    entry->signature = signature;
+    entry->valid     = true;
+    return entry;
+}
+
+bool layout_cache_calculate(LayoutCache *cache, const FamilyTree *tree, LayoutAlgorithm algorithm,
+                            LayoutResult *out)
+{
+    if (!out)
+    {
+        return false;
+    }
+    out->nodes = NULL;
+    out->count = 0U;
+
+    if (!tree || tree->person_count == 0U)
+    {
+        return true;
+    }
+
+    uint64_t signature = layout_tree_signature(tree);
+
+    LayoutCacheEntry *entry = layout_cache_find(cache, signature, algorithm);
+    if (entry)
+    {
+        return layout_result_copy(out, &entry->layout);
+    }
+
+    LayoutResult computed = layout_calculate_with_algorithm(tree, algorithm);
+    if (!computed.nodes && computed.count > 0U)
+    {
+        layout_result_destroy(&computed);
+        return false;
+    }
+
+    if (!cache)
+    {
+        out->nodes = computed.nodes;
+        out->count = computed.count;
+        return true;
+    }
+
+    LayoutCacheEntry *stored = layout_cache_store(cache, algorithm, signature, &computed);
+    if (!stored)
+    {
+        layout_result_destroy(&computed);
+        return false;
+    }
+
+    if (!layout_result_copy(out, &stored->layout))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+static size_t layout_collect_generation(Person **buffer, size_t capacity,
+                                        const Person *const *previous_generation,
                                         size_t previous_count)
 {
     size_t count = 0U;
@@ -150,8 +369,8 @@ static int layout_find_person_index(Person *const *generation, size_t count, con
     return -1;
 }
 
-static const Person *layout_find_generation_spouse(Person *const *generation, size_t count, const Person *person,
-                                                   const bool *assigned)
+static const Person *layout_find_generation_spouse(Person *const *generation, size_t count,
+                                                   const Person *person, const bool *assigned)
 {
     if (!generation || !person)
     {
@@ -230,7 +449,8 @@ typedef struct LayoutEdge
     size_t end;
 } LayoutEdge;
 
-static bool layout_force_edge_exists(const LayoutEdge *edges, size_t count, size_t start, size_t end)
+static bool layout_force_edge_exists(const LayoutEdge *edges, size_t count, size_t start,
+                                     size_t end)
 {
     for (size_t index = 0U; index < count; ++index)
     {
@@ -243,7 +463,8 @@ static bool layout_force_edge_exists(const LayoutEdge *edges, size_t count, size
     return false;
 }
 
-static bool layout_force_add_edge(LayoutEdge **edges, size_t *count, size_t *capacity, size_t start, size_t end)
+static bool layout_force_add_edge(LayoutEdge **edges, size_t *count, size_t *capacity, size_t start,
+                                  size_t end)
 {
     if (!edges || !count || !capacity)
     {
@@ -265,17 +486,17 @@ static bool layout_force_add_edge(LayoutEdge **edges, size_t *count, size_t *cap
         {
             return false;
         }
-        *edges = resized;
+        *edges    = resized;
         *capacity = new_capacity;
     }
     (*edges)[*count].start = start;
-    (*edges)[*count].end = end;
+    (*edges)[*count].end   = end;
     *count += 1U;
     return true;
 }
 
-static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Person *const *generation, size_t count,
-                                     float vertical_level)
+static void layout_assign_generation(LayoutNode *nodes, size_t start_index,
+                                     Person *const *generation, size_t count, float vertical_level)
 {
     if (!nodes || !generation)
     {
@@ -287,17 +508,18 @@ static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Pers
     }
 
     Person **ordered = (Person **)calloc(count, sizeof(Person *));
-    bool *assigned = (bool *)calloc(count, sizeof(bool));
+    bool *assigned   = (bool *)calloc(count, sizeof(bool));
     if (!ordered || !assigned)
     {
         free(ordered);
         free(assigned);
-        const float total_width_fallback = (float)(count > 0U ? count - 1U : 0U) * LAYOUT_HORIZONTAL_SPACING;
+        const float total_width_fallback =
+            (float)(count > 0U ? count - 1U : 0U) * LAYOUT_HORIZONTAL_SPACING;
         const float origin_fallback = -total_width_fallback / 2.0f;
         for (size_t index = 0U; index < count; ++index)
         {
-            LayoutNode *node = &nodes[start_index + index];
-            node->person = generation[index];
+            LayoutNode *node  = &nodes[start_index + index];
+            node->person      = generation[index];
             node->position[0] = origin_fallback + (float)index * LAYOUT_HORIZONTAL_SPACING;
             node->position[1] = vertical_level;
             node->position[2] = 0.0f;
@@ -312,9 +534,9 @@ static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Pers
         {
             continue;
         }
-        Person *person = generation[index];
+        Person *person           = generation[index];
         ordered[ordered_count++] = person;
-        assigned[index] = true;
+        assigned[index]          = true;
 
         const Person *spouse = layout_find_generation_spouse(generation, count, person, assigned);
         if (spouse)
@@ -323,7 +545,7 @@ static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Pers
             if (spouse_index >= 0 && !assigned[spouse_index])
             {
                 ordered[ordered_count++] = generation[spouse_index];
-                assigned[spouse_index] = true;
+                assigned[spouse_index]   = true;
             }
         }
     }
@@ -332,7 +554,7 @@ static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Pers
     {
         for (size_t index = 0U; index < count && ordered_count < count; ++index)
         {
-            Person *person = generation[index];
+            Person *person     = generation[index];
             bool already_added = false;
             for (size_t scan = 0U; scan < ordered_count; ++scan)
             {
@@ -349,12 +571,13 @@ static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Pers
         }
     }
 
-    const float total_width = (float)(ordered_count > 0U ? ordered_count - 1U : 0U) * LAYOUT_HORIZONTAL_SPACING;
+    const float total_width =
+        (float)(ordered_count > 0U ? ordered_count - 1U : 0U) * LAYOUT_HORIZONTAL_SPACING;
     const float origin = -total_width / 2.0f;
     for (size_t index = 0U; index < ordered_count; ++index)
     {
-        LayoutNode *node = &nodes[start_index + index];
-        node->person = ordered[index];
+        LayoutNode *node  = &nodes[start_index + index];
+        node->person      = ordered[index];
         node->position[0] = origin + (float)index * LAYOUT_HORIZONTAL_SPACING;
         node->position[1] = vertical_level;
         node->position[2] = 0.0f;
@@ -404,9 +627,9 @@ static LayoutResult layout_calculate_hierarchical_internal(const FamilyTree *tre
         return result;
     }
 
-    size_t node_index = 0U;
+    size_t node_index           = 0U;
     Person **current_generation = calloc(tree->person_count, sizeof(Person *));
-    Person **next_generation = calloc(tree->person_count, sizeof(Person *));
+    Person **next_generation    = calloc(tree->person_count, sizeof(Person *));
     if (!current_generation || !next_generation)
     {
         free(scratch);
@@ -441,8 +664,9 @@ static LayoutResult layout_calculate_hierarchical_internal(const FamilyTree *tre
         node_index += root_count;
         level -= LAYOUT_VERTICAL_SPACING;
 
-        size_t next_count = layout_collect_generation(next_generation, tree->person_count,
-                                                      (const Person *const *)current_generation, root_count);
+        size_t next_count =
+            layout_collect_generation(next_generation, tree->person_count,
+                                      (const Person *const *)current_generation, root_count);
         memset(current_generation, 0, sizeof(Person *) * tree->person_count);
         memcpy(current_generation, next_generation, sizeof(Person *) * next_count);
         memset(next_generation, 0, sizeof(Person *) * tree->person_count);
@@ -467,7 +691,7 @@ static bool layout_force_prepare_edges(LayoutResult *layout, LayoutEdge **edges,
     {
         return false;
     }
-    *edge_count = 0U;
+    *edge_count    = 0U;
     *edge_capacity = layout->count * 4U;
     if (*edge_capacity < 8U)
     {
@@ -488,30 +712,34 @@ static bool layout_force_prepare_edges(LayoutResult *layout, LayoutEdge **edges,
         {
             continue;
         }
-        for (size_t child_index = 0U; child_index < person->children_count && success; ++child_index)
+        for (size_t child_index = 0U; child_index < person->children_count && success;
+             ++child_index)
         {
-            Person *child = person->children[child_index];
+            Person *child          = person->children[child_index];
             int child_layout_index = layout_find_node_index(layout, child);
             if (child_layout_index >= 0)
             {
-                success = layout_force_add_edge(edges, edge_count, edge_capacity, index, (size_t)child_layout_index);
+                success = layout_force_add_edge(edges, edge_count, edge_capacity, index,
+                                                (size_t)child_layout_index);
             }
         }
-        for (size_t spouse_index = 0U; spouse_index < person->spouses_count && success; ++spouse_index)
+        for (size_t spouse_index = 0U; spouse_index < person->spouses_count && success;
+             ++spouse_index)
         {
-            const Person *partner = person->spouses[spouse_index].partner;
+            const Person *partner    = person->spouses[spouse_index].partner;
             int partner_layout_index = layout_find_node_index(layout, partner);
             if (partner_layout_index >= 0)
             {
-                success = layout_force_add_edge(edges, edge_count, edge_capacity, index, (size_t)partner_layout_index);
+                success = layout_force_add_edge(edges, edge_count, edge_capacity, index,
+                                                (size_t)partner_layout_index);
             }
         }
     }
     if (!success)
     {
         free(*edges);
-        *edges = NULL;
-        *edge_count = 0U;
+        *edges         = NULL;
+        *edge_count    = 0U;
         *edge_capacity = 0U;
         return false;
     }
@@ -526,9 +754,9 @@ LayoutResult layout_calculate_force_directed(const FamilyTree *tree)
         return result;
     }
 
-    size_t count = result.count;
+    size_t count         = result.count;
     float (*velocity)[3] = (float (*)[3])calloc(count, sizeof(float[3]));
-    float (*forces)[3] = (float (*)[3])calloc(count, sizeof(float[3]));
+    float (*forces)[3]   = (float (*)[3])calloc(count, sizeof(float[3]));
     float *layer_targets = (float *)calloc(count, sizeof(float));
     if (!velocity || !forces || !layer_targets)
     {
@@ -542,13 +770,13 @@ LayoutResult layout_calculate_force_directed(const FamilyTree *tree)
         layer_targets[index] = result.nodes[index].position[1];
     }
 
-    LayoutEdge *edges = NULL;
-    size_t edge_count = 0U;
+    LayoutEdge *edges    = NULL;
+    size_t edge_count    = 0U;
     size_t edge_capacity = 0U;
     if (!layout_force_prepare_edges(&result, &edges, &edge_count, &edge_capacity))
     {
         edge_count = 0U;
-        edges = NULL;
+        edges      = NULL;
     }
 
     const float epsilon = 0.0001f;
@@ -565,16 +793,16 @@ LayoutResult layout_calculate_force_directed(const FamilyTree *tree)
         {
             for (size_t j = i + 1U; j < count; ++j)
             {
-                float dx = result.nodes[i].position[0] - result.nodes[j].position[0];
-                float dy = result.nodes[i].position[1] - result.nodes[j].position[1];
-                float dz = result.nodes[i].position[2] - result.nodes[j].position[2];
-                float distance_sq = dx * dx + dy * dy + dz * dz + epsilon;
-                float distance = sqrtf(distance_sq);
+                float dx           = result.nodes[i].position[0] - result.nodes[j].position[0];
+                float dy           = result.nodes[i].position[1] - result.nodes[j].position[1];
+                float dz           = result.nodes[i].position[2] - result.nodes[j].position[2];
+                float distance_sq  = dx * dx + dy * dy + dz * dz + epsilon;
+                float distance     = sqrtf(distance_sq);
                 float inv_distance = (distance > epsilon) ? (1.0f / distance) : 0.0f;
-                float magnitude = LAYOUT_FORCE_REPULSION / distance_sq;
-                float fx = dx * inv_distance * magnitude;
-                float fy = dy * inv_distance * magnitude;
-                float fz = dz * inv_distance * magnitude;
+                float magnitude    = LAYOUT_FORCE_REPULSION / distance_sq;
+                float fx           = dx * inv_distance * magnitude;
+                float fy           = dy * inv_distance * magnitude;
+                float fz           = dz * inv_distance * magnitude;
                 forces[i][0] += fx;
                 forces[i][1] += fy;
                 forces[i][2] += fz;
@@ -587,22 +815,22 @@ LayoutResult layout_calculate_force_directed(const FamilyTree *tree)
         for (size_t edge_index = 0U; edge_index < edge_count; ++edge_index)
         {
             size_t start = edges[edge_index].start;
-            size_t end = edges[edge_index].end;
+            size_t end   = edges[edge_index].end;
             if (start >= count || end >= count)
             {
                 continue;
             }
-            float dx = result.nodes[end].position[0] - result.nodes[start].position[0];
-            float dy = result.nodes[end].position[1] - result.nodes[start].position[1];
-            float dz = result.nodes[end].position[2] - result.nodes[start].position[2];
-            float distance_sq = dx * dx + dy * dy + dz * dz + epsilon;
-            float distance = sqrtf(distance_sq);
+            float dx           = result.nodes[end].position[0] - result.nodes[start].position[0];
+            float dy           = result.nodes[end].position[1] - result.nodes[start].position[1];
+            float dz           = result.nodes[end].position[2] - result.nodes[start].position[2];
+            float distance_sq  = dx * dx + dy * dy + dz * dz + epsilon;
+            float distance     = sqrtf(distance_sq);
             float inv_distance = (distance > epsilon) ? (1.0f / distance) : 0.0f;
             float displacement = distance - LAYOUT_FORCE_TARGET_DISTANCE;
-            float magnitude = LAYOUT_FORCE_SPRING * displacement;
-            float fx = dx * inv_distance * magnitude;
-            float fy = dy * inv_distance * magnitude;
-            float fz = dz * inv_distance * magnitude;
+            float magnitude    = LAYOUT_FORCE_SPRING * displacement;
+            float fx           = dx * inv_distance * magnitude;
+            float fy           = dy * inv_distance * magnitude;
+            float fz           = dz * inv_distance * magnitude;
             forces[start][0] += fx;
             forces[start][1] += fy;
             forces[start][2] += fz;
@@ -616,9 +844,12 @@ LayoutResult layout_calculate_force_directed(const FamilyTree *tree)
             float vertical_offset = result.nodes[index].position[1] - layer_targets[index];
             forces[index][1] -= vertical_offset * LAYOUT_FORCE_LAYER_STRENGTH;
 
-            velocity[index][0] = (velocity[index][0] + forces[index][0] * LAYOUT_FORCE_TIMESTEP) * LAYOUT_FORCE_DAMPING;
-            velocity[index][1] = (velocity[index][1] + forces[index][1] * LAYOUT_FORCE_TIMESTEP) * LAYOUT_FORCE_DAMPING;
-            velocity[index][2] = (velocity[index][2] + forces[index][2] * LAYOUT_FORCE_TIMESTEP) * LAYOUT_FORCE_DAMPING;
+            velocity[index][0] = (velocity[index][0] + forces[index][0] * LAYOUT_FORCE_TIMESTEP) *
+                                 LAYOUT_FORCE_DAMPING;
+            velocity[index][1] = (velocity[index][1] + forces[index][1] * LAYOUT_FORCE_TIMESTEP) *
+                                 LAYOUT_FORCE_DAMPING;
+            velocity[index][2] = (velocity[index][2] + forces[index][2] * LAYOUT_FORCE_TIMESTEP) *
+                                 LAYOUT_FORCE_DAMPING;
 
             result.nodes[index].position[0] += velocity[index][0] * LAYOUT_FORCE_TIMESTEP;
             result.nodes[index].position[1] += velocity[index][1] * LAYOUT_FORCE_TIMESTEP;
@@ -677,7 +908,8 @@ LayoutResult layout_calculate_with_algorithm(const FamilyTree *tree, LayoutAlgor
     return layout_calculate_hierarchical_internal(tree);
 }
 
-bool layout_animate(const LayoutResult *from, const LayoutResult *to, float alpha, LayoutResult *out)
+bool layout_animate(const LayoutResult *from, const LayoutResult *to, float alpha,
+                    LayoutResult *out)
 {
     if (!out)
     {
@@ -699,8 +931,8 @@ bool layout_animate(const LayoutResult *from, const LayoutResult *to, float alph
     }
 
     size_t from_count = (from && from->nodes) ? from->count : 0U;
-    size_t to_count = (to && to->nodes) ? to->count : 0U;
-    size_t capacity = from_count + to_count;
+    size_t to_count   = (to && to->nodes) ? to->count : 0U;
+    size_t capacity   = from_count + to_count;
     if (capacity == 0U)
     {
         layout_result_destroy(out);
@@ -719,8 +951,9 @@ bool layout_animate(const LayoutResult *from, const LayoutResult *to, float alph
         for (size_t index = 0U; index < to->count; ++index)
         {
             const LayoutNode *target_node = &to->nodes[index];
-            const LayoutNode *start_node = layout_find_node(from, target_node->person);
-            float start_position[3] = {target_node->position[0], target_node->position[1], target_node->position[2]};
+            const LayoutNode *start_node  = layout_find_node(from, target_node->person);
+            float start_position[3]       = {target_node->position[0], target_node->position[1],
+                                             target_node->position[2]};
             if (start_node)
             {
                 start_position[0] = start_node->position[0];
@@ -730,8 +963,8 @@ bool layout_animate(const LayoutResult *from, const LayoutResult *to, float alph
             nodes[count].person = target_node->person;
             for (size_t axis = 0U; axis < 3U; ++axis)
             {
-                float target_coord = target_node->position[axis];
-                float start_coord = start_position[axis];
+                float target_coord          = target_node->position[axis];
+                float start_coord           = start_position[axis];
                 nodes[count].position[axis] = start_coord + (target_coord - start_coord) * alpha;
             }
             count += 1U;

@@ -6,8 +6,8 @@
 #include "layout.h"
 #include "person.h"
 #include "settings.h"
-#include "tree.h"
 #include "timeline.h"
+#include "tree.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -68,6 +68,7 @@ extern "C"
     {
         FamilyTree **tree;
         LayoutResult *layout;
+        LayoutCache layout_cache;
         LayoutResult layout_transition_start;
         LayoutResult layout_transition_target;
         InteractionState *interaction;
@@ -144,22 +145,28 @@ extern "C"
     } AppPersonCreateData;
 
     void app_state_init(AppState *state);
-    bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layout, InteractionState *interaction,
-                             CameraController *camera, Settings *settings, Settings *persisted_settings);
+    bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layout,
+                             InteractionState *interaction, CameraController *camera,
+                             Settings *settings, Settings *persisted_settings);
     void app_state_shutdown(AppState *state);
     void app_state_reset_history(AppState *state);
     void app_state_tick(AppState *state, float delta_seconds);
 
-    bool app_state_push_command(AppState *state, AppCommand *command, char *error_buffer, size_t error_buffer_size);
+    bool app_state_push_command(AppState *state, AppCommand *command, char *error_buffer,
+                                size_t error_buffer_size);
     bool app_state_undo(AppState *state, char *error_buffer, size_t error_buffer_size);
     bool app_state_redo(AppState *state, char *error_buffer, size_t error_buffer_size);
 
-    bool app_state_add_person(AppState *state, Person *person, char *error_buffer, size_t error_buffer_size);
-    bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_buffer, size_t error_buffer_size);
-    bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonEditData *edit_data,
-                               char *error_buffer, size_t error_buffer_size);
-    bool app_state_create_person(AppState *state, const AppPersonCreateData *data, uint32_t *out_person_id,
-                                 char *error_buffer, size_t error_buffer_size);
+    bool app_state_add_person(AppState *state, Person *person, char *error_buffer,
+                              size_t error_buffer_size);
+    bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_buffer,
+                                 size_t error_buffer_size);
+    bool app_state_edit_person(AppState *state, uint32_t person_id,
+                               const AppPersonEditData *edit_data, char *error_buffer,
+                               size_t error_buffer_size);
+    bool app_state_create_person(AppState *state, const AppPersonCreateData *data,
+                                 uint32_t *out_person_id, char *error_buffer,
+                                 size_t error_buffer_size);
 
     bool app_state_is_tree_dirty(const AppState *state);
     bool app_state_is_history_empty(const AppState *state);
@@ -168,7 +175,8 @@ extern "C"
 
     AppCommand *app_command_create_add_person(Person *person);
     AppCommand *app_command_create_delete_person(uint32_t person_id);
-    AppCommand *app_command_create_edit_person(uint32_t person_id, const AppPersonEditData *edit_data);
+    AppCommand *app_command_create_edit_person(uint32_t person_id,
+                                               const AppPersonEditData *edit_data);
 
 #ifdef __cplusplus
 }

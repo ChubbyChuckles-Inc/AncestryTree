@@ -5,10 +5,10 @@
 #include "layout.h"
 #include "person.h"
 
+#include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <limits.h>
 
 static LayoutAlgorithm app_state_resolve_algorithm_from_settings(const Settings *settings);
 
@@ -36,8 +36,8 @@ static void app_command_stack_reset(AppCommandStack *stack)
         return;
     }
     AT_FREE(stack->items);
-    stack->items = NULL;
-    stack->count = 0U;
+    stack->items    = NULL;
+    stack->count    = 0U;
     stack->capacity = 0U;
 }
 
@@ -56,7 +56,7 @@ static bool app_command_stack_reserve(AppCommandStack *stack, size_t capacity)
     {
         return false;
     }
-    stack->items = items;
+    stack->items    = items;
     stack->capacity = capacity;
     return true;
 }
@@ -92,31 +92,34 @@ void app_state_init(AppState *state)
         return;
     }
     memset(state, 0, sizeof(AppState));
-    state->interaction_mode = APP_INTERACTION_MODE_TREE_VIEW;
+    state->interaction_mode        = APP_INTERACTION_MODE_TREE_VIEW;
     state->active_layout_algorithm = LAYOUT_ALGORITHM_HIERARCHICAL;
+    layout_cache_init(&state->layout_cache);
 }
 
-bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layout, InteractionState *interaction,
-                         CameraController *camera, Settings *settings, Settings *persisted_settings)
+bool app_state_configure(AppState *state, FamilyTree **tree, LayoutResult *layout,
+                         InteractionState *interaction, CameraController *camera,
+                         Settings *settings, Settings *persisted_settings)
 {
     if (!state || !tree || !layout || !interaction || !camera || !settings || !persisted_settings)
     {
         return false;
     }
-    state->tree = tree;
-    state->layout = layout;
-    state->interaction = interaction;
-    state->camera = camera;
-    state->settings = settings;
+    state->tree               = tree;
+    state->layout             = layout;
+    state->interaction        = interaction;
+    state->camera             = camera;
+    state->settings           = settings;
     state->persisted_settings = persisted_settings;
-    state->selected_person = NULL;
-    state->tree_dirty = false;
+    state->selected_person    = NULL;
+    state->tree_dirty         = false;
     layout_result_destroy(&state->layout_transition_start);
     layout_result_destroy(&state->layout_transition_target);
-    state->layout_transition_active = false;
-    state->layout_transition_elapsed = 0.0f;
+    state->layout_transition_active   = false;
+    state->layout_transition_elapsed  = 0.0f;
     state->layout_transition_duration = 0.0f;
-    state->active_layout_algorithm = app_state_resolve_algorithm_from_settings(settings);
+    state->active_layout_algorithm    = app_state_resolve_algorithm_from_settings(settings);
+    layout_cache_invalidate(&state->layout_cache);
     return true;
 }
 
@@ -139,16 +142,17 @@ void app_state_shutdown(AppState *state)
         return;
     }
     app_state_reset_history(state);
-    state->tree = NULL;
-    state->layout = NULL;
-    state->interaction = NULL;
-    state->camera = NULL;
-    state->settings = NULL;
+    state->tree               = NULL;
+    state->layout             = NULL;
+    state->interaction        = NULL;
+    state->camera             = NULL;
+    state->settings           = NULL;
     state->persisted_settings = NULL;
-    state->selected_person = NULL;
+    state->selected_person    = NULL;
     layout_result_destroy(&state->layout_transition_start);
     layout_result_destroy(&state->layout_transition_target);
     state->layout_transition_active = false;
+    layout_cache_reset(&state->layout_cache);
 }
 
 void app_state_reset_history(AppState *state)
@@ -164,7 +168,8 @@ void app_state_reset_history(AppState *state)
     state->tree_dirty = false;
 }
 
-bool app_state_push_command(AppState *state, AppCommand *command, char *error_buffer, size_t error_buffer_size)
+bool app_state_push_command(AppState *state, AppCommand *command, char *error_buffer,
+                            size_t error_buffer_size)
 {
     if (!state || !command)
     {
@@ -215,12 +220,13 @@ bool app_state_push_command(AppState *state, AppCommand *command, char *error_bu
         return false;
     }
     app_command_stack_clear(&state->redo_stack);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
-static bool app_state_transfer_command(AppState *state, AppCommandStack *from_stack, AppCommandStack *to_stack,
-                                       bool use_execute, char *error_buffer, size_t error_buffer_size)
+static bool app_state_transfer_command(AppState *state, AppCommandStack *from_stack,
+                                       AppCommandStack *to_stack, bool use_execute,
+                                       char *error_buffer, size_t error_buffer_size)
 {
     if (!state || !from_stack || !to_stack)
     {
@@ -248,13 +254,17 @@ static bool app_state_transfer_command(AppState *state, AppCommandStack *from_st
         (void)app_command_stack_push(from_stack, command);
         return false;
     }
-    bool (*handler)(AppCommand *, AppState *) = use_execute ? command->vtable->execute : command->vtable->undo;
-    bool (*compensate)(AppCommand *, AppState *) = use_execute ? command->vtable->undo : command->vtable->execute;
+    bool (*handler)(AppCommand *, AppState *) =
+        use_execute ? command->vtable->execute : command->vtable->undo;
+    bool (*compensate)(AppCommand *, AppState *) =
+        use_execute ? command->vtable->undo : command->vtable->execute;
     if (!handler)
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, use_execute ? "Command lacks execute handler" : "Command lacks undo handler");
+            (void)snprintf(error_buffer, error_buffer_size,
+                           use_execute ? "Command lacks execute handler"
+                                       : "Command lacks undo handler");
         }
         (void)app_command_stack_push(from_stack, command);
         return false;
@@ -287,23 +297,24 @@ static bool app_state_transfer_command(AppState *state, AppCommandStack *from_st
 
 bool app_state_undo(AppState *state, char *error_buffer, size_t error_buffer_size)
 {
-    if (!app_state_transfer_command(state, &state->undo_stack, &state->redo_stack, false, error_buffer,
-                                    error_buffer_size))
+    if (!app_state_transfer_command(state, &state->undo_stack, &state->redo_stack, false,
+                                    error_buffer, error_buffer_size))
     {
         return false;
     }
     state->tree_dirty = state->undo_stack.count > 0U;
+    layout_cache_invalidate(&state->layout_cache);
     return true;
 }
 
 bool app_state_redo(AppState *state, char *error_buffer, size_t error_buffer_size)
 {
-    if (!app_state_transfer_command(state, &state->redo_stack, &state->undo_stack, true, error_buffer,
-                                    error_buffer_size))
+    if (!app_state_transfer_command(state, &state->redo_stack, &state->undo_stack, true,
+                                    error_buffer, error_buffer_size))
     {
         return false;
     }
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -318,7 +329,8 @@ static LayoutAlgorithm app_state_resolve_algorithm_from_settings(const Settings 
                : LAYOUT_ALGORITHM_HIERARCHICAL;
 }
 
-static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm, bool allow_animation)
+static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
+                                     bool allow_animation)
 {
     if (!state || !state->tree || !state->layout)
     {
@@ -332,11 +344,15 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
         layout_result_destroy(&state->layout_transition_start);
         layout_result_destroy(&state->layout_transition_target);
         state->layout_transition_active = false;
-        state->active_layout_algorithm = algorithm;
+        state->active_layout_algorithm  = algorithm;
         return;
     }
 
-    LayoutResult target = layout_calculate_with_algorithm(tree, algorithm);
+    LayoutResult target;
+    if (!layout_cache_calculate(&state->layout_cache, tree, algorithm, &target))
+    {
+        return;
+    }
     if (tree->person_count > 0U && (!target.nodes || target.count == 0U))
     {
         layout_result_destroy(&target);
@@ -344,8 +360,8 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
     }
 
     size_t current_count = (state->layout && state->layout->nodes) ? state->layout->count : 0U;
-    bool counts_match = (current_count == target.count);
-    bool can_animate = allow_animation && counts_match && current_count > 0U;
+    bool counts_match    = (current_count == target.count);
+    bool can_animate     = allow_animation && counts_match && current_count > 0U;
 
     if (!can_animate)
     {
@@ -353,10 +369,10 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
         layout_result_move(state->layout, &target);
         layout_result_destroy(&state->layout_transition_start);
         layout_result_destroy(&state->layout_transition_target);
-        state->layout_transition_active = false;
-        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_active   = false;
+        state->layout_transition_elapsed  = 0.0f;
         state->layout_transition_duration = 0.0f;
-        state->active_layout_algorithm = algorithm;
+        state->active_layout_algorithm    = algorithm;
         return;
     }
 
@@ -368,10 +384,10 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
         layout_result_destroy(state->layout);
         layout_result_move(state->layout, &target);
         layout_result_destroy(&target);
-        state->layout_transition_active = false;
-        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_active   = false;
+        state->layout_transition_elapsed  = 0.0f;
         state->layout_transition_duration = 0.0f;
-        state->active_layout_algorithm = algorithm;
+        state->active_layout_algorithm    = algorithm;
         return;
     }
 
@@ -382,18 +398,18 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
         layout_result_destroy(state->layout);
         layout_result_move(state->layout, &target);
         layout_result_destroy(&target);
-        state->layout_transition_active = false;
-        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_active   = false;
+        state->layout_transition_elapsed  = 0.0f;
         state->layout_transition_duration = 0.0f;
-        state->active_layout_algorithm = algorithm;
+        state->active_layout_algorithm    = algorithm;
         return;
     }
 
     layout_result_destroy(&target);
-    state->layout_transition_active = true;
-    state->layout_transition_elapsed = 0.0f;
+    state->layout_transition_active   = true;
+    state->layout_transition_elapsed  = 0.0f;
     state->layout_transition_duration = 0.9f;
-    state->active_layout_algorithm = algorithm;
+    state->active_layout_algorithm    = algorithm;
 }
 
 void app_state_tick(AppState *state, float delta_seconds)
@@ -445,13 +461,14 @@ void app_state_tick(AppState *state, float delta_seconds)
         }
         layout_result_destroy(&state->layout_transition_start);
         layout_result_destroy(&state->layout_transition_target);
-        state->layout_transition_active = false;
-        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_active   = false;
+        state->layout_transition_elapsed  = 0.0f;
         state->layout_transition_duration = 0.0f;
         return;
     }
 
-    if (!layout_animate(&state->layout_transition_start, &state->layout_transition_target, alpha, state->layout))
+    if (!layout_animate(&state->layout_transition_start, &state->layout_transition_target, alpha,
+                        state->layout))
     {
         layout_result_destroy(state->layout);
         if (!layout_result_copy(state->layout, &state->layout_transition_target))
@@ -460,13 +477,14 @@ void app_state_tick(AppState *state, float delta_seconds)
         }
         layout_result_destroy(&state->layout_transition_start);
         layout_result_destroy(&state->layout_transition_target);
-        state->layout_transition_active = false;
-        state->layout_transition_elapsed = 0.0f;
+        state->layout_transition_active   = false;
+        state->layout_transition_elapsed  = 0.0f;
         state->layout_transition_duration = 0.0f;
     }
 }
 
-bool app_state_add_person(AppState *state, Person *person, char *error_buffer, size_t error_buffer_size)
+bool app_state_add_person(AppState *state, Person *person, char *error_buffer,
+                          size_t error_buffer_size)
 {
     if (!state || !state->tree || !person)
     {
@@ -485,7 +503,7 @@ bool app_state_add_person(AppState *state, Person *person, char *error_buffer, s
         return false;
     }
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -496,7 +514,7 @@ static uint32_t app_state_next_person_id(const AppState *state)
         return 1U;
     }
     const FamilyTree *tree = *state->tree;
-    uint32_t max_id = 0U;
+    uint32_t max_id        = 0U;
     for (size_t index = 0U; index < tree->person_count; ++index)
     {
         const Person *person = tree->persons[index];
@@ -516,12 +534,13 @@ static uint32_t app_state_next_person_id(const AppState *state)
     return max_id + 1U;
 }
 
-bool app_state_create_person(AppState *state, const AppPersonCreateData *data, uint32_t *out_person_id,
-                             char *error_buffer, size_t error_buffer_size)
+bool app_state_create_person(AppState *state, const AppPersonCreateData *data,
+                             uint32_t *out_person_id, char *error_buffer, size_t error_buffer_size)
 {
     if (!state || !state->tree || !state->layout || !data)
     {
-        app_state_write_error(error_buffer, error_buffer_size, "Invalid arguments for person creation");
+        app_state_write_error(error_buffer, error_buffer_size,
+                              "Invalid arguments for person creation");
         return false;
     }
 
@@ -537,12 +556,14 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data, u
     }
     if (data->is_alive && data->death_date && data->death_date[0] != '\0')
     {
-        app_state_write_error(error_buffer, error_buffer_size, "Alive persons cannot have a death date");
+        app_state_write_error(error_buffer, error_buffer_size,
+                              "Alive persons cannot have a death date");
         return false;
     }
     if (!data->is_alive && (!data->death_date || data->death_date[0] == '\0'))
     {
-        app_state_write_error(error_buffer, error_buffer_size, "Deceased persons require a death date");
+        app_state_write_error(error_buffer, error_buffer_size,
+                              "Deceased persons require a death date");
         return false;
     }
     if (data->certificate_count > APP_PERSON_CREATE_MAX_CERTIFICATES ||
@@ -555,7 +576,8 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data, u
     uint32_t new_id = app_state_next_person_id(state);
     if (new_id == 0U)
     {
-        app_state_write_error(error_buffer, error_buffer_size, "No identifiers available for new person");
+        app_state_write_error(error_buffer, error_buffer_size,
+                              "No identifiers available for new person");
         return false;
     }
 
@@ -600,7 +622,8 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data, u
         if (!profile_copy)
         {
             person_destroy(person);
-            app_state_write_error(error_buffer, error_buffer_size, "Failed to assign profile image path");
+            app_state_write_error(error_buffer, error_buffer_size,
+                                  "Failed to assign profile image path");
             return false;
         }
         person->profile_image_path = profile_copy;
@@ -623,7 +646,8 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data, u
         if (!entry_data->description || entry_data->description[0] == '\0')
         {
             person_destroy(person);
-            app_state_write_error(error_buffer, error_buffer_size, "Timeline entries require a description");
+            app_state_write_error(error_buffer, error_buffer_size,
+                                  "Timeline entries require a description");
             return false;
         }
         TimelineEntry entry;
@@ -649,7 +673,8 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data, u
         if (!entry_ok)
         {
             person_destroy(person);
-            app_state_write_error(error_buffer, error_buffer_size, "Failed to record timeline entry");
+            app_state_write_error(error_buffer, error_buffer_size,
+                                  "Failed to record timeline entry");
             return false;
         }
     }
@@ -658,7 +683,8 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data, u
     if (!tree)
     {
         person_destroy(person);
-        app_state_write_error(error_buffer, error_buffer_size, "Tree unavailable for person creation");
+        app_state_write_error(error_buffer, error_buffer_size,
+                              "Tree unavailable for person creation");
         return false;
     }
 
@@ -699,7 +725,8 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data, u
     if (!command)
     {
         person_destroy(person);
-        app_state_write_error(error_buffer, error_buffer_size, "Failed to create add-person command");
+        app_state_write_error(error_buffer, error_buffer_size,
+                              "Failed to create add-person command");
         return false;
     }
     if (!app_state_push_command(state, command, error_buffer, error_buffer_size))
@@ -777,7 +804,8 @@ static void app_remove_person_relationship_links(FamilyTree *tree, Person *perso
     }
 }
 
-bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_buffer, size_t error_buffer_size)
+bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_buffer,
+                             size_t error_buffer_size)
 {
     if (!state || !state->tree || !*state->tree || person_id == 0U)
     {
@@ -801,12 +829,13 @@ bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_bu
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Failed to remove person %u", person_id);
+            (void)snprintf(error_buffer, error_buffer_size, "Failed to remove person %u",
+                           person_id);
         }
         return false;
     }
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -847,7 +876,8 @@ bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonE
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Unable to update name for %u", person_id);
+            (void)snprintf(error_buffer, error_buffer_size, "Unable to update name for %u",
+                           person_id);
         }
         return false;
     }
@@ -865,7 +895,8 @@ bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonE
         {
             if (error_buffer && error_buffer_size > 0U)
             {
-                (void)snprintf(error_buffer, error_buffer_size, "Unable to clear death info for %u", person_id);
+                (void)snprintf(error_buffer, error_buffer_size, "Unable to clear death info for %u",
+                               person_id);
             }
             return false;
         }
@@ -879,36 +910,38 @@ bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonE
         return false;
     }
     const AppPersonEditRelationships *relationships = &edit_data->relationships;
-    FamilyTree *tree = *state->tree;
-    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_FATHER, relationships->apply_father,
-                                         relationships->father_id))
+    FamilyTree *tree                                = *state->tree;
+    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_FATHER,
+                                         relationships->apply_father, relationships->father_id))
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Unable to update father selection for %u", person_id);
+            (void)snprintf(error_buffer, error_buffer_size,
+                           "Unable to update father selection for %u", person_id);
         }
         return false;
     }
-    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_MOTHER, relationships->apply_mother,
-                                         relationships->mother_id))
+    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_MOTHER,
+                                         relationships->apply_mother, relationships->mother_id))
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Unable to update mother selection for %u", person_id);
+            (void)snprintf(error_buffer, error_buffer_size,
+                           "Unable to update mother selection for %u", person_id);
         }
         return false;
     }
-    if (!app_command_person_apply_spouses(tree, person, relationships->apply_spouses, relationships->spouse_ids,
-                                          relationships->spouse_count))
+    if (!app_command_person_apply_spouses(tree, person, relationships->apply_spouses,
+                                          relationships->spouse_ids, relationships->spouse_count))
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Unable to update spouse relationships for %u",
-                           person_id);
+            (void)snprintf(error_buffer, error_buffer_size,
+                           "Unable to update spouse relationships for %u", person_id);
         }
         return false;
     }
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -937,6 +970,7 @@ void app_state_mark_tree_dirty(AppState *state)
         return;
     }
     state->tree_dirty = true;
+    layout_cache_invalidate(&state->layout_cache);
 }
 
 void app_state_clear_tree_dirty(AppState *state)
@@ -1005,7 +1039,7 @@ static bool app_restore_person_relationship_links(AppState *state, Person *perso
             if (!child->parents[slot])
             {
                 child->parents[slot] = person;
-                slot_found = true;
+                slot_found           = true;
                 break;
             }
         }
@@ -1017,7 +1051,7 @@ static bool app_restore_person_relationship_links(AppState *state, Person *perso
     for (size_t index = 0U; index < person->spouses_count; ++index)
     {
         PersonSpouseRecord *record = &person->spouses[index];
-        Person *partner = record->partner;
+        Person *partner            = record->partner;
         if (!partner)
         {
             continue;
@@ -1066,9 +1100,9 @@ static bool app_command_add_person_execute(AppCommand *command, AppState *state)
         return false;
     }
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     state->selected_person = self->person;
-    self->inserted = true;
+    self->inserted         = true;
     return true;
 }
 
@@ -1149,7 +1183,7 @@ static bool app_command_delete_person_execute(AppCommand *command, AppState *sta
     self->inserted = false;
     app_state_clear_selection_if_matches(state, person);
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -1179,7 +1213,7 @@ static bool app_command_delete_person_undo(AppCommand *command, AppState *state)
         state->selected_person = self->person;
     }
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -1245,19 +1279,23 @@ static bool app_command_person_fields_capture(AppCommandPersonFields *fields, co
         return false;
     }
     app_command_person_fields_reset(fields);
-    fields->first = at_string_dup(person->name.first);
-    fields->middle = person->name.middle ? at_string_dup(person->name.middle) : NULL;
-    fields->last = at_string_dup(person->name.last);
+    fields->first      = at_string_dup(person->name.first);
+    fields->middle     = person->name.middle ? at_string_dup(person->name.middle) : NULL;
+    fields->last       = at_string_dup(person->name.last);
     fields->birth_date = at_string_dup(person->dates.birth_date);
-    fields->birth_location = person->dates.birth_location ? at_string_dup(person->dates.birth_location) : NULL;
+    fields->birth_location =
+        person->dates.birth_location ? at_string_dup(person->dates.birth_location) : NULL;
     fields->death_date = person->dates.death_date ? at_string_dup(person->dates.death_date) : NULL;
-    fields->death_location = person->dates.death_location ? at_string_dup(person->dates.death_location) : NULL;
+    fields->death_location =
+        person->dates.death_location ? at_string_dup(person->dates.death_location) : NULL;
     fields->father_present = true;
-    fields->father_id = person->parents[PERSON_PARENT_FATHER] ? person->parents[PERSON_PARENT_FATHER]->id : 0U;
+    fields->father_id =
+        person->parents[PERSON_PARENT_FATHER] ? person->parents[PERSON_PARENT_FATHER]->id : 0U;
     fields->mother_present = true;
-    fields->mother_id = person->parents[PERSON_PARENT_MOTHER] ? person->parents[PERSON_PARENT_MOTHER]->id : 0U;
+    fields->mother_id =
+        person->parents[PERSON_PARENT_MOTHER] ? person->parents[PERSON_PARENT_MOTHER]->id : 0U;
     fields->spouses_present = true;
-    fields->spouse_count = person->spouses_count;
+    fields->spouse_count    = person->spouses_count;
     if (fields->spouse_count > 0U)
     {
         fields->spouse_ids = (uint32_t *)AT_MALLOC(sizeof(uint32_t) * fields->spouse_count);
@@ -1269,7 +1307,7 @@ static bool app_command_person_fields_capture(AppCommandPersonFields *fields, co
         for (size_t index = 0U; index < fields->spouse_count; ++index)
         {
             const PersonSpouseRecord *record = &person->spouses[index];
-            fields->spouse_ids[index] = record->partner ? record->partner->id : 0U;
+            fields->spouse_ids[index]        = record->partner ? record->partner->id : 0U;
         }
     }
     if (!fields->first || !fields->last || !fields->birth_date)
@@ -1289,22 +1327,23 @@ static bool app_command_person_fields_from_edit_data(AppCommandPersonFields *fie
     }
     app_command_person_fields_reset(fields);
     fields->first = edit_data->first ? at_string_dup(edit_data->first) : NULL;
-    fields->middle = edit_data->middle && edit_data->middle[0] != '\0' ? at_string_dup(edit_data->middle) : NULL;
-    fields->last = edit_data->last ? at_string_dup(edit_data->last) : NULL;
-    fields->birth_date = edit_data->birth_date ? at_string_dup(edit_data->birth_date) : NULL;
+    fields->middle =
+        edit_data->middle && edit_data->middle[0] != '\0' ? at_string_dup(edit_data->middle) : NULL;
+    fields->last           = edit_data->last ? at_string_dup(edit_data->last) : NULL;
+    fields->birth_date     = edit_data->birth_date ? at_string_dup(edit_data->birth_date) : NULL;
     fields->birth_location = edit_data->birth_location && edit_data->birth_location[0] != '\0'
                                  ? at_string_dup(edit_data->birth_location)
                                  : NULL;
     if (edit_data->clear_death)
     {
-        fields->death_date = NULL;
+        fields->death_date     = NULL;
         fields->death_location = NULL;
     }
     else
     {
-        fields->death_date = edit_data->death_date && edit_data->death_date[0] != '\0'
-                                 ? at_string_dup(edit_data->death_date)
-                                 : NULL;
+        fields->death_date     = edit_data->death_date && edit_data->death_date[0] != '\0'
+                                     ? at_string_dup(edit_data->death_date)
+                                     : NULL;
         fields->death_location = edit_data->death_location && edit_data->death_location[0] != '\0'
                                      ? at_string_dup(edit_data->death_location)
                                      : NULL;
@@ -1313,17 +1352,17 @@ static bool app_command_person_fields_from_edit_data(AppCommandPersonFields *fie
     if (relationships->apply_father)
     {
         fields->father_present = true;
-        fields->father_id = relationships->father_id;
+        fields->father_id      = relationships->father_id;
     }
     if (relationships->apply_mother)
     {
         fields->mother_present = true;
-        fields->mother_id = relationships->mother_id;
+        fields->mother_id      = relationships->mother_id;
     }
     if (relationships->apply_spouses)
     {
         fields->spouses_present = true;
-        size_t count = relationships->spouse_count;
+        size_t count            = relationships->spouse_count;
         if (count > APP_PERSON_EDIT_MAX_SPOUSES)
         {
             count = APP_PERSON_EDIT_MAX_SPOUSES;
@@ -1459,8 +1498,8 @@ static bool app_command_person_apply_spouses(FamilyTree *tree, Person *person, b
     while (existing_index < person->spouses_count)
     {
         PersonSpouseRecord *record = &person->spouses[existing_index];
-        Person *partner = record->partner;
-        bool keep = false;
+        Person *partner            = record->partner;
+        bool keep                  = false;
         for (size_t check = 0U; check < desired_count; ++check)
         {
             if (desired_spouses[check] == partner)
@@ -1576,9 +1615,9 @@ static bool app_command_edit_person_execute(AppCommand *command, AppState *state
         return false;
     }
     self->applied_new_state = true;
-    state->selected_person = person;
+    state->selected_person  = person;
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -1599,9 +1638,9 @@ static bool app_command_edit_person_undo(AppCommand *command, AppState *state)
         return false;
     }
     self->applied_new_state = false;
-    state->selected_person = person;
+    state->selected_person  = person;
     app_state_refresh_layout(state, state->active_layout_algorithm, false);
-    state->tree_dirty = true;
+    app_state_mark_tree_dirty(state);
     return true;
 }
 
@@ -1635,8 +1674,8 @@ AppCommand *app_command_create_add_person(Person *person)
         return NULL;
     }
     command->base.vtable = &APP_COMMAND_ADD_PERSON_VTABLE;
-    command->person = person;
-    command->inserted = false;
+    command->person      = person;
+    command->inserted    = false;
     /* Manual QA: verify holographic add/undo cycle via UI panel once available. */
     return (AppCommand *)command;
 }
@@ -1653,8 +1692,8 @@ AppCommand *app_command_create_delete_person(uint32_t person_id)
         return NULL;
     }
     command->base.vtable = &APP_COMMAND_DELETE_PERSON_VTABLE;
-    command->person_id = person_id;
-    command->inserted = true;
+    command->person_id   = person_id;
+    command->inserted    = true;
     /* Manual QA: exercise delete/undo from UI context when panel wiring lands. */
     return (AppCommand *)command;
 }
@@ -1671,13 +1710,13 @@ AppCommand *app_command_create_edit_person(uint32_t person_id, const AppPersonEd
         return NULL;
     }
     command->base.vtable = &APP_COMMAND_EDIT_PERSON_VTABLE;
-    command->person_id = person_id;
+    command->person_id   = person_id;
     if (!app_command_person_fields_from_edit_data(&command->new_fields, edit_data))
     {
         app_command_edit_person_destroy((AppCommand *)command);
         return NULL;
     }
-    command->has_snapshot = false;
+    command->has_snapshot      = false;
     command->applied_new_state = false;
     /* Manual QA: cross-check edit form behaviour in holographic panel workflows. */
     return (AppCommand *)command;
