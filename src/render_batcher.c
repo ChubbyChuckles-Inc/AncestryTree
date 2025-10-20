@@ -11,12 +11,12 @@ static void render_batcher_grouping_internal_reset(RenderBatcherGrouping *groupi
     {
         return;
     }
-    grouping->alive_nodes = NULL;
-    grouping->alive_count = 0U;
+    grouping->alive_nodes    = NULL;
+    grouping->alive_count    = 0U;
     grouping->deceased_nodes = NULL;
     grouping->deceased_count = 0U;
-    grouping->selected_node = NULL;
-    grouping->hovered_node = NULL;
+    grouping->selected_node  = NULL;
+    grouping->hovered_node   = NULL;
 }
 
 void render_batcher_grouping_reset(RenderBatcherGrouping *grouping)
@@ -25,8 +25,7 @@ void render_batcher_grouping_reset(RenderBatcherGrouping *grouping)
 }
 
 static bool render_batcher_validate_inputs(const LayoutResult *layout,
-                                           const LayoutNode **alive_storage,
-                                           size_t alive_capacity,
+                                           const LayoutNode **alive_storage, size_t alive_capacity,
                                            const LayoutNode **deceased_storage,
                                            size_t deceased_capacity)
 {
@@ -41,28 +40,26 @@ static bool render_batcher_validate_inputs(const LayoutResult *layout,
     return true;
 }
 
-bool render_batcher_plan(const LayoutResult *layout,
-                         const Person *selected_person,
-                         const Person *hovered_person,
-                         RenderBatcherGrouping *grouping,
-                         const LayoutNode **alive_storage,
-                         size_t alive_capacity,
-                         const LayoutNode **deceased_storage,
-                         size_t deceased_capacity)
+bool render_batcher_plan(const LayoutResult *layout, const Person *selected_person,
+                         const Person *hovered_person, RenderBatcherGrouping *grouping,
+                         const LayoutNode **alive_storage, size_t alive_capacity,
+                         const LayoutNode **deceased_storage, size_t deceased_capacity,
+                         const unsigned char *visibility_mask, size_t visibility_count)
 {
     if (!grouping)
     {
         return false;
     }
     render_batcher_grouping_internal_reset(grouping);
-    if (!render_batcher_validate_inputs(layout, alive_storage, alive_capacity, deceased_storage, deceased_capacity))
+    if (!render_batcher_validate_inputs(layout, alive_storage, alive_capacity, deceased_storage,
+                                        deceased_capacity))
     {
         return false;
     }
 
-    grouping->alive_nodes = alive_storage;
+    grouping->alive_nodes    = alive_storage;
     grouping->deceased_nodes = deceased_storage;
-    grouping->alive_count = 0U;
+    grouping->alive_count    = 0U;
     grouping->deceased_count = 0U;
 
     if (!layout || layout->count == 0U)
@@ -73,13 +70,17 @@ bool render_batcher_plan(const LayoutResult *layout,
     for (size_t index = 0; index < layout->count; ++index)
     {
         const LayoutNode *node = &layout->nodes[index];
-        const Person *person = node ? node->person : NULL;
+        const Person *person   = node ? node->person : NULL;
         if (!node || !person)
         {
             continue;
         }
+        if (visibility_mask && index < visibility_count && visibility_mask[index] == 0U)
+        {
+            continue;
+        }
         bool is_selected = (selected_person && person == selected_person);
-        bool is_hovered = (hovered_person && person == hovered_person);
+        bool is_hovered  = (hovered_person && person == hovered_person);
         if (is_selected)
         {
             grouping->selected_node = node;

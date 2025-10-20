@@ -28,6 +28,10 @@ TEST(test_render_config_default_is_valid)
     ASSERT_TRUE(config.connection_antialiasing);
     ASSERT_EQ(config.connection_style_parent_child, RENDER_CONNECTION_STYLE_BEZIER);
     ASSERT_EQ(config.connection_style_spouse, RENDER_CONNECTION_STYLE_STRAIGHT);
+    ASSERT_TRUE(config.enable_frustum_culling);
+    ASSERT_TRUE(config.enable_lod);
+    ASSERT_TRUE(config.lod_far_distance > config.lod_near_distance);
+    ASSERT_TRUE(config.culling_margin >= 0.0f);
 }
 
 TEST(test_render_find_person_position_returns_expected_coordinates)
@@ -39,7 +43,7 @@ TEST(test_render_find_person_position_returns_expected_coordinates)
     layout.count = 1U;
     layout.nodes = calloc(1U, sizeof(LayoutNode));
     ASSERT_NOT_NULL(layout.nodes);
-    layout.nodes[0].person = person;
+    layout.nodes[0].person      = person;
     layout.nodes[0].position[0] = 1.0f;
     layout.nodes[0].position[1] = -2.0f;
     layout.nodes[0].position[2] = 3.5f;
@@ -51,7 +55,7 @@ TEST(test_render_find_person_position_returns_expected_coordinates)
     ASSERT_FLOAT_NEAR(position[2], 3.5f, 0.0001f);
 
     float missing[3] = {0.0f, 0.0f, 0.0f};
-    Person *other = person_create(2U);
+    Person *other    = person_create(2U);
     ASSERT_NOT_NULL(other);
     ASSERT_FALSE(render_find_person_position(&layout, other, missing));
 
@@ -62,7 +66,7 @@ TEST(test_render_find_person_position_returns_expected_coordinates)
 
 TEST(test_render_collect_parent_child_segments_collects_all_children)
 {
-    Person *parent = person_create(10U);
+    Person *parent  = person_create(10U);
     Person *child_a = person_create(11U);
     Person *child_b = person_create(12U);
     ASSERT_TRUE(parent != NULL && child_a != NULL && child_b != NULL);
@@ -73,15 +77,15 @@ TEST(test_render_collect_parent_child_segments_collects_all_children)
     layout.count = 3U;
     layout.nodes = calloc(layout.count, sizeof(LayoutNode));
     ASSERT_NOT_NULL(layout.nodes);
-    layout.nodes[0].person = parent;
+    layout.nodes[0].person      = parent;
     layout.nodes[0].position[0] = 0.0f;
     layout.nodes[0].position[1] = 0.0f;
     layout.nodes[0].position[2] = 0.0f;
-    layout.nodes[1].person = child_a;
+    layout.nodes[1].person      = child_a;
     layout.nodes[1].position[0] = 1.0f;
     layout.nodes[1].position[1] = -1.0f;
     layout.nodes[1].position[2] = 0.0f;
-    layout.nodes[2].person = child_b;
+    layout.nodes[2].person      = child_b;
     layout.nodes[2].position[0] = -1.0f;
     layout.nodes[2].position[1] = -1.0f;
     layout.nodes[2].position[2] = 0.0f;
@@ -124,11 +128,11 @@ TEST(test_render_collect_spouse_segments_ignores_duplicates)
     layout.count = 2U;
     layout.nodes = calloc(layout.count, sizeof(LayoutNode));
     ASSERT_NOT_NULL(layout.nodes);
-    layout.nodes[0].person = one;
+    layout.nodes[0].person      = one;
     layout.nodes[0].position[0] = 0.0f;
     layout.nodes[0].position[1] = 0.0f;
     layout.nodes[0].position[2] = 0.0f;
-    layout.nodes[1].person = two;
+    layout.nodes[1].person      = two;
     layout.nodes[1].position[0] = 2.0f;
     layout.nodes[1].position[1] = 0.0f;
     layout.nodes[1].position[2] = 0.0f;
@@ -146,22 +150,33 @@ TEST(test_render_collect_spouse_segments_ignores_duplicates)
 
 TEST(test_render_config_validate_rejects_invalid_style)
 {
-    RenderConfig config = render_config_default();
+    RenderConfig config                  = render_config_default();
     config.connection_style_parent_child = (RenderConnectionStyle)42;
     ASSERT_FALSE(render_config_validate(&config));
-    config = render_config_default();
+    config                         = render_config_default();
     config.connection_style_spouse = (RenderConnectionStyle)(-1);
+    ASSERT_FALSE(render_config_validate(&config));
+    config                   = render_config_default();
+    config.lod_near_distance = 12.0f;
+    config.lod_far_distance  = 8.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                   = render_config_default();
+    config.enable_lod        = true;
+    config.lod_near_distance = 0.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                = render_config_default();
+    config.culling_margin = -1.0f;
     ASSERT_FALSE(render_config_validate(&config));
 }
 
 TEST(test_render_batcher_plan_groups_alive_and_deceased)
 {
-    Person *alive_a = person_create(31U);
-    Person *alive_b = person_create(32U);
+    Person *alive_a  = person_create(31U);
+    Person *alive_b  = person_create(32U);
     Person *deceased = person_create(33U);
     ASSERT_TRUE(alive_a && alive_b && deceased);
-    alive_a->is_alive = true;
-    alive_b->is_alive = true;
+    alive_a->is_alive  = true;
+    alive_b->is_alive  = true;
     deceased->is_alive = false;
 
     LayoutResult layout;
@@ -172,11 +187,12 @@ TEST(test_render_batcher_plan_groups_alive_and_deceased)
     layout.nodes[1].person = alive_b;
     layout.nodes[2].person = deceased;
 
-    const LayoutNode *alive_nodes[3] = {0};
+    const LayoutNode *alive_nodes[3]    = {0};
     const LayoutNode *deceased_nodes[3] = {0};
     RenderBatcherGrouping grouping;
     render_batcher_grouping_reset(&grouping);
-    ASSERT_TRUE(render_batcher_plan(&layout, NULL, NULL, &grouping, alive_nodes, 3U, deceased_nodes, 3U));
+    ASSERT_TRUE(render_batcher_plan(&layout, NULL, NULL, &grouping, alive_nodes, 3U, deceased_nodes,
+                                    3U, NULL, 0U));
     ASSERT_EQ(grouping.alive_count, 2U);
     ASSERT_EQ(grouping.deceased_count, 1U);
     ASSERT_TRUE(grouping.alive_nodes[0]->person->is_alive);
@@ -191,12 +207,12 @@ TEST(test_render_batcher_plan_groups_alive_and_deceased)
 
 TEST(test_render_batcher_plan_handles_selected_and_hovered)
 {
-    Person *alive = person_create(40U);
-    Person *hover = person_create(41U);
+    Person *alive    = person_create(40U);
+    Person *hover    = person_create(41U);
     Person *deceased = person_create(42U);
     ASSERT_TRUE(alive && hover && deceased);
-    alive->is_alive = true;
-    hover->is_alive = true;
+    alive->is_alive    = true;
+    hover->is_alive    = true;
     deceased->is_alive = false;
 
     LayoutResult layout;
@@ -207,11 +223,12 @@ TEST(test_render_batcher_plan_handles_selected_and_hovered)
     layout.nodes[1].person = hover;
     layout.nodes[2].person = deceased;
 
-    const LayoutNode *alive_nodes[3] = {0};
+    const LayoutNode *alive_nodes[3]    = {0};
     const LayoutNode *deceased_nodes[3] = {0};
     RenderBatcherGrouping grouping;
     render_batcher_grouping_reset(&grouping);
-    ASSERT_TRUE(render_batcher_plan(&layout, alive, hover, &grouping, alive_nodes, 3U, deceased_nodes, 3U));
+    ASSERT_TRUE(render_batcher_plan(&layout, alive, hover, &grouping, alive_nodes, 3U,
+                                    deceased_nodes, 3U, NULL, 0U));
     ASSERT_EQ(grouping.alive_count, 0U);
     ASSERT_EQ(grouping.deceased_count, 1U);
     ASSERT_NOT_NULL(grouping.selected_node);
@@ -226,6 +243,36 @@ TEST(test_render_batcher_plan_handles_selected_and_hovered)
     person_destroy(alive);
 }
 
+TEST(test_render_batcher_plan_skips_invisible_nodes)
+{
+    Person *alive_a = person_create(44U);
+    Person *alive_b = person_create(45U);
+    ASSERT_TRUE(alive_a && alive_b);
+    alive_a->is_alive = true;
+    alive_b->is_alive = true;
+
+    LayoutResult layout;
+    layout.count = 2U;
+    layout.nodes = calloc(layout.count, sizeof(LayoutNode));
+    ASSERT_NOT_NULL(layout.nodes);
+    layout.nodes[0].person = alive_a;
+    layout.nodes[1].person = alive_b;
+
+    unsigned char visibility[2]         = {1U, 0U};
+    const LayoutNode *alive_nodes[2]    = {0};
+    const LayoutNode *deceased_nodes[2] = {0};
+    RenderBatcherGrouping grouping;
+    render_batcher_grouping_reset(&grouping);
+    ASSERT_TRUE(render_batcher_plan(&layout, NULL, NULL, &grouping, alive_nodes, 2U, deceased_nodes,
+                                    2U, visibility, 2U));
+    ASSERT_EQ(grouping.alive_count, 1U);
+    ASSERT_EQ(grouping.alive_nodes[0], &layout.nodes[0]);
+
+    free(layout.nodes);
+    person_destroy(alive_b);
+    person_destroy(alive_a);
+}
+
 TEST(test_render_batcher_plan_handles_hover_equal_selected)
 {
     Person *alive = person_create(50U);
@@ -238,11 +285,12 @@ TEST(test_render_batcher_plan_handles_hover_equal_selected)
     ASSERT_NOT_NULL(layout.nodes);
     layout.nodes[0].person = alive;
 
-    const LayoutNode *alive_nodes[1] = {0};
+    const LayoutNode *alive_nodes[1]    = {0};
     const LayoutNode *deceased_nodes[1] = {0};
     RenderBatcherGrouping grouping;
     render_batcher_grouping_reset(&grouping);
-    ASSERT_TRUE(render_batcher_plan(&layout, alive, alive, &grouping, alive_nodes, 1U, deceased_nodes, 1U));
+    ASSERT_TRUE(render_batcher_plan(&layout, alive, alive, &grouping, alive_nodes, 1U,
+                                    deceased_nodes, 1U, NULL, 0U));
     ASSERT_EQ(grouping.alive_count, 0U);
     ASSERT_NULL(grouping.hovered_node);
     ASSERT_NOT_NULL(grouping.selected_node);
@@ -294,6 +342,7 @@ void register_render_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_render_config_validate_rejects_invalid_style);
     REGISTER_TEST(registry, test_render_batcher_plan_groups_alive_and_deceased);
     REGISTER_TEST(registry, test_render_batcher_plan_handles_selected_and_hovered);
+    REGISTER_TEST(registry, test_render_batcher_plan_skips_invisible_nodes);
     REGISTER_TEST(registry, test_render_batcher_plan_handles_hover_equal_selected);
     REGISTER_TEST(registry, test_render_resize_updates_dimensions_when_raylib_missing);
     REGISTER_TEST(registry, test_render_resize_rejects_zero_dimension);

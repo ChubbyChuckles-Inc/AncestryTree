@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file. The format 
 
 - Layout cache manager that fingerprints family tree relationships per algorithm, reuses previously computed node
   positions between ticks, and ships with unit tests covering cache invalidation and multi-algorithm reuse.
+- Rendering visibility pipeline featuring frustum culling and distance-based level of detail that skips off-screen
+  nodes, lowers mesh complexity for distant spheres, and includes unit tests for batch planner visibility masks.
 - Memory diagnostics suite that wraps the unit tests with Valgrind/Dr. Memory helpers, adds leak-focused regression cases for tree and persistence lifecycles, and fails the runner when outstanding allocations are detected.
 - GitHub Actions build/test automation spanning Windows, Linux, and macOS with Debug/Release matrices, dependency provisioning, artifact uploads, and Valgrind-backed regression gates.
 - Automated coverage instrumentation toggled via CMake, with CI jobs emitting filtered lcov reports, archiving results, and publishing metrics to Codecov for ongoing regression tracking.

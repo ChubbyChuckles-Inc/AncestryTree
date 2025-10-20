@@ -680,8 +680,8 @@ PHASE 10: OPTIMIZATION & POLISH
       [ ] Identify bottlenecks
       [ ] Optimize hot paths
   [ ] Optimize rendering
-      [ ] Implement frustum culling
-      [ ] Level of detail (LOD) for distant spheres
+      [x] Implement frustum culling
+      [x] Level of detail (LOD) for distant spheres
       [ ] Texture atlasing
       [ ] Instanced rendering for spheres
   [ ] Optimize layout algorithm

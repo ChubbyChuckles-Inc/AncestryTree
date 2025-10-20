@@ -27,7 +27,7 @@ typedef struct RenderColor
 typedef enum RenderConnectionStyle
 {
     RENDER_CONNECTION_STYLE_STRAIGHT = 0,
-    RENDER_CONNECTION_STYLE_BEZIER = 1
+    RENDER_CONNECTION_STYLE_BEZIER   = 1
 } RenderConnectionStyle;
 
 typedef struct RenderConfig
@@ -49,6 +49,11 @@ typedef struct RenderConfig
     bool show_name_panels;
     bool show_profile_images;
     float name_panel_font_size;
+    bool enable_frustum_culling;
+    bool enable_lod;
+    float lod_near_distance;
+    float lod_far_distance;
+    float culling_margin;
 } RenderConfig;
 
 typedef struct RenderConnectionSegment
@@ -67,6 +72,10 @@ typedef struct RenderState
     const struct LayoutNode **batch_alive_nodes;
     const struct LayoutNode **batch_deceased_nodes;
     size_t batch_capacity;
+    unsigned char *visible_nodes;
+    size_t visibility_capacity;
+    size_t visible_node_count;
+    bool visibility_mask_ready;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     struct Shader glow_shader;
     int glow_intensity_loc;
@@ -85,19 +94,24 @@ void render_state_init(RenderState *state);
 RenderConfig render_config_default(void);
 bool render_config_validate(const RenderConfig *config);
 
-bool render_init(RenderState *state, const RenderConfig *config, char *error_buffer, size_t error_buffer_size);
+bool render_init(RenderState *state, const RenderConfig *config, char *error_buffer,
+                 size_t error_buffer_size);
 void render_cleanup(RenderState *state);
-bool render_resize(RenderState *state, int width, int height, char *error_buffer, size_t error_buffer_size);
+bool render_resize(RenderState *state, int width, int height, char *error_buffer,
+                   size_t error_buffer_size);
 bool render_has_render_target(const RenderState *state);
 
-bool render_scene(RenderState *state, const struct LayoutResult *layout, const struct CameraController *camera,
-                  const struct Person *selected_person, const struct Person *hovered_person);
+bool render_scene(RenderState *state, const struct LayoutResult *layout,
+                  const struct CameraController *camera, const struct Person *selected_person,
+                  const struct Person *hovered_person);
 bool render_connections_render(RenderState *state, const struct LayoutResult *layout);
 
-bool render_find_person_position(const struct LayoutResult *layout, const struct Person *person, float out_position[3]);
-size_t render_collect_parent_child_segments(const struct LayoutResult *layout, RenderConnectionSegment *segments,
+bool render_find_person_position(const struct LayoutResult *layout, const struct Person *person,
+                                 float out_position[3]);
+size_t render_collect_parent_child_segments(const struct LayoutResult *layout,
+                                            RenderConnectionSegment *segments,
                                             size_t segment_capacity);
-size_t render_collect_spouse_segments(const struct LayoutResult *layout, RenderConnectionSegment *segments,
-                                      size_t segment_capacity);
+size_t render_collect_spouse_segments(const struct LayoutResult *layout,
+                                      RenderConnectionSegment *segments, size_t segment_capacity);
 
 #endif /* RENDER_H */
