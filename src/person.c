@@ -290,16 +290,16 @@ bool person_set_name(Person *person, const char *first, const char *middle, cons
         middle_copy = at_string_dup(middle);
         if (!middle_copy)
         {
-            free(first_copy);
-            free(last_copy);
+            AT_FREE(first_copy);
+            AT_FREE(last_copy);
             return false;
         }
     }
     if (!first_copy || !last_copy)
     {
-        free(first_copy);
-        free(middle_copy);
-        free(last_copy);
+        AT_FREE(first_copy);
+        AT_FREE(middle_copy);
+        AT_FREE(last_copy);
         return false;
     }
     person_clear_name(person);
@@ -330,12 +330,12 @@ bool person_set_birth(Person *person, const char *date, const char *location)
         location_copy = at_string_dup(location);
         if (!location_copy)
         {
-            free(date_copy);
+            AT_FREE(date_copy);
             return false;
         }
     }
-    free(person->dates.birth_date);
-    free(person->dates.birth_location);
+    AT_FREE(person->dates.birth_date);
+    AT_FREE(person->dates.birth_location);
     person->dates.birth_date = date_copy;
     person->dates.birth_location = location_copy;
     return true;
@@ -350,8 +350,8 @@ bool person_set_death(Person *person, const char *date, const char *location)
     if (!date || date[0] == '\0')
     {
         person->is_alive = true;
-        free(person->dates.death_date);
-        free(person->dates.death_location);
+        AT_FREE(person->dates.death_date);
+        AT_FREE(person->dates.death_location);
         person->dates.death_date = NULL;
         person->dates.death_location = NULL;
         return true;
@@ -371,12 +371,12 @@ bool person_set_death(Person *person, const char *date, const char *location)
         location_copy = at_string_dup(location);
         if (!location_copy)
         {
-            free(date_copy);
+            AT_FREE(date_copy);
             return false;
         }
     }
-    free(person->dates.death_date);
-    free(person->dates.death_location);
+    AT_FREE(person->dates.death_date);
+    AT_FREE(person->dates.death_location);
     person->dates.death_date = date_copy;
     person->dates.death_location = location_copy;
     person->is_alive = false;
@@ -441,6 +441,51 @@ bool person_add_child(Person *parent, Person *child)
     {
         parent->children_count--;
         return false;
+    }
+    return true;
+}
+
+bool person_clear_parent(Person *child, PersonParentSlot slot)
+{
+    if (!child || slot > PERSON_PARENT_MOTHER)
+    {
+        return false;
+    }
+    child->parents[slot] = NULL;
+    return true;
+}
+
+bool person_remove_child(Person *parent, Person *child)
+{
+    if (!parent || !child)
+    {
+        return false;
+    }
+    size_t index = 0U;
+    bool found = false;
+    for (; index < parent->children_count; ++index)
+    {
+        if (parent->children[index] == child)
+        {
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+    {
+        return true;
+    }
+    for (size_t shift = index + 1U; shift < parent->children_count; ++shift)
+    {
+        parent->children[shift - 1U] = parent->children[shift];
+    }
+    parent->children_count -= 1U;
+    for (size_t slot = 0U; slot < 2U; ++slot)
+    {
+        if (child->parents[slot] == parent)
+        {
+            child->parents[slot] = NULL;
+        }
     }
     return true;
 }
@@ -539,6 +584,48 @@ bool person_add_spouse(Person *person, Person *spouse)
     return person_add_spouse_internal(person, spouse, true);
 }
 
+static void person_free_spouse_metadata(PersonSpouseRecord *record)
+{
+    if (!record)
+    {
+        return;
+    }
+    AT_FREE(record->marriage_date);
+    record->marriage_date = NULL;
+    AT_FREE(record->marriage_location);
+    record->marriage_location = NULL;
+}
+
+static bool person_remove_spouse_internal(Person *person, Person *spouse, bool reciprocal)
+{
+    if (!person || !spouse)
+    {
+        return false;
+    }
+    size_t index = 0U;
+    if (!person_find_spouse_index(person, spouse, &index))
+    {
+        return true;
+    }
+    PersonSpouseRecord *record = &person->spouses[index];
+    person_free_spouse_metadata(record);
+    for (size_t shift = index + 1U; shift < person->spouses_count; ++shift)
+    {
+        person->spouses[shift - 1U] = person->spouses[shift];
+    }
+    person->spouses_count -= 1U;
+    if (reciprocal)
+    {
+        (void)person_remove_spouse_internal(spouse, person, false);
+    }
+    return true;
+}
+
+bool person_remove_spouse(Person *person, Person *spouse)
+{
+    return person_remove_spouse_internal(person, spouse, true);
+}
+
 static bool person_set_marriage_internal(Person *person, Person *spouse, const char *date, const char *location,
                                          bool reciprocal)
 {
@@ -574,7 +661,7 @@ static bool person_set_marriage_internal(Person *person, Person *spouse, const c
         location_copy = at_string_dup(location);
         if (!location_copy)
         {
-            free(date_copy);
+            AT_FREE(date_copy);
             return false;
         }
     }
@@ -583,14 +670,14 @@ static bool person_set_marriage_internal(Person *person, Person *spouse, const c
     {
         if (!person_set_marriage_internal(spouse, person, date, location, false))
         {
-            free(date_copy);
-            free(location_copy);
+            AT_FREE(date_copy);
+            AT_FREE(location_copy);
             return false;
         }
     }
 
-    free(person->spouses[index].marriage_date);
-    free(person->spouses[index].marriage_location);
+    AT_FREE(person->spouses[index].marriage_date);
+    AT_FREE(person->spouses[index].marriage_location);
     person->spouses[index].marriage_date = date_copy;
     person->spouses[index].marriage_location = location_copy;
     return true;
@@ -667,8 +754,8 @@ bool person_metadata_set(Person *person, const char *key, const char *value)
     char *value_copy = value ? at_string_dup(value) : NULL;
     if (!key_copy || (value && !value_copy))
     {
-        free(key_copy);
-        free(value_copy);
+        AT_FREE(key_copy);
+        AT_FREE(value_copy);
         return false;
     }
     person->metadata[person->metadata_count].key = key_copy;

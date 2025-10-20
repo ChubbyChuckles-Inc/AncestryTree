@@ -86,6 +86,19 @@ extern "C"
         bool tree_dirty;
     } AppState;
 
+#define APP_PERSON_EDIT_MAX_SPOUSES 4U
+
+    typedef struct AppPersonEditRelationships
+    {
+        bool apply_father;
+        uint32_t father_id;
+        bool apply_mother;
+        uint32_t mother_id;
+        bool apply_spouses;
+        uint32_t spouse_ids[APP_PERSON_EDIT_MAX_SPOUSES];
+        size_t spouse_count;
+    } AppPersonEditRelationships;
+
     typedef struct AppPersonEditData
     {
         const char *first;
@@ -96,6 +109,7 @@ extern "C"
         const char *death_date;
         const char *death_location;
         bool clear_death;
+        AppPersonEditRelationships relationships;
     } AppPersonEditData;
 
 #define APP_PERSON_CREATE_MAX_CERTIFICATES 8U

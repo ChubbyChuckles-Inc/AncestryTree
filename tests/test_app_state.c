@@ -333,20 +333,50 @@ DECLARE_TEST(test_app_command_edit_person_roundtrip)
 
     char error_buffer[128];
 
+    Person *father = app_state_test_create_person(3101U, "Orion", "Prime", "1960-02-02", "Luna Base");
+    ASSERT_NOT_NULL(father);
+    ASSERT_TRUE(app_state_add_person(&state, father, error_buffer, sizeof(error_buffer)));
+
+    Person *mother = app_state_test_create_person(3102U, "Lyra", "Prime", "1965-03-03", "Luna Base");
+    ASSERT_NOT_NULL(mother);
+    ASSERT_TRUE(app_state_add_person(&state, mother, error_buffer, sizeof(error_buffer)));
+
+    Person *primary_spouse = app_state_test_create_person(3103U, "Vega", "Prime", "1985-04-04", "Mars City");
+    ASSERT_NOT_NULL(primary_spouse);
+    ASSERT_TRUE(app_state_add_person(&state, primary_spouse, error_buffer, sizeof(error_buffer)));
+
+    Person *secondary_spouse = app_state_test_create_person(3104U, "Altair", "Prime", "1986-05-05", "Mars City");
+    ASSERT_NOT_NULL(secondary_spouse);
+    ASSERT_TRUE(app_state_add_person(&state, secondary_spouse, error_buffer, sizeof(error_buffer)));
+
     Person *person = app_state_test_create_person(3001U, "Iris", "Vector", "2000-09-09", "Mars City");
     ASSERT_NOT_NULL(person);
     ASSERT_TRUE(app_state_add_person(&state, person, error_buffer, sizeof(error_buffer)));
 
+    ASSERT_TRUE(person_set_parent(person, father, PERSON_PARENT_FATHER));
+    ASSERT_TRUE(person_add_child(father, person));
+    ASSERT_TRUE(person_add_spouse(person, primary_spouse));
+
     AppPersonEditData edit_data = {
-        "Iris",
-        "Quantum",
-        "Vector",
-        "2000-09-09",
-        "Mars City",
-        "2080-01-01",
-        "Europa",
-        false,
+        .first = "Iris",
+        .middle = "Quantum",
+        .last = "Vector",
+        .birth_date = "2000-09-09",
+        .birth_location = "Mars City",
+        .death_date = "2080-01-01",
+        .death_location = "Europa",
+        .clear_death = false,
+        .relationships = {
+            .apply_father = true,
+            .father_id = 0U,
+            .apply_mother = true,
+            .mother_id = mother->id,
+            .apply_spouses = true,
+            .spouse_count = 2U,
+        },
     };
+    edit_data.relationships.spouse_ids[0] = primary_spouse->id;
+    edit_data.relationships.spouse_ids[1] = secondary_spouse->id;
 
     AppCommand *command = app_command_create_edit_person(3001U, &edit_data);
     ASSERT_NOT_NULL(command);
@@ -357,6 +387,15 @@ DECLARE_TEST(test_app_command_edit_person_roundtrip)
     ASSERT_STREQ(edited->name.middle, "Quantum");
     ASSERT_FALSE(edited->is_alive);
     ASSERT_STREQ(edited->dates.death_location, "Europa");
+    ASSERT_NULL(edited->parents[PERSON_PARENT_FATHER]);
+    ASSERT_EQ(father->children_count, 0U);
+    ASSERT_EQ(edited->parents[PERSON_PARENT_MOTHER], mother);
+    ASSERT_EQ(mother->children_count, 1U);
+    ASSERT_EQ(edited->spouses_count, 2U);
+    ASSERT_EQ(primary_spouse->spouses_count, 1U);
+    ASSERT_EQ(primary_spouse->spouses[0].partner, edited);
+    ASSERT_EQ(secondary_spouse->spouses_count, 1U);
+    ASSERT_EQ(secondary_spouse->spouses[0].partner, edited);
 
     ASSERT_TRUE(app_state_undo(&state, error_buffer, sizeof(error_buffer)));
     Person *reverted = family_tree_find_person(tree, 3001U);
@@ -364,12 +403,26 @@ DECLARE_TEST(test_app_command_edit_person_roundtrip)
     ASSERT_TRUE(reverted->name.middle == NULL);
     ASSERT_TRUE(reverted->is_alive);
     ASSERT_NULL(reverted->dates.death_location);
+    ASSERT_EQ(reverted->parents[PERSON_PARENT_FATHER], father);
+    ASSERT_EQ(father->children_count, 1U);
+    ASSERT_NULL(reverted->parents[PERSON_PARENT_MOTHER]);
+    ASSERT_EQ(mother->children_count, 0U);
+    ASSERT_EQ(reverted->spouses_count, 1U);
+    ASSERT_EQ(reverted->spouses[0].partner, primary_spouse);
+    ASSERT_EQ(primary_spouse->spouses_count, 1U);
+    ASSERT_EQ(secondary_spouse->spouses_count, 0U);
 
     ASSERT_TRUE(app_state_redo(&state, error_buffer, sizeof(error_buffer)));
     Person *reapplied = family_tree_find_person(tree, 3001U);
     ASSERT_NOT_NULL(reapplied);
     ASSERT_STREQ(reapplied->name.middle, "Quantum");
     ASSERT_FALSE(reapplied->is_alive);
+    ASSERT_NULL(reapplied->parents[PERSON_PARENT_FATHER]);
+    ASSERT_EQ(father->children_count, 0U);
+    ASSERT_EQ(reapplied->parents[PERSON_PARENT_MOTHER], mother);
+    ASSERT_EQ(mother->children_count, 1U);
+    ASSERT_EQ(reapplied->spouses_count, 2U);
+    ASSERT_EQ(secondary_spouse->spouses_count, 1U);
 
     app_state_test_context_shutdown(&state, &layout, tree);
 }

@@ -1,5 +1,6 @@
 #include "persistence.h"
 
+#include "at_memory.h"
 #include "at_string.h"
 #include "persistence_internal.h"
 
@@ -76,7 +77,7 @@ void persistence_auto_save_shutdown(PersistenceAutoSave *state)
     {
         return;
     }
-    free(state->path);
+    AT_FREE(state->path);
     state->path = NULL;
     state->tree_supplier = NULL;
     state->user_data = NULL;
@@ -157,7 +158,7 @@ bool persistence_auto_save_update_path(PersistenceAutoSave *state, const char *p
     {
         return persistence_set_error_message(error_buffer, error_buffer_size, "failed to duplicate auto-save path");
     }
-    free(state->path);
+    AT_FREE(state->path);
     state->path = copy;
     state->elapsed_seconds = 0.0;
     return true;

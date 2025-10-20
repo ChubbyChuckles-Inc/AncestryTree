@@ -35,7 +35,7 @@ static void app_command_stack_reset(AppCommandStack *stack)
     {
         return;
     }
-    free(stack->items);
+    AT_FREE(stack->items);
     stack->items = NULL;
     stack->count = 0U;
     stack->capacity = 0U;
@@ -810,6 +810,11 @@ bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_bu
     return true;
 }
 
+static bool app_command_person_apply_parent(FamilyTree *tree, Person *person, PersonParentSlot slot,
+                                            bool present, uint32_t parent_id);
+static bool app_command_person_apply_spouses(FamilyTree *tree, Person *person, bool present,
+                                             const uint32_t *spouse_ids, size_t spouse_count);
+
 bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonEditData *edit_data,
                            char *error_buffer, size_t error_buffer_size)
 {
@@ -870,6 +875,36 @@ bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonE
         if (error_buffer && error_buffer_size > 0U)
         {
             (void)snprintf(error_buffer, error_buffer_size, "Invalid death data for %u", person_id);
+        }
+        return false;
+    }
+    const AppPersonEditRelationships *relationships = &edit_data->relationships;
+    FamilyTree *tree = *state->tree;
+    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_FATHER, relationships->apply_father,
+                                         relationships->father_id))
+    {
+        if (error_buffer && error_buffer_size > 0U)
+        {
+            (void)snprintf(error_buffer, error_buffer_size, "Unable to update father selection for %u", person_id);
+        }
+        return false;
+    }
+    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_MOTHER, relationships->apply_mother,
+                                         relationships->mother_id))
+    {
+        if (error_buffer && error_buffer_size > 0U)
+        {
+            (void)snprintf(error_buffer, error_buffer_size, "Unable to update mother selection for %u", person_id);
+        }
+        return false;
+    }
+    if (!app_command_person_apply_spouses(tree, person, relationships->apply_spouses, relationships->spouse_ids,
+                                          relationships->spouse_count))
+    {
+        if (error_buffer && error_buffer_size > 0U)
+        {
+            (void)snprintf(error_buffer, error_buffer_size, "Unable to update spouse relationships for %u",
+                           person_id);
         }
         return false;
     }
@@ -1177,6 +1212,13 @@ typedef struct AppCommandPersonFields
     char *birth_location;
     char *death_date;
     char *death_location;
+    bool father_present;
+    uint32_t father_id;
+    bool mother_present;
+    uint32_t mother_id;
+    bool spouses_present;
+    uint32_t *spouse_ids;
+    size_t spouse_count;
 } AppCommandPersonFields;
 
 static void app_command_person_fields_reset(AppCommandPersonFields *fields)
@@ -1185,13 +1227,14 @@ static void app_command_person_fields_reset(AppCommandPersonFields *fields)
     {
         return;
     }
-    free(fields->first);
-    free(fields->middle);
-    free(fields->last);
-    free(fields->birth_date);
-    free(fields->birth_location);
-    free(fields->death_date);
-    free(fields->death_location);
+    AT_FREE(fields->first);
+    AT_FREE(fields->middle);
+    AT_FREE(fields->last);
+    AT_FREE(fields->birth_date);
+    AT_FREE(fields->birth_location);
+    AT_FREE(fields->death_date);
+    AT_FREE(fields->death_location);
+    AT_FREE(fields->spouse_ids);
     memset(fields, 0, sizeof(AppCommandPersonFields));
 }
 
@@ -1209,6 +1252,26 @@ static bool app_command_person_fields_capture(AppCommandPersonFields *fields, co
     fields->birth_location = person->dates.birth_location ? at_string_dup(person->dates.birth_location) : NULL;
     fields->death_date = person->dates.death_date ? at_string_dup(person->dates.death_date) : NULL;
     fields->death_location = person->dates.death_location ? at_string_dup(person->dates.death_location) : NULL;
+    fields->father_present = true;
+    fields->father_id = person->parents[PERSON_PARENT_FATHER] ? person->parents[PERSON_PARENT_FATHER]->id : 0U;
+    fields->mother_present = true;
+    fields->mother_id = person->parents[PERSON_PARENT_MOTHER] ? person->parents[PERSON_PARENT_MOTHER]->id : 0U;
+    fields->spouses_present = true;
+    fields->spouse_count = person->spouses_count;
+    if (fields->spouse_count > 0U)
+    {
+        fields->spouse_ids = (uint32_t *)AT_MALLOC(sizeof(uint32_t) * fields->spouse_count);
+        if (!fields->spouse_ids)
+        {
+            app_command_person_fields_reset(fields);
+            return false;
+        }
+        for (size_t index = 0U; index < fields->spouse_count; ++index)
+        {
+            const PersonSpouseRecord *record = &person->spouses[index];
+            fields->spouse_ids[index] = record->partner ? record->partner->id : 0U;
+        }
+    }
     if (!fields->first || !fields->last || !fields->birth_date)
     {
         app_command_person_fields_reset(fields);
@@ -1246,6 +1309,40 @@ static bool app_command_person_fields_from_edit_data(AppCommandPersonFields *fie
                                      ? at_string_dup(edit_data->death_location)
                                      : NULL;
     }
+    const AppPersonEditRelationships *relationships = &edit_data->relationships;
+    if (relationships->apply_father)
+    {
+        fields->father_present = true;
+        fields->father_id = relationships->father_id;
+    }
+    if (relationships->apply_mother)
+    {
+        fields->mother_present = true;
+        fields->mother_id = relationships->mother_id;
+    }
+    if (relationships->apply_spouses)
+    {
+        fields->spouses_present = true;
+        size_t count = relationships->spouse_count;
+        if (count > APP_PERSON_EDIT_MAX_SPOUSES)
+        {
+            count = APP_PERSON_EDIT_MAX_SPOUSES;
+        }
+        fields->spouse_count = count;
+        if (count > 0U)
+        {
+            fields->spouse_ids = (uint32_t *)AT_MALLOC(sizeof(uint32_t) * count);
+            if (!fields->spouse_ids)
+            {
+                app_command_person_fields_reset(fields);
+                return false;
+            }
+            for (size_t index = 0U; index < count; ++index)
+            {
+                fields->spouse_ids[index] = relationships->spouse_ids[index];
+            }
+        }
+    }
     if (!fields->first || !fields->last || !fields->birth_date)
     {
         app_command_person_fields_reset(fields);
@@ -1254,9 +1351,142 @@ static bool app_command_person_fields_from_edit_data(AppCommandPersonFields *fie
     return true;
 }
 
-static bool app_command_person_fields_apply(Person *person, const AppCommandPersonFields *fields)
+static bool app_command_person_apply_parent(FamilyTree *tree, Person *person, PersonParentSlot slot,
+                                            bool present, uint32_t parent_id)
 {
-    if (!person || !fields)
+    if (!tree || !person)
+    {
+        return false;
+    }
+    if (!present)
+    {
+        return true;
+    }
+    Person *current_parent = person->parents[slot];
+    if (parent_id == 0U)
+    {
+        if (current_parent && !person_remove_child(current_parent, person))
+        {
+            return false;
+        }
+        if (!person_clear_parent(person, slot))
+        {
+            return false;
+        }
+        return true;
+    }
+    Person *parent = family_tree_find_person(tree, parent_id);
+    if (!parent || parent == person)
+    {
+        return false;
+    }
+    if (current_parent && current_parent != parent)
+    {
+        if (!person_remove_child(current_parent, person))
+        {
+            return false;
+        }
+    }
+    if (!person_set_parent(person, parent, slot))
+    {
+        return false;
+    }
+    if (!person_add_child(parent, person))
+    {
+        return false;
+    }
+    return true;
+}
+
+static bool app_command_person_apply_spouses(FamilyTree *tree, Person *person, bool present,
+                                             const uint32_t *spouse_ids, size_t spouse_count)
+{
+    if (!tree || !person)
+    {
+        return false;
+    }
+    if (!present)
+    {
+        return true;
+    }
+    Person *desired_spouses[APP_PERSON_EDIT_MAX_SPOUSES];
+    size_t desired_count = 0U;
+    if (spouse_count > APP_PERSON_EDIT_MAX_SPOUSES)
+    {
+        spouse_count = APP_PERSON_EDIT_MAX_SPOUSES;
+    }
+    for (size_t index = 0U; index < spouse_count; ++index)
+    {
+        uint32_t spouse_id = spouse_ids ? spouse_ids[index] : 0U;
+        if (spouse_id == 0U)
+        {
+            continue;
+        }
+        Person *spouse = family_tree_find_person(tree, spouse_id);
+        if (!spouse || spouse == person)
+        {
+            return false;
+        }
+        bool duplicate = false;
+        for (size_t check = 0U; check < desired_count; ++check)
+        {
+            if (desired_spouses[check] == spouse)
+            {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate)
+        {
+            desired_spouses[desired_count++] = spouse;
+        }
+    }
+    size_t existing_index = 0U;
+    while (existing_index < person->spouses_count)
+    {
+        PersonSpouseRecord *record = &person->spouses[existing_index];
+        Person *partner = record->partner;
+        bool keep = false;
+        for (size_t check = 0U; check < desired_count; ++check)
+        {
+            if (desired_spouses[check] == partner)
+            {
+                keep = true;
+                break;
+            }
+        }
+        if (!keep)
+        {
+            if (partner && !person_remove_spouse(person, partner))
+            {
+                return false;
+            }
+            else if (!partner)
+            {
+                for (size_t shift = existing_index + 1U; shift < person->spouses_count; ++shift)
+                {
+                    person->spouses[shift - 1U] = person->spouses[shift];
+                }
+                person->spouses_count -= 1U;
+            }
+            continue;
+        }
+        existing_index += 1U;
+    }
+    for (size_t index = 0U; index < desired_count; ++index)
+    {
+        if (!person_add_spouse(person, desired_spouses[index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool app_command_person_fields_apply(FamilyTree *tree, Person *person,
+                                            const AppCommandPersonFields *fields)
+{
+    if (!tree || !person || !fields)
     {
         return false;
     }
@@ -1276,6 +1506,21 @@ static bool app_command_person_fields_apply(Person *person, const AppCommandPers
         }
     }
     else if (!person_set_death(person, NULL, NULL))
+    {
+        return false;
+    }
+    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_FATHER, fields->father_present,
+                                         fields->father_id))
+    {
+        return false;
+    }
+    if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_MOTHER, fields->mother_present,
+                                         fields->mother_id))
+    {
+        return false;
+    }
+    if (!app_command_person_apply_spouses(tree, person, fields->spouses_present, fields->spouse_ids,
+                                          fields->spouse_count))
     {
         return false;
     }
@@ -1312,7 +1557,7 @@ static bool app_command_edit_person_execute(AppCommand *command, AppState *state
         }
         self->has_snapshot = true;
     }
-    if (!app_command_person_fields_apply(person, &self->new_fields))
+    if (!app_command_person_fields_apply(*state->tree, person, &self->new_fields))
     {
         return false;
     }
@@ -1333,7 +1578,7 @@ static bool app_command_edit_person_undo(AppCommand *command, AppState *state)
     {
         return false;
     }
-    if (!app_command_person_fields_apply(person, &self->original_fields))
+    if (!app_command_person_fields_apply(*state->tree, person, &self->original_fields))
     {
         return false;
     }

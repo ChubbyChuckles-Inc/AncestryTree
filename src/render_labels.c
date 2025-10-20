@@ -100,7 +100,7 @@ void render_labels_shutdown(RenderLabelSystem *system)
     }
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     render_labels_reset(system);
-    free(system->entries);
+    AT_FREE(system->entries);
     system->entries = NULL;
     system->count = 0U;
     system->capacity = 0U;

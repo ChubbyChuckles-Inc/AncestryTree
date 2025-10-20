@@ -16,7 +16,7 @@ static bool timeline_replace_string(char **target, const char *value)
     }
     if (!value)
     {
-        free(*target);
+        AT_FREE(*target);
         *target = NULL;
         return true;
     }
@@ -25,7 +25,7 @@ static bool timeline_replace_string(char **target, const char *value)
     {
         return false;
     }
-    free(*target);
+    AT_FREE(*target);
     *target = copy;
     return true;
 }
@@ -72,14 +72,14 @@ void timeline_entry_reset(TimelineEntry *entry)
     {
         return;
     }
-    free(entry->date);
-    free(entry->description);
-    free(entry->location);
+    AT_FREE(entry->date);
+    AT_FREE(entry->description);
+    AT_FREE(entry->location);
     for (size_t index = 0; index < entry->media_count; ++index)
     {
-        free(entry->media_paths[index]);
+        AT_FREE(entry->media_paths[index]);
     }
-    free(entry->media_paths);
+    AT_FREE(entry->media_paths);
     timeline_entry_init(entry, entry->type);
 }
 

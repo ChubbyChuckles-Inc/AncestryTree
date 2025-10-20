@@ -31,7 +31,7 @@ static bool assign_string(char **target, const char *value)
             return false;
         }
     }
-    free(*target);
+    AT_FREE(*target);
     *target = copy;
     return true;
 }
