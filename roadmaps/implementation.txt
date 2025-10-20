@@ -645,8 +645,8 @@ PHASE 9: CI/CD & AUTOMATION (GITHUB ACTIONS)
     [x] Create .github/workflows/test.yml
             [x] Run after build workflow
             [x] Run test suite on all platforms
-            [ ] Generate coverage reports (gcov/lcov)
-            [ ] Upload coverage to Codecov/Coveralls
+            [x] Generate coverage reports (gcov/lcov)
+            [x] Upload coverage to Codecov/Coveralls
             [x] Fail workflow if tests fail
 
 9.3 Release Workflow

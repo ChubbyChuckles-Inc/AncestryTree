@@ -23,7 +23,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build git valgrind libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev libglu1-mesa-dev libgl1-mesa-dev
+          sudo apt-get install -y build-essential cmake ninja-build git valgrind lcov libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev libglu1-mesa-dev libgl1-mesa-dev
           git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git
           cmake -S raylib -B raylib/build -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=$HOME/raylib
           cmake --build raylib/build --target raylib
@@ -59,17 +59,25 @@ jobs:
 
       - name: Configure CMake (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        run: cmake -S . -B build-${{ matrix.build_type }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        run: |
+          cmake -S . -B build-${{ matrix.build_type }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DANCESTRYTREE_ENABLE_COVERAGE=ON
         shell: bash
 
       - name: Configure CMake (Windows)
         if: matrix.os == 'windows-latest'
-        run: cmake -S . -B build-${{ matrix.build_type }} -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        run: |
+          cmake -S . -B build-${{ matrix.build_type }} -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         shell: pwsh
 
       - name: Build (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        run: cmake --build build-${{ matrix.build_type }}
+        run: |
+          cmake --build build-${{ matrix.build_type }}
+        shell: bash
+
+      - name: Reset coverage counters (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: lcov --directory build-${{ matrix.build_type }} --zerocounters
         shell: bash
 
       - name: Build (Windows)
@@ -91,3 +99,25 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: bash scripts/run_memory_checks.sh --build-dir build-${{ matrix.build_type }}
         shell: bash
+
+      - name: Capture coverage report
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          lcov --capture --directory build-${{ matrix.build_type }} --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/tests/*' '*/dependencies/*' --output-file coverage.info
+          lcov --list coverage.info
+        shell: bash
+
+      - name: Upload coverage artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.build_type }}
+          path: coverage.info
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.info
+          fail_ci_if_error: true

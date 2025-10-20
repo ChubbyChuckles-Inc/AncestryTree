@@ -10,6 +10,19 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 option(ANCESTRYTREE_BUILD_TESTS "Build unit tests" ON)
+option(ANCESTRYTREE_ENABLE_COVERAGE "Enable GCC/Clang code coverage instrumentation" OFF)
+
+set(ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS "")
+set(ANCESTRYTREE_COVERAGE_LINK_LIBRARIES "")
+
+if(ANCESTRYTREE_ENABLE_COVERAGE)
+    if(MSVC)
+        message(FATAL_ERROR "Code coverage instrumentation is only supported on GCC/Clang toolchains.")
+    else()
+        list(APPEND ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS --coverage)
+        list(APPEND ANCESTRYTREE_COVERAGE_LINK_LIBRARIES --coverage)
+    endif()
+endif()
 
 set(PROJECT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(PROJECT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -23,6 +36,14 @@ if(MSVC)
     target_compile_options(ancestrytree_lib PRIVATE /W4 /permissive- /Zc:preprocessor)
 else()
     target_compile_options(ancestrytree_lib PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS)
+    target_compile_options(ancestrytree_lib PRIVATE ${ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS})
+endif()
+
+if(ANCESTRYTREE_COVERAGE_LINK_LIBRARIES)
+    target_link_libraries(ancestrytree_lib PUBLIC ${ANCESTRYTREE_COVERAGE_LINK_LIBRARIES})
 endif()
 
 target_include_directories(ancestrytree_lib PUBLIC ${PROJECT_INCLUDE_DIR})
@@ -67,6 +88,14 @@ add_executable(ancestrytree src/main.c)
 
 target_link_libraries(ancestrytree PRIVATE ancestrytree_lib)
 
+if(ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS)
+    target_compile_options(ancestrytree PRIVATE ${ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS})
+endif()
+
+if(ANCESTRYTREE_COVERAGE_LINK_LIBRARIES)
+    target_link_libraries(ancestrytree PRIVATE ${ANCESTRYTREE_COVERAGE_LINK_LIBRARIES})
+endif()
+
 find_path(NUKLEAR_INCLUDE_DIR nuklear.h
     HINTS
         ${PROJECT_INCLUDE_DIR}/external
@@ -108,6 +137,12 @@ if(ANCESTRYTREE_BUILD_TESTS)
     file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_*.c)
     add_executable(ancestrytree_tests ${TEST_SOURCES})
     target_link_libraries(ancestrytree_tests PRIVATE ancestrytree_lib)
+    if(ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS)
+        target_compile_options(ancestrytree_tests PRIVATE ${ANCESTRYTREE_COVERAGE_COMPILE_OPTIONS})
+    endif()
+    if(ANCESTRYTREE_COVERAGE_LINK_LIBRARIES)
+        target_link_libraries(ancestrytree_tests PRIVATE ${ANCESTRYTREE_COVERAGE_LINK_LIBRARIES})
+    endif()
     if(raylib_FOUND)
         target_link_libraries(ancestrytree_tests PRIVATE raylib::raylib)
         target_compile_definitions(ancestrytree_tests PRIVATE ANCESTRYTREE_HAVE_RAYLIB=1)
