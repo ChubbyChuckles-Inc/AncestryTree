@@ -38,47 +38,77 @@ static void render_copy_color(RenderColor *dst, const RenderColor *src)
     memcpy(dst, src, sizeof(RenderColor));
 }
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+static void render_update_selection_particles(RenderState *state, const LayoutResult *layout,
+                                              const Camera3D *camera, const Person *selected_person,
+                                              float delta_seconds);
+static void render_draw_selection_particles(RenderState *state, const Camera3D *camera);
+#else
+static void render_update_selection_particles(RenderState *state, const LayoutResult *layout,
+                                              const Camera3D *camera, const Person *selected_person,
+                                              float delta_seconds)
+{
+    (void)state;
+    (void)layout;
+    (void)camera;
+    (void)selected_person;
+    (void)delta_seconds;
+}
+
+static void render_draw_selection_particles(RenderState *state, const Camera3D *camera)
+{
+    (void)state;
+    (void)camera;
+}
+#endif
+
 static void render_set_default_config(RenderConfig *config)
 {
     if (!config)
     {
         return;
     }
-    config->sphere_radius                 = 0.6f;
-    config->glow_intensity                = 0.85f;
-    config->glow_min_strength             = 0.35f;
-    config->glow_pulse_speed              = 1.4f;
-    config->connection_radius             = 0.05f;
-    config->connection_antialiasing       = true;
-    config->connection_style_parent_child = RENDER_CONNECTION_STYLE_BEZIER;
-    config->connection_style_spouse       = RENDER_CONNECTION_STYLE_STRAIGHT;
-    config->alive_color                   = render_color_make(0, 195, 255, 255);
-    config->deceased_color                = render_color_make(200, 120, 240, 255);
-    config->selected_outline_color        = render_color_make(255, 255, 255, 255);
-    config->connection_color_parent_child = render_color_make(64, 200, 255, 200);
-    config->connection_color_spouse       = render_color_make(255, 180, 120, 200);
-    config->show_connections              = true;
-    config->show_grid                     = true;
-    config->show_overlay                  = true;
-    config->show_name_panels              = true;
-    config->show_profile_images           = true;
-    config->name_panel_font_size          = 26.0f;
-    config->enable_frustum_culling        = true;
-    config->enable_lod                    = true;
-    config->lod_near_distance             = 14.0f;
-    config->lod_far_distance              = 42.0f;
-    config->culling_margin                = 1.2f;
-    config->show_background_gradient      = true;
-    config->background_gradient_top       = render_color_make(10, 30, 64, 255);
-    config->background_gradient_bottom    = render_color_make(2, 8, 20, 255);
-    config->enable_fog                    = true;
-    config->fog_start_distance            = 18.0f;
-    config->fog_end_distance              = 78.0f;
-    config->fog_color                     = render_color_make(8, 20, 42, 255);
-    config->enable_rim_lighting           = true;
-    config->rim_intensity                 = 1.1f;
-    config->rim_power                     = 2.6f;
-    config->rim_color                     = render_color_make(100, 240, 255, 255);
+    config->sphere_radius                   = 0.6f;
+    config->glow_intensity                  = 0.85f;
+    config->glow_min_strength               = 0.35f;
+    config->glow_pulse_speed                = 1.4f;
+    config->connection_radius               = 0.05f;
+    config->connection_antialiasing         = true;
+    config->connection_style_parent_child   = RENDER_CONNECTION_STYLE_BEZIER;
+    config->connection_style_spouse         = RENDER_CONNECTION_STYLE_STRAIGHT;
+    config->alive_color                     = render_color_make(0, 195, 255, 255);
+    config->deceased_color                  = render_color_make(200, 120, 240, 255);
+    config->selected_outline_color          = render_color_make(255, 255, 255, 255);
+    config->connection_color_parent_child   = render_color_make(64, 200, 255, 200);
+    config->connection_color_spouse         = render_color_make(255, 180, 120, 200);
+    config->show_connections                = true;
+    config->show_grid                       = true;
+    config->show_overlay                    = true;
+    config->show_name_panels                = true;
+    config->show_profile_images             = true;
+    config->name_panel_font_size            = 26.0f;
+    config->enable_frustum_culling          = true;
+    config->enable_lod                      = true;
+    config->lod_near_distance               = 14.0f;
+    config->lod_far_distance                = 42.0f;
+    config->culling_margin                  = 1.2f;
+    config->show_background_gradient        = true;
+    config->background_gradient_top         = render_color_make(10, 30, 64, 255);
+    config->background_gradient_bottom      = render_color_make(2, 8, 20, 255);
+    config->enable_fog                      = true;
+    config->fog_start_distance              = 18.0f;
+    config->fog_end_distance                = 78.0f;
+    config->fog_color                       = render_color_make(8, 20, 42, 255);
+    config->enable_rim_lighting             = true;
+    config->rim_intensity                   = 1.1f;
+    config->rim_power                       = 2.6f;
+    config->rim_color                       = render_color_make(100, 240, 255, 255);
+    config->enable_selection_particles      = true;
+    config->selection_particle_capacity     = 48U;
+    config->selection_particle_lifetime     = 1.6f;
+    config->selection_particle_speed_min    = 1.8f;
+    config->selection_particle_speed_max    = 3.6f;
+    config->selection_particle_repeat_delay = 2.4f;
 }
 
 void render_state_init(RenderState *state)
@@ -89,13 +119,18 @@ void render_state_init(RenderState *state)
     }
     memset(state, 0, sizeof(*state));
     render_set_default_config(&state->config);
-    state->render_width          = 0;
-    state->render_height         = 0;
-    state->render_target_ready   = false;
-    state->visible_nodes         = NULL;
-    state->visibility_capacity   = 0U;
-    state->visible_node_count    = 0U;
-    state->visibility_mask_ready = false;
+    state->render_width                       = 0;
+    state->render_height                      = 0;
+    state->render_target_ready                = false;
+    state->visible_nodes                      = NULL;
+    state->visibility_capacity                = 0U;
+    state->visible_node_count                 = 0U;
+    state->visibility_mask_ready              = false;
+    state->selection_particles_last_person    = NULL;
+    state->selection_particles_last_origin[0] = 0.0f;
+    state->selection_particles_last_origin[1] = 0.0f;
+    state->selection_particles_last_origin[2] = 0.0f;
+    state->selection_particles_timer          = 0.0f;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     state->glow_shader_ready      = false;
     state->glow_intensity_loc     = -1;
@@ -197,6 +232,29 @@ bool render_config_validate(const RenderConfig *config)
     if (!(config->rim_power >= 0.5f))
     {
         return false;
+    }
+    if (config->enable_selection_particles)
+    {
+        if (config->selection_particle_capacity == 0U)
+        {
+            return false;
+        }
+        if (!(config->selection_particle_lifetime > 0.0f))
+        {
+            return false;
+        }
+        if (!(config->selection_particle_speed_min > 0.0f))
+        {
+            return false;
+        }
+        if (!(config->selection_particle_speed_max >= config->selection_particle_speed_min))
+        {
+            return false;
+        }
+        if (!(config->selection_particle_repeat_delay >= 0.0f))
+        {
+            return false;
+        }
     }
     return true;
 }
@@ -811,6 +869,163 @@ static void render_apply_rim_overlay(const RenderState *state, const Vector3 *po
     BeginBlendMode(BLEND_ADD_COLORS);
     rlDisableDepthMask();
     DrawSphereEx(*position, rim_radius, rim_segments, rim_segments, rim_color);
+    rlEnableDepthMask();
+    EndBlendMode();
+}
+
+static void render_reset_selection_particle_state(RenderState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    selection_particles_reset(&state->selection_particles);
+    state->selection_particles_last_person    = NULL;
+    state->selection_particles_last_origin[0] = 0.0f;
+    state->selection_particles_last_origin[1] = 0.0f;
+    state->selection_particles_last_origin[2] = 0.0f;
+    state->selection_particles_timer          = 0.0f;
+}
+
+static void render_update_selection_particles(RenderState *state, const LayoutResult *layout,
+                                              const Camera3D *camera, const Person *selected_person,
+                                              float delta_seconds)
+{
+    if (!state)
+    {
+        return;
+    }
+    SelectionParticleSystem *system = &state->selection_particles;
+    if (!state->config.enable_selection_particles || !system->particles || system->capacity == 0U)
+    {
+        render_reset_selection_particle_state(state);
+        return;
+    }
+
+    if (delta_seconds > 0.0f)
+    {
+        selection_particles_update(system, delta_seconds);
+    }
+
+    if (!selected_person || !layout)
+    {
+        state->selection_particles_last_person = NULL;
+        return;
+    }
+
+    float origin[3];
+    if (!render_find_person_position(layout, selected_person, origin))
+    {
+        state->selection_particles_last_person = NULL;
+        return;
+    }
+
+    bool selection_changed             = selected_person != state->selection_particles_last_person;
+    const float displacement_threshold = fmaxf(0.02f, state->config.sphere_radius * 0.25f);
+    float displacement_sq              = 0.0f;
+    if (!selection_changed)
+    {
+        float dx        = origin[0] - state->selection_particles_last_origin[0];
+        float dy        = origin[1] - state->selection_particles_last_origin[1];
+        float dz        = origin[2] - state->selection_particles_last_origin[2];
+        displacement_sq = dx * dx + dy * dy + dz * dz;
+    }
+
+    bool trigger_burst = false;
+    if (selection_changed)
+    {
+        selection_particles_reset(system);
+        trigger_burst                    = true;
+        state->selection_particles_timer = 0.0f;
+    }
+    else
+    {
+        state->selection_particles_timer += delta_seconds;
+        if (displacement_sq > displacement_threshold * displacement_threshold)
+        {
+            trigger_burst                    = true;
+            state->selection_particles_timer = 0.0f;
+        }
+        else if (state->config.selection_particle_repeat_delay <= 0.0f)
+        {
+            if (selection_particles_active_count(system) == 0U)
+            {
+                trigger_burst                    = true;
+                state->selection_particles_timer = 0.0f;
+            }
+        }
+        else if (state->selection_particles_timer >= state->config.selection_particle_repeat_delay)
+        {
+            trigger_burst                    = true;
+            state->selection_particles_timer = 0.0f;
+        }
+    }
+
+    if (trigger_burst)
+    {
+        selection_particles_trigger_burst(system, origin,
+                                          state->config.selection_particle_speed_min,
+                                          state->config.selection_particle_speed_max);
+    }
+
+    state->selection_particles_last_person    = selected_person;
+    state->selection_particles_last_origin[0] = origin[0];
+    state->selection_particles_last_origin[1] = origin[1];
+    state->selection_particles_last_origin[2] = origin[2];
+
+    (void)camera;
+}
+
+static void render_draw_selection_particles(RenderState *state, const Camera3D *camera)
+{
+    if (!state || !state->config.enable_selection_particles)
+    {
+        return;
+    }
+    const SelectionParticleSystem *system = &state->selection_particles;
+    if (!system->particles || system->capacity == 0U)
+    {
+        return;
+    }
+    size_t active = selection_particles_active_count(system);
+    if (active == 0U)
+    {
+        return;
+    }
+
+    Color base_color = render_color_to_raylib(state->config.selected_outline_color);
+    BeginBlendMode(BLEND_ADD_COLORS);
+    rlDisableDepthMask();
+    for (size_t index = 0U; index < system->capacity; ++index)
+    {
+        const SelectionParticle *particle = &system->particles[index];
+        if (!particle->active)
+        {
+            continue;
+        }
+        float life_fraction = 0.0f;
+        if (particle->lifetime > 0.0f)
+        {
+            life_fraction = particle->age / particle->lifetime;
+            if (life_fraction > 1.0f)
+            {
+                life_fraction = 1.0f;
+            }
+        }
+        float fade       = 1.0f - life_fraction;
+        float radius     = fmaxf(0.1f, state->config.sphere_radius * (0.18f + 0.32f * fade));
+        Color draw_color = base_color;
+        float alpha      = (float)base_color.a * (0.35f + 0.55f * fade);
+        if (alpha > 255.0f)
+        {
+            alpha = 255.0f;
+        }
+        draw_color.a     = (unsigned char)alpha;
+        Vector3 position = {particle->position[0], particle->position[1], particle->position[2]};
+        float distance   = camera ? Vector3Distance(camera->position, position) : 0.0f;
+        draw_color       = render_apply_fog_color(state, draw_color, distance);
+        DrawSphereEx(position, radius, 10, 10, draw_color);
+    }
     rlEnableDepthMask();
     EndBlendMode();
 }
@@ -1455,12 +1670,39 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.rim_intensity       = config->rim_intensity;
         state->config.rim_power           = config->rim_power;
         render_copy_color(&state->config.rim_color, &config->rim_color);
+        state->config.enable_selection_particles      = config->enable_selection_particles;
+        state->config.selection_particle_capacity     = config->selection_particle_capacity;
+        state->config.selection_particle_lifetime     = config->selection_particle_lifetime;
+        state->config.selection_particle_speed_min    = config->selection_particle_speed_min;
+        state->config.selection_particle_speed_max    = config->selection_particle_speed_max;
+        state->config.selection_particle_repeat_delay = config->selection_particle_repeat_delay;
     }
 
     if (!render_config_validate(&state->config))
     {
         return render_set_error(error_buffer, error_buffer_size, "invalid render configuration");
     }
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (state->config.enable_selection_particles)
+    {
+        if (!selection_particles_setup(&state->selection_particles,
+                                       state->config.selection_particle_capacity,
+                                       state->config.selection_particle_lifetime))
+        {
+            return render_set_error(error_buffer, error_buffer_size,
+                                    "failed to initialize selection particle system");
+        }
+    }
+    else
+    {
+        (void)selection_particles_setup(&state->selection_particles, 0U,
+                                        state->config.selection_particle_lifetime);
+    }
+#else
+    (void)selection_particles_setup(&state->selection_particles, 0U,
+                                    state->config.selection_particle_lifetime);
+#endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     bool window_ready = IsWindowReady();
@@ -1567,6 +1809,7 @@ void render_cleanup(RenderState *state)
     state->visibility_capacity   = 0U;
     state->visible_node_count    = 0U;
     state->visibility_mask_ready = false;
+    selection_particles_shutdown(&state->selection_particles);
     render_state_init(state);
 }
 
@@ -1801,6 +2044,13 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         return false;
     }
 
+    float delta_seconds = GetFrameTime();
+    if (delta_seconds < 0.0f)
+    {
+        delta_seconds = 0.0f;
+    }
+    render_update_selection_particles(state, layout, camera_data, selected_person, delta_seconds);
+
     if (!render_update_visibility(state, layout, camera_data))
     {
         state->visibility_mask_ready = false;
@@ -1907,6 +2157,8 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         }
     }
 
+    render_draw_selection_particles(state, camera_data);
+
     for (size_t index = 0; index < layout->count; ++index)
     {
         const LayoutNode *node = &layout->nodes[index];
@@ -1960,4 +2212,6 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
  * remain visible.
  * 8. Move far from the tree to verify sphere tessellation reduces smoothly without noticeable
  * popping.
+ * 9. Select a person and observe the selection particle burst; hold the selection to ensure
+ *    periodic bursts respect the configured repeat delay and fade cleanly with fog.
  */

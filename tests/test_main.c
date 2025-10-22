@@ -1,5 +1,5 @@
-#include "test_framework.h"
 #include "at_memory.h"
+#include "test_framework.h"
 
 #include <stdio.h>
 
@@ -37,6 +37,7 @@ void register_file_dialog_tests(TestRegistry *registry);
 void register_bootstrap_tests(TestRegistry *registry);
 void register_ui_scaling_tests(TestRegistry *registry);
 void register_memory_suite_tests(TestRegistry *registry);
+void register_selection_particles_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -65,6 +66,7 @@ int main(void)
     register_path_utils_tests(&registry);
     register_render_tests(&registry);
     register_render_labels_tests(&registry);
+    register_selection_particles_tests(&registry);
     register_interaction_tests(&registry);
     register_detail_content_tests(&registry);
     register_detail_view_tests(&registry);
@@ -92,10 +94,10 @@ int main(void)
         at_memory_get_stats(&failure_stats);
         if (failure_stats.outstanding_allocations != 0U)
         {
-            fprintf(stderr,
-                    "Detected %zu outstanding allocation(s) totalling %zu bytes while tests failed.\n",
-                    failure_stats.outstanding_allocations,
-                    failure_stats.outstanding_bytes);
+            fprintf(
+                stderr,
+                "Detected %zu outstanding allocation(s) totalling %zu bytes while tests failed.\n",
+                failure_stats.outstanding_allocations, failure_stats.outstanding_bytes);
             at_memory_report_leaks();
         }
 #endif
@@ -107,10 +109,10 @@ int main(void)
     at_memory_get_stats(&stats);
     if (stats.outstanding_allocations != 0U || stats.outstanding_bytes != 0U)
     {
-        fprintf(stderr,
-                "Detected %zu outstanding allocation(s) totalling %zu bytes after tests completed.\n",
-                stats.outstanding_allocations,
-                stats.outstanding_bytes);
+        fprintf(
+            stderr,
+            "Detected %zu outstanding allocation(s) totalling %zu bytes after tests completed.\n",
+            stats.outstanding_allocations, stats.outstanding_bytes);
         at_memory_report_leaks();
         return 1;
     }

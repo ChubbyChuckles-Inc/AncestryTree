@@ -41,6 +41,12 @@ TEST(test_render_config_default_is_valid)
     ASSERT_TRUE(config.enable_fog);
     ASSERT_TRUE(config.fog_start_distance >= 0.0f);
     ASSERT_TRUE(config.fog_end_distance > config.fog_start_distance);
+    ASSERT_TRUE(config.enable_selection_particles);
+    ASSERT_EQ(config.selection_particle_capacity, 48U);
+    ASSERT_TRUE(config.selection_particle_lifetime > 0.0f);
+    ASSERT_TRUE(config.selection_particle_speed_min > 0.0f);
+    ASSERT_TRUE(config.selection_particle_speed_max >= config.selection_particle_speed_min);
+    ASSERT_TRUE(config.selection_particle_repeat_delay >= 0.0f);
 }
 
 TEST(test_render_find_person_position_returns_expected_coordinates)
@@ -196,6 +202,27 @@ TEST(test_render_config_validate_rejects_invalid_style)
     ASSERT_FALSE(render_config_validate(&config));
     config           = render_config_default();
     config.rim_power = 0.3f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                             = render_config_default();
+    config.enable_selection_particles  = true;
+    config.selection_particle_capacity = 0U;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                             = render_config_default();
+    config.enable_selection_particles  = true;
+    config.selection_particle_lifetime = 0.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                              = render_config_default();
+    config.enable_selection_particles   = true;
+    config.selection_particle_speed_min = 0.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                              = render_config_default();
+    config.enable_selection_particles   = true;
+    config.selection_particle_speed_min = 3.0f;
+    config.selection_particle_speed_max = 2.5f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                                 = render_config_default();
+    config.enable_selection_particles      = true;
+    config.selection_particle_repeat_delay = -0.1f;
     ASSERT_FALSE(render_config_validate(&config));
 }
 

@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "selection_particles.h"
+
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 #include <raylib.h>
 #endif
@@ -67,6 +69,12 @@ typedef struct RenderConfig
     float rim_intensity;
     float rim_power;
     RenderColor rim_color;
+    bool enable_selection_particles;
+    size_t selection_particle_capacity;
+    float selection_particle_lifetime;
+    float selection_particle_speed_min;
+    float selection_particle_speed_max;
+    float selection_particle_repeat_delay;
 } RenderConfig;
 
 typedef struct RenderConnectionSegment
@@ -89,6 +97,10 @@ typedef struct RenderState
     size_t visibility_capacity;
     size_t visible_node_count;
     bool visibility_mask_ready;
+    SelectionParticleSystem selection_particles;
+    const struct Person *selection_particles_last_person;
+    float selection_particles_last_origin[3];
+    float selection_particles_timer;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     struct Shader glow_shader;
     int glow_intensity_loc;

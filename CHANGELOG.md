@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Selection particle bursts that radiate from selected holographic spheres, configurable via
+  render settings, with runtime validation safeguards and a dedicated unit test suite for the
+  particle system.
 - Glow shader overhaul introduces configurable pulse speed, minimum glow floor,
   and rim lighting highlights driven by camera-facing normals, with new unit
   tests guarding configuration validation.

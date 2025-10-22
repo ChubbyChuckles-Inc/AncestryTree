@@ -698,7 +698,7 @@ PHASE 10: OPTIMIZATION & POLISH
       [ ] Shadows (optional)
   [ ] Add particle effects
       [ ] Birth/death visual indicators
-      [ ] Selection particles
+      [x] Selection particles
   [ ] Improve UI aesthetics
       [ ] Custom Nuklear theme
       [ ] Icons for buttons
@@ -854,5 +854,5 @@ Documentation:
 ================================================================================
 END OF IMPLEMENTATION ROADMAP
 ================================================================================
-Last updated: October 15, 2025
+Last updated: October 22, 2025
 Version: 1.0
