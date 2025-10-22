@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "life_particles.h"
 #include "selection_particles.h"
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
@@ -75,6 +76,19 @@ typedef struct RenderConfig
     float selection_particle_speed_min;
     float selection_particle_speed_max;
     float selection_particle_repeat_delay;
+    bool enable_life_particles;
+    size_t birth_particle_capacity;
+    size_t death_particle_capacity;
+    float birth_particle_lifetime;
+    float death_particle_lifetime;
+    float birth_particle_speed_min;
+    float birth_particle_speed_max;
+    float death_particle_speed_min;
+    float death_particle_speed_max;
+    float birth_particle_spawn_rate;
+    float death_particle_spawn_rate;
+    float birth_particle_vertical_bias;
+    float death_particle_vertical_bias;
 } RenderConfig;
 
 typedef struct RenderConnectionSegment
@@ -101,6 +115,11 @@ typedef struct RenderState
     const struct Person *selection_particles_last_person;
     float selection_particles_last_origin[3];
     float selection_particles_timer;
+    LifeParticleSystem life_particles;
+    float birth_particle_spawn_accumulator;
+    float death_particle_spawn_accumulator;
+    size_t birth_particle_spawn_cursor;
+    size_t death_particle_spawn_cursor;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     struct Shader glow_shader;
     int glow_intensity_loc;

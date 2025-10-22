@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file. The format 
 - Selection particle bursts that radiate from selected holographic spheres, configurable via
   render settings, with runtime validation safeguards and a dedicated unit test suite for the
   particle system.
+- Birth and memorial particle streams for living and deceased holographic spheres, including
+  configurable spawn rates, lifetimes, and vertical bias controls with validation, renderer
+  integration, and a dedicated life particle unit test suite.
 - Glow shader overhaul introduces configurable pulse speed, minimum glow floor,
   and rim lighting highlights driven by camera-facing normals, with new unit
   tests guarding configuration validation.

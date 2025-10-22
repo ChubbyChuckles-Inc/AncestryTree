@@ -43,6 +43,9 @@ static void render_update_selection_particles(RenderState *state, const LayoutRe
                                               const Camera3D *camera, const Person *selected_person,
                                               float delta_seconds);
 static void render_draw_selection_particles(RenderState *state, const Camera3D *camera);
+static void render_update_life_particles(RenderState *state, const LayoutResult *layout,
+                                         const Camera3D *camera, float delta_seconds);
+static void render_draw_life_particles(RenderState *state, const Camera3D *camera);
 #else
 static void render_update_selection_particles(RenderState *state, const LayoutResult *layout,
                                               const Camera3D *camera, const Person *selected_person,
@@ -56,6 +59,21 @@ static void render_update_selection_particles(RenderState *state, const LayoutRe
 }
 
 static void render_draw_selection_particles(RenderState *state, const Camera3D *camera)
+{
+    (void)state;
+    (void)camera;
+}
+
+static void render_update_life_particles(RenderState *state, const LayoutResult *layout,
+                                         const Camera3D *camera, float delta_seconds)
+{
+    (void)state;
+    (void)layout;
+    (void)camera;
+    (void)delta_seconds;
+}
+
+static void render_draw_life_particles(RenderState *state, const Camera3D *camera)
 {
     (void)state;
     (void)camera;
@@ -109,6 +127,19 @@ static void render_set_default_config(RenderConfig *config)
     config->selection_particle_speed_min    = 1.8f;
     config->selection_particle_speed_max    = 3.6f;
     config->selection_particle_repeat_delay = 2.4f;
+    config->enable_life_particles           = true;
+    config->birth_particle_capacity         = 96U;
+    config->death_particle_capacity         = 96U;
+    config->birth_particle_lifetime         = 2.6f;
+    config->death_particle_lifetime         = 3.2f;
+    config->birth_particle_speed_min        = 0.45f;
+    config->birth_particle_speed_max        = 1.4f;
+    config->death_particle_speed_min        = 0.30f;
+    config->death_particle_speed_max        = 0.9f;
+    config->birth_particle_spawn_rate       = 3.0f;
+    config->death_particle_spawn_rate       = 2.0f;
+    config->birth_particle_vertical_bias    = 0.55f;
+    config->death_particle_vertical_bias    = 0.45f;
 }
 
 void render_state_init(RenderState *state)
@@ -131,6 +162,10 @@ void render_state_init(RenderState *state)
     state->selection_particles_last_origin[1] = 0.0f;
     state->selection_particles_last_origin[2] = 0.0f;
     state->selection_particles_timer          = 0.0f;
+    state->birth_particle_spawn_accumulator   = 0.0f;
+    state->death_particle_spawn_accumulator   = 0.0f;
+    state->birth_particle_spawn_cursor        = 0U;
+    state->death_particle_spawn_cursor        = 0U;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     state->glow_shader_ready      = false;
     state->glow_intensity_loc     = -1;
@@ -254,6 +289,67 @@ bool render_config_validate(const RenderConfig *config)
         if (!(config->selection_particle_repeat_delay >= 0.0f))
         {
             return false;
+        }
+    }
+    if (config->enable_life_particles)
+    {
+        if (config->birth_particle_capacity == 0U && config->death_particle_capacity == 0U)
+        {
+            return false;
+        }
+        if (config->birth_particle_capacity == 0U && config->birth_particle_spawn_rate > 0.0f)
+        {
+            return false;
+        }
+        if (config->death_particle_capacity == 0U && config->death_particle_spawn_rate > 0.0f)
+        {
+            return false;
+        }
+        if (config->birth_particle_capacity > 0U)
+        {
+            if (!(config->birth_particle_lifetime > 0.0f))
+            {
+                return false;
+            }
+            if (!(config->birth_particle_speed_min > 0.0f))
+            {
+                return false;
+            }
+            if (!(config->birth_particle_speed_max >= config->birth_particle_speed_min))
+            {
+                return false;
+            }
+            if (!(config->birth_particle_spawn_rate >= 0.0f))
+            {
+                return false;
+            }
+            if (!(config->birth_particle_vertical_bias > 0.0f))
+            {
+                return false;
+            }
+        }
+        if (config->death_particle_capacity > 0U)
+        {
+            if (!(config->death_particle_lifetime > 0.0f))
+            {
+                return false;
+            }
+            if (!(config->death_particle_speed_min > 0.0f))
+            {
+                return false;
+            }
+            if (!(config->death_particle_speed_max >= config->death_particle_speed_min))
+            {
+                return false;
+            }
+            if (!(config->death_particle_spawn_rate >= 0.0f))
+            {
+                return false;
+            }
+            if (!(config->death_particle_vertical_bias > 0.0f))
+            {
+                return false;
+            }
         }
     }
     return true;
@@ -1030,6 +1126,278 @@ static void render_draw_selection_particles(RenderState *state, const Camera3D *
     EndBlendMode();
 }
 
+static void render_reset_life_particle_state(RenderState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    life_particles_reset(&state->life_particles);
+    state->birth_particle_spawn_accumulator = 0.0f;
+    state->death_particle_spawn_accumulator = 0.0f;
+    state->birth_particle_spawn_cursor      = 0U;
+    state->death_particle_spawn_cursor      = 0U;
+}
+
+static void render_update_life_particles(RenderState *state, const LayoutResult *layout,
+                                         const Camera3D *camera, float delta_seconds)
+{
+    (void)camera;
+    if (!state)
+    {
+        return;
+    }
+    LifeParticleSystem *system = &state->life_particles;
+    if (!state->config.enable_life_particles ||
+        (system->birth.capacity == 0U && system->death.capacity == 0U))
+    {
+        render_reset_life_particle_state(state);
+        return;
+    }
+
+    if (delta_seconds > 0.0f)
+    {
+        life_particles_update(system, delta_seconds);
+    }
+
+    if (!layout || layout->count == 0U)
+    {
+        state->birth_particle_spawn_cursor = 0U;
+        state->death_particle_spawn_cursor = 0U;
+        return;
+    }
+
+    if (!render_ensure_batch_capacity(state, layout->count))
+    {
+        return;
+    }
+
+    const LayoutNode **alive_nodes    = state->batch_alive_nodes;
+    const LayoutNode **deceased_nodes = state->batch_deceased_nodes;
+    size_t alive_count                = 0U;
+    size_t deceased_count             = 0U;
+    for (size_t index = 0U; index < layout->count && alive_nodes && deceased_nodes; ++index)
+    {
+        const LayoutNode *node = &layout->nodes[index];
+        const Person *person   = node->person;
+        if (!person)
+        {
+            continue;
+        }
+        if (!render_is_node_visible(state, layout, node))
+        {
+            continue;
+        }
+        if (person->is_alive)
+        {
+            if (alive_count < state->batch_capacity)
+            {
+                alive_nodes[alive_count++] = node;
+            }
+        }
+        else
+        {
+            if (deceased_count < state->batch_capacity)
+            {
+                deceased_nodes[deceased_count++] = node;
+            }
+        }
+    }
+
+    float radius = state->config.sphere_radius;
+    if (!(radius > 0.0f))
+    {
+        radius = 0.6f;
+    }
+
+    if (alive_count == 0U)
+    {
+        state->birth_particle_spawn_cursor      = 0U;
+        state->birth_particle_spawn_accumulator = 0.0f;
+    }
+    if (deceased_count == 0U)
+    {
+        state->death_particle_spawn_cursor      = 0U;
+        state->death_particle_spawn_accumulator = 0.0f;
+    }
+
+    if (alive_count > 0U && system->birth.capacity > 0U &&
+        state->config.birth_particle_spawn_rate > 0.0f)
+    {
+        state->birth_particle_spawn_accumulator +=
+            state->config.birth_particle_spawn_rate * delta_seconds * (float)alive_count;
+        size_t spawn_count = (size_t)state->birth_particle_spawn_accumulator;
+        if (spawn_count > 0U)
+        {
+            state->birth_particle_spawn_accumulator -= (float)spawn_count;
+            if (spawn_count > system->birth.capacity)
+            {
+                spawn_count = system->birth.capacity;
+            }
+            for (size_t spawn_index = 0U; spawn_index < spawn_count; ++spawn_index)
+            {
+                if (alive_count == 0U)
+                {
+                    break;
+                }
+                if (state->birth_particle_spawn_cursor >= alive_count)
+                {
+                    state->birth_particle_spawn_cursor = 0U;
+                }
+                const LayoutNode *node = alive_nodes[state->birth_particle_spawn_cursor];
+                ++state->birth_particle_spawn_cursor;
+                if (!node)
+                {
+                    continue;
+                }
+                float origin[3] = {node->position[0], node->position[1], node->position[2]};
+                (void)life_particles_spawn_birth(system, origin, radius,
+                                                 state->config.birth_particle_speed_min,
+                                                 state->config.birth_particle_speed_max,
+                                                 state->config.birth_particle_vertical_bias);
+            }
+        }
+    }
+
+    if (deceased_count > 0U && system->death.capacity > 0U &&
+        state->config.death_particle_spawn_rate > 0.0f)
+    {
+        state->death_particle_spawn_accumulator +=
+            state->config.death_particle_spawn_rate * delta_seconds * (float)deceased_count;
+        size_t spawn_count = (size_t)state->death_particle_spawn_accumulator;
+        if (spawn_count > 0U)
+        {
+            state->death_particle_spawn_accumulator -= (float)spawn_count;
+            if (spawn_count > system->death.capacity)
+            {
+                spawn_count = system->death.capacity;
+            }
+            for (size_t spawn_index = 0U; spawn_index < spawn_count; ++spawn_index)
+            {
+                if (deceased_count == 0U)
+                {
+                    break;
+                }
+                if (state->death_particle_spawn_cursor >= deceased_count)
+                {
+                    state->death_particle_spawn_cursor = 0U;
+                }
+                const LayoutNode *node = deceased_nodes[state->death_particle_spawn_cursor];
+                ++state->death_particle_spawn_cursor;
+                if (!node)
+                {
+                    continue;
+                }
+                float origin[3] = {node->position[0], node->position[1], node->position[2]};
+                (void)life_particles_spawn_death(system, origin, radius,
+                                                 state->config.death_particle_speed_min,
+                                                 state->config.death_particle_speed_max,
+                                                 state->config.death_particle_vertical_bias);
+            }
+        }
+    }
+}
+
+static void render_draw_life_particles(RenderState *state, const Camera3D *camera)
+{
+    if (!state || !state->config.enable_life_particles)
+    {
+        return;
+    }
+    const LifeParticleSystem *system = &state->life_particles;
+    if ((!system->birth.particles || system->birth.capacity == 0U) &&
+        (!system->death.particles || system->death.capacity == 0U))
+    {
+        return;
+    }
+
+    const float radius_base = fmaxf(state->config.sphere_radius * 0.18f, 0.1f);
+    Color birth_color       = render_color_to_raylib(state->config.alive_color);
+    Color death_color       = render_color_to_raylib(state->config.deceased_color);
+    birth_color.a           = (unsigned char)((int)birth_color.a / 2);
+    death_color.a           = (unsigned char)((int)death_color.a / 3);
+
+    BeginBlendMode(BLEND_ADD_COLORS);
+    rlDisableDepthMask();
+
+    if (system->birth.particles && system->birth.capacity > 0U)
+    {
+        for (size_t index = 0U; index < system->birth.capacity; ++index)
+        {
+            const LifeParticle *particle = &system->birth.particles[index];
+            if (!particle->active)
+            {
+                continue;
+            }
+            float fraction = 0.0f;
+            if (particle->lifetime > 0.0f)
+            {
+                fraction = particle->age / particle->lifetime;
+                if (fraction > 1.0f)
+                {
+                    fraction = 1.0f;
+                }
+            }
+            float fade       = 1.0f - fraction;
+            float radius     = radius_base * (0.7f + 0.5f * fade);
+            Color draw_color = birth_color;
+            float alpha      = (float)birth_color.a * (0.5f + 0.5f * fade);
+            if (alpha > 255.0f)
+            {
+                alpha = 255.0f;
+            }
+            draw_color.a     = (unsigned char)alpha;
+            Vector3 position = {particle->position[0], particle->position[1],
+                                particle->position[2]};
+            float distance   = camera ? Vector3Distance(camera->position, position) : 0.0f;
+            draw_color       = render_apply_fog_color(state, draw_color, distance);
+            DrawSphereEx(position, radius, 10, 10, draw_color);
+        }
+    }
+
+    if (system->death.particles && system->death.capacity > 0U)
+    {
+        for (size_t index = 0U; index < system->death.capacity; ++index)
+        {
+            const LifeParticle *particle = &system->death.particles[index];
+            if (!particle->active)
+            {
+                continue;
+            }
+            float fraction = 0.0f;
+            if (particle->lifetime > 0.0f)
+            {
+                fraction = particle->age / particle->lifetime;
+                if (fraction > 1.0f)
+                {
+                    fraction = 1.0f;
+                }
+            }
+            float fade       = 1.0f - fraction;
+            float radius     = radius_base * (0.55f + 0.45f * fade);
+            Color draw_color = death_color;
+            float shade      = 0.6f + 0.4f * fade;
+            draw_color.r     = (unsigned char)fminf(255.0f, (float)draw_color.r * shade);
+            draw_color.g     = (unsigned char)fminf(255.0f, (float)draw_color.g * shade);
+            draw_color.b     = (unsigned char)fminf(255.0f, (float)draw_color.b * shade + 8.0f);
+            float alpha      = (float)death_color.a * (0.35f + 0.45f * fade);
+            if (alpha > 255.0f)
+            {
+                alpha = 255.0f;
+            }
+            draw_color.a     = (unsigned char)alpha;
+            Vector3 position = {particle->position[0], particle->position[1],
+                                particle->position[2]};
+            float distance   = camera ? Vector3Distance(camera->position, position) : 0.0f;
+            draw_color       = render_apply_fog_color(state, draw_color, distance);
+            DrawSphereEx(position, radius, 10, 10, draw_color);
+        }
+    }
+
+    rlEnableDepthMask();
+    EndBlendMode();
+}
+
 static void render_configure_glow_shader(RenderState *state, const Camera3D *camera)
 {
     if (!state || !state->glow_shader_ready)
@@ -1704,6 +2072,16 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
                                     state->config.selection_particle_lifetime);
 #endif
 
+    if (!life_particles_setup(
+            &state->life_particles,
+            (state->config.enable_life_particles ? state->config.birth_particle_capacity : 0U),
+            (state->config.enable_life_particles ? state->config.death_particle_capacity : 0U),
+            state->config.birth_particle_lifetime, state->config.death_particle_lifetime))
+    {
+        return render_set_error(error_buffer, error_buffer_size,
+                                "failed to initialize life particle system");
+    }
+
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     bool window_ready = IsWindowReady();
     if (window_ready)
@@ -1810,6 +2188,7 @@ void render_cleanup(RenderState *state)
     state->visible_node_count    = 0U;
     state->visibility_mask_ready = false;
     selection_particles_shutdown(&state->selection_particles);
+    life_particles_shutdown(&state->life_particles);
     render_state_init(state);
 }
 
@@ -2057,6 +2436,8 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         state->visible_node_count    = layout->count;
     }
 
+    render_update_life_particles(state, layout, camera_data, delta_seconds);
+
     if (state->label_system)
     {
         state->label_system_ready = IsWindowReady();
@@ -2157,6 +2538,7 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
         }
     }
 
+    render_draw_life_particles(state, camera_data);
     render_draw_selection_particles(state, camera_data);
 
     for (size_t index = 0; index < layout->count; ++index)
@@ -2214,4 +2596,7 @@ bool render_scene(RenderState *state, const LayoutResult *layout, const CameraCo
  * popping.
  * 9. Select a person and observe the selection particle burst; hold the selection to ensure
  *    periodic bursts respect the configured repeat delay and fade cleanly with fog.
+ * 10. Watch living nodes emit upward motes and deceased nodes emit drifting memorial motes;
+ *     toggle the life particle configuration to confirm the streams stop cleanly without
+ *     lingering artifacts or leaked allocations.
  */

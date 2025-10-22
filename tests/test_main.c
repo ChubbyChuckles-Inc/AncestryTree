@@ -38,6 +38,7 @@ void register_bootstrap_tests(TestRegistry *registry);
 void register_ui_scaling_tests(TestRegistry *registry);
 void register_memory_suite_tests(TestRegistry *registry);
 void register_selection_particles_tests(TestRegistry *registry);
+void register_life_particles_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -67,6 +68,7 @@ int main(void)
     register_render_tests(&registry);
     register_render_labels_tests(&registry);
     register_selection_particles_tests(&registry);
+    register_life_particles_tests(&registry);
     register_interaction_tests(&registry);
     register_detail_content_tests(&registry);
     register_detail_view_tests(&registry);

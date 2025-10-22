@@ -47,6 +47,19 @@ TEST(test_render_config_default_is_valid)
     ASSERT_TRUE(config.selection_particle_speed_min > 0.0f);
     ASSERT_TRUE(config.selection_particle_speed_max >= config.selection_particle_speed_min);
     ASSERT_TRUE(config.selection_particle_repeat_delay >= 0.0f);
+    ASSERT_TRUE(config.enable_life_particles);
+    ASSERT_EQ(config.birth_particle_capacity, 96U);
+    ASSERT_EQ(config.death_particle_capacity, 96U);
+    ASSERT_TRUE(config.birth_particle_lifetime > 0.0f);
+    ASSERT_TRUE(config.death_particle_lifetime > 0.0f);
+    ASSERT_TRUE(config.birth_particle_speed_min > 0.0f);
+    ASSERT_TRUE(config.birth_particle_speed_max >= config.birth_particle_speed_min);
+    ASSERT_TRUE(config.death_particle_speed_min > 0.0f);
+    ASSERT_TRUE(config.death_particle_speed_max >= config.death_particle_speed_min);
+    ASSERT_TRUE(config.birth_particle_spawn_rate >= 0.0f);
+    ASSERT_TRUE(config.death_particle_spawn_rate >= 0.0f);
+    ASSERT_TRUE(config.birth_particle_vertical_bias > 0.0f);
+    ASSERT_TRUE(config.death_particle_vertical_bias > 0.0f);
 }
 
 TEST(test_render_find_person_position_returns_expected_coordinates)
@@ -171,7 +184,11 @@ TEST(test_render_config_validate_rejects_invalid_style)
     config                         = render_config_default();
     config.connection_style_spouse = (RenderConnectionStyle)(-1);
     ASSERT_FALSE(render_config_validate(&config));
-    config                   = render_config_default();
+    config                          = render_config_default();
+    config                          = render_config_default();
+    config.enable_life_particles    = true;
+    config.death_particle_speed_min = 0.0f;
+    ASSERT_FALSE(render_config_validate(&config));
     config.lod_near_distance = 12.0f;
     config.lod_far_distance  = 8.0f;
     ASSERT_FALSE(render_config_validate(&config));
@@ -206,6 +223,30 @@ TEST(test_render_config_validate_rejects_invalid_style)
     config                             = render_config_default();
     config.enable_selection_particles  = true;
     config.selection_particle_capacity = 0U;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                         = render_config_default();
+    config.enable_life_particles   = true;
+    config.birth_particle_capacity = 0U;
+    config.death_particle_capacity = 0U;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                           = render_config_default();
+    config.enable_life_particles     = true;
+    config.birth_particle_capacity   = 0U;
+    config.death_particle_capacity   = 32U;
+    config.death_particle_spawn_rate = -1.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                          = render_config_default();
+    config.enable_life_particles    = true;
+    config.birth_particle_speed_min = 0.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                           = render_config_default();
+    config.enable_life_particles     = true;
+    config.birth_particle_capacity   = 0U;
+    config.birth_particle_spawn_rate = 1.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                              = render_config_default();
+    config.enable_life_particles        = true;
+    config.birth_particle_vertical_bias = 0.0f;
     ASSERT_FALSE(render_config_validate(&config));
     config                             = render_config_default();
     config.enable_selection_particles  = true;
