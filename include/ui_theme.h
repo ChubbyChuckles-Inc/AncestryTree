@@ -52,6 +52,7 @@ typedef struct UIAnimatedPanel
 } UIAnimatedPanel;
 
 void ui_theme_apply_holographic(struct nk_context *ctx, UIThemePalette *palette);
+void ui_theme_apply_high_contrast(struct nk_context *ctx, UIThemePalette *palette);
 void ui_theme_push_panel_alpha(struct nk_context *ctx, const UIThemePalette *palette, float alpha,
                                UIThemePanelStyleToken *token);
 void ui_theme_pop_panel_alpha(struct nk_context *ctx, UIThemePanelStyleToken *token);

@@ -20,11 +20,13 @@ TEST(test_settings_defaults_are_expected)
     ASSERT_EQ(settings.default_layout_algorithm, SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL);
     ASSERT_EQ(settings.color_scheme, SETTINGS_COLOR_SCHEME_CYAN_GRAPH);
     ASSERT_EQ(settings.language, SETTINGS_LANGUAGE_ENGLISH);
+    ASSERT_FALSE(settings.high_contrast_mode);
+    ASSERT_FLOAT_NEAR(settings.ui_font_scale, 1.0f, 0.0001f);
 }
 
 TEST(test_settings_mark_dirty_increments_revision)
 {
-    Settings settings = settings_make_defaults();
+    Settings settings             = settings_make_defaults();
     unsigned int initial_revision = settings_get_revision(&settings);
     settings_mark_dirty(&settings);
     ASSERT_TRUE(settings_get_revision(&settings) > initial_revision);
@@ -32,17 +34,19 @@ TEST(test_settings_mark_dirty_increments_revision)
 
 TEST(test_settings_save_and_load_round_trip)
 {
-    Settings settings = settings_make_defaults();
-    settings.graphics_quality = SETTINGS_GRAPHICS_QUALITY_PERFORMANCE;
-    settings.camera_rotation_sensitivity = 0.25f;
-    settings.camera_pan_sensitivity = 0.8f;
+    Settings settings                        = settings_make_defaults();
+    settings.graphics_quality                = SETTINGS_GRAPHICS_QUALITY_PERFORMANCE;
+    settings.camera_rotation_sensitivity     = 0.25f;
+    settings.camera_pan_sensitivity          = 0.8f;
     settings.camera_keyboard_pan_sensitivity = 1.5f;
-    settings.camera_zoom_sensitivity = 1.2f;
-    settings.auto_save_enabled = false;
-    settings.auto_save_interval_seconds = 45U;
-    settings.default_layout_algorithm = SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED;
-    settings.color_scheme = SETTINGS_COLOR_SCHEME_SOLAR_ORCHID;
-    settings.language = SETTINGS_LANGUAGE_FUTURE;
+    settings.camera_zoom_sensitivity         = 1.2f;
+    settings.auto_save_enabled               = false;
+    settings.auto_save_interval_seconds      = 45U;
+    settings.default_layout_algorithm        = SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED;
+    settings.color_scheme                    = SETTINGS_COLOR_SCHEME_SOLAR_ORCHID;
+    settings.language                        = SETTINGS_LANGUAGE_FUTURE;
+    settings.high_contrast_mode              = true;
+    settings.ui_font_scale                   = 1.35f;
     settings_mark_dirty(&settings);
 
     char path[128];
@@ -64,6 +68,8 @@ TEST(test_settings_save_and_load_round_trip)
     ASSERT_EQ(loaded.default_layout_algorithm, SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED);
     ASSERT_EQ(loaded.color_scheme, SETTINGS_COLOR_SCHEME_SOLAR_ORCHID);
     ASSERT_EQ(loaded.language, SETTINGS_LANGUAGE_FUTURE);
+    ASSERT_TRUE(loaded.high_contrast_mode);
+    ASSERT_FLOAT_NEAR(loaded.ui_font_scale, 1.35f, 0.0001f);
 
     test_delete_file(path);
 }

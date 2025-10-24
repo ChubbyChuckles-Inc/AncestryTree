@@ -17,6 +17,26 @@ void ui_theme_apply_holographic(struct nk_context *ctx, UIThemePalette *palette)
     }
 }
 
+void ui_theme_apply_high_contrast(struct nk_context *ctx, UIThemePalette *palette)
+{
+    (void)ctx;
+    if (palette)
+    {
+        memset(palette, 0, sizeof(*palette));
+        palette->text_color        = (nk_color){255, 255, 255, 255};
+        palette->window_background = (nk_color){16, 16, 16, 240};
+        palette->window_border     = (nk_color){255, 255, 255, 255};
+        palette->header_background = (nk_color){64, 64, 64, 255};
+        palette->accent_color      = (nk_color){255, 200, 0, 255};
+        palette->accent_hover      = (nk_color){255, 220, 0, 255};
+        palette->accent_active     = (nk_color){255, 240, 0, 255};
+        palette->warning_color     = (nk_color){255, 80, 80, 255};
+        palette->panel_min_alpha   = 0.18f;
+        palette->panel_show_speed  = 5.5f;
+        palette->panel_hide_speed  = 4.2f;
+    }
+}
+
 void ui_theme_push_panel_alpha(struct nk_context *ctx, const UIThemePalette *palette, float alpha,
                                UIThemePanelStyleToken *token)
 {
@@ -237,6 +257,123 @@ void ui_theme_apply_holographic(struct nk_context *ctx, UIThemePalette *palette)
         palette->panel_min_alpha   = 0.12f;
         palette->panel_show_speed  = 6.0f;
         palette->panel_hide_speed  = 5.0f;
+    }
+}
+
+void ui_theme_apply_high_contrast(struct nk_context *ctx, UIThemePalette *palette)
+{
+    if (!ctx)
+    {
+        if (palette)
+        {
+            memset(palette, 0, sizeof(*palette));
+            palette->text_color        = nk_rgba(255, 255, 255, 255);
+            palette->window_background = nk_rgba(16, 16, 16, 240);
+            palette->window_border     = nk_rgba(255, 255, 255, 255);
+            palette->header_background = nk_rgba(64, 64, 64, 255);
+            palette->accent_color      = nk_rgba(255, 200, 0, 255);
+            palette->accent_hover      = nk_rgba(255, 220, 0, 255);
+            palette->accent_active     = nk_rgba(255, 240, 0, 255);
+            palette->warning_color     = nk_rgba(255, 96, 96, 255);
+            palette->panel_min_alpha   = 0.18f;
+            palette->panel_show_speed  = 7.0f;
+            palette->panel_hide_speed  = 5.5f;
+        }
+        return;
+    }
+
+    struct nk_color table[NK_COLOR_COUNT];
+    memset(table, 0, sizeof(table));
+
+    struct nk_color text          = nk_rgba(255, 255, 255, 255);
+    struct nk_color window        = nk_rgba(16, 16, 16, 240);
+    struct nk_color header        = nk_rgba(64, 64, 64, 255);
+    struct nk_color header_hover  = nk_rgba(96, 96, 96, 255);
+    struct nk_color header_active = nk_rgba(128, 128, 128, 255);
+    struct nk_color border        = nk_rgba(255, 255, 255, 255);
+    struct nk_color button        = nk_rgba(255, 200, 0, 255);
+    struct nk_color button_hover  = nk_rgba(255, 220, 40, 255);
+    struct nk_color button_active = nk_rgba(255, 240, 80, 255);
+    struct nk_color warning       = nk_rgba(255, 96, 96, 255);
+
+    table[NK_COLOR_TEXT]                    = text;
+    table[NK_COLOR_WINDOW]                  = window;
+    table[NK_COLOR_HEADER]                  = header;
+    table[NK_COLOR_BORDER]                  = border;
+    table[NK_COLOR_BUTTON]                  = button;
+    table[NK_COLOR_BUTTON_HOVER]            = button_hover;
+    table[NK_COLOR_BUTTON_ACTIVE]           = button_active;
+    table[NK_COLOR_TOGGLE]                  = button;
+    table[NK_COLOR_TOGGLE_HOVER]            = button_hover;
+    table[NK_COLOR_TOGGLE_CURSOR]           = nk_rgba(0, 0, 0, 255);
+    table[NK_COLOR_SELECT]                  = button;
+    table[NK_COLOR_SELECT_ACTIVE]           = button_active;
+    table[NK_COLOR_SLIDER]                  = nk_rgba(48, 48, 48, 255);
+    table[NK_COLOR_SLIDER_CURSOR]           = button_active;
+    table[NK_COLOR_SLIDER_CURSOR_HOVER]     = nk_rgba(255, 232, 96, 255);
+    table[NK_COLOR_SLIDER_CURSOR_ACTIVE]    = nk_rgba(255, 240, 128, 255);
+    table[NK_COLOR_PROPERTY]                = nk_rgba(32, 32, 32, 240);
+    table[NK_COLOR_EDIT]                    = nk_rgba(32, 32, 32, 240);
+    table[NK_COLOR_EDIT_CURSOR]             = nk_rgba(255, 255, 255, 255);
+    table[NK_COLOR_COMBO]                   = nk_rgba(32, 32, 32, 240);
+    table[NK_COLOR_CHART]                   = button;
+    table[NK_COLOR_CHART_COLOR]             = button_active;
+    table[NK_COLOR_CHART_COLOR_HIGHLIGHT]   = nk_rgba(255, 240, 80, 255);
+    table[NK_COLOR_SCROLLBAR]               = nk_rgba(40, 40, 40, 255);
+    table[NK_COLOR_SCROLLBAR_CURSOR]        = nk_rgba(80, 80, 80, 255);
+    table[NK_COLOR_SCROLLBAR_CURSOR_HOVER]  = button_hover;
+    table[NK_COLOR_SCROLLBAR_CURSOR_ACTIVE] = button_active;
+    table[NK_COLOR_TAB_HEADER]              = header;
+
+    nk_style_from_table(ctx, table);
+
+    ctx->style.window.background          = window;
+    ctx->style.window.fixed_background    = nk_style_item_color(window);
+    ctx->style.window.border_color        = border;
+    ctx->style.window.header.normal       = nk_style_item_color(header);
+    ctx->style.window.header.hover        = nk_style_item_color(header_hover);
+    ctx->style.window.header.active       = nk_style_item_color(header_active);
+    ctx->style.window.header.label_normal = text;
+    ctx->style.window.header.label_hover  = text;
+    ctx->style.window.header.label_active = text;
+    ctx->style.window.padding             = nk_vec2(18.0f, 18.0f);
+    ctx->style.window.spacing             = nk_vec2(12.0f, 10.0f);
+    ctx->style.window.border              = 3.0f;
+    ctx->style.window.rounding            = 8.0f;
+    ctx->style.window.header.align        = NK_HEADER_LEFT;
+    ctx->style.window.header.padding      = nk_vec2(12.0f, 12.0f);
+
+    ctx->style.button.rounding     = 2.0f;
+    ctx->style.button.border       = 2.0f;
+    ctx->style.button.padding      = nk_vec2(10.0f, 8.0f);
+    ctx->style.button.normal       = nk_style_item_color(button);
+    ctx->style.button.hover        = nk_style_item_color(button_hover);
+    ctx->style.button.active       = nk_style_item_color(button_active);
+    ctx->style.button.border_color = border;
+    ctx->style.button.text_normal  = nk_rgba(0, 0, 0, 255);
+    ctx->style.button.text_hover   = nk_rgba(0, 0, 0, 255);
+    ctx->style.button.text_active  = nk_rgba(0, 0, 0, 255);
+
+    ctx->style.tab.rounding = 2.0f;
+    ctx->style.tab.border   = 2.0f;
+    ctx->style.tab.padding  = nk_vec2(10.0f, 8.0f);
+
+    ctx->style.checkbox.padding   = nk_vec2(6.0f, 6.0f);
+    ctx->style.option.text_active = text;
+
+    if (palette)
+    {
+        palette->text_color        = text;
+        palette->window_background = window;
+        palette->window_border     = border;
+        palette->header_background = header;
+        palette->accent_color      = button;
+        palette->accent_hover      = button_hover;
+        palette->accent_active     = button_active;
+        palette->warning_color     = warning;
+        palette->panel_min_alpha   = 0.18f;
+        palette->panel_show_speed  = 7.0f;
+        palette->panel_hide_speed  = 5.5f;
     }
 }
 

@@ -21,16 +21,18 @@ static void settings_set_defaults(Settings *settings)
     {
         return;
     }
-    settings->graphics_quality = SETTINGS_GRAPHICS_QUALITY_QUALITY;
-    settings->camera_rotation_sensitivity = 0.15f;
-    settings->camera_pan_sensitivity = 0.5f;
+    settings->graphics_quality                = SETTINGS_GRAPHICS_QUALITY_QUALITY;
+    settings->camera_rotation_sensitivity     = 0.15f;
+    settings->camera_pan_sensitivity          = 0.5f;
     settings->camera_keyboard_pan_sensitivity = 1.0f;
-    settings->camera_zoom_sensitivity = 1.0f;
-    settings->auto_save_enabled = true;
-    settings->auto_save_interval_seconds = 120U;
-    settings->default_layout_algorithm = SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL;
-    settings->color_scheme = SETTINGS_COLOR_SCHEME_CYAN_GRAPH;
-    settings->language = SETTINGS_LANGUAGE_ENGLISH;
+    settings->camera_zoom_sensitivity         = 1.0f;
+    settings->auto_save_enabled               = true;
+    settings->auto_save_interval_seconds      = 120U;
+    settings->default_layout_algorithm        = SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL;
+    settings->color_scheme                    = SETTINGS_COLOR_SCHEME_CYAN_GRAPH;
+    settings->language                        = SETTINGS_LANGUAGE_ENGLISH;
+    settings->high_contrast_mode              = false;
+    settings->ui_font_scale                   = 1.0f;
 }
 
 void settings_init_defaults(Settings *settings)
@@ -49,12 +51,14 @@ static bool settings_parse_bool(const char *value, bool *out_result)
     {
         return false;
     }
-    if (strcmp(value, "1") == 0 || settings_strcasecmp(value, "true") == 0 || settings_strcasecmp(value, "yes") == 0)
+    if (strcmp(value, "1") == 0 || settings_strcasecmp(value, "true") == 0 ||
+        settings_strcasecmp(value, "yes") == 0)
     {
         *out_result = true;
         return true;
     }
-    if (strcmp(value, "0") == 0 || settings_strcasecmp(value, "false") == 0 || settings_strcasecmp(value, "no") == 0)
+    if (strcmp(value, "0") == 0 || settings_strcasecmp(value, "false") == 0 ||
+        settings_strcasecmp(value, "no") == 0)
     {
         *out_result = false;
         return true;
@@ -68,7 +72,7 @@ static bool settings_parse_float(const char *value, float *out_result)
     {
         return false;
     }
-    char *end = NULL;
+    char *end    = NULL;
     float parsed = (float)strtod(value, &end);
     if (end == value || !isfinite(parsed))
     {
@@ -84,7 +88,7 @@ static bool settings_parse_uint(const char *value, unsigned int *out_result)
     {
         return false;
     }
-    char *end = NULL;
+    char *end   = NULL;
     long parsed = strtol(value, &end, 10);
     if (end == value || parsed < 0L)
     {
@@ -101,8 +105,8 @@ static void settings_trim(char *text)
         return;
     }
     size_t length = strlen(text);
-    while (length > 0U && (text[length - 1U] == '\n' || text[length - 1U] == '\r' || text[length - 1U] == ' ' ||
-                           text[length - 1U] == '\t'))
+    while (length > 0U && (text[length - 1U] == '\n' || text[length - 1U] == '\r' ||
+                           text[length - 1U] == ' ' || text[length - 1U] == '\t'))
     {
         text[length - 1U] = '\0';
         --length;
@@ -118,7 +122,8 @@ static void settings_trim(char *text)
     }
 }
 
-bool settings_try_load(Settings *settings, const char *path, char *error_buffer, size_t error_buffer_size)
+bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
+                       size_t error_buffer_size)
 {
     if (!settings || !path)
     {
@@ -153,15 +158,16 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
         {
             continue;
         }
-        *equals = '\0';
-        char *key = line;
+        *equals     = '\0';
+        char *key   = line;
         char *value = equals + 1;
         settings_trim(key);
         settings_trim(value);
         if (settings_strcasecmp(key, "graphics_quality") == 0)
         {
             unsigned int parsed = 0U;
-            if (settings_parse_uint(value, &parsed) && parsed <= (unsigned int)SETTINGS_GRAPHICS_QUALITY_QUALITY)
+            if (settings_parse_uint(value, &parsed) &&
+                parsed <= (unsigned int)SETTINGS_GRAPHICS_QUALITY_QUALITY)
             {
                 settings->graphics_quality = (SettingsGraphicsQuality)parsed;
             }
@@ -217,7 +223,8 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
         else if (settings_strcasecmp(key, "default_layout_algorithm") == 0)
         {
             unsigned int parsed = 0U;
-            if (settings_parse_uint(value, &parsed) && parsed <= (unsigned int)SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED)
+            if (settings_parse_uint(value, &parsed) &&
+                parsed <= (unsigned int)SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED)
             {
                 settings->default_layout_algorithm = (SettingsLayoutAlgorithm)parsed;
             }
@@ -225,7 +232,8 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
         else if (settings_strcasecmp(key, "color_scheme") == 0)
         {
             unsigned int parsed = 0U;
-            if (settings_parse_uint(value, &parsed) && parsed <= (unsigned int)SETTINGS_COLOR_SCHEME_SOLAR_ORCHID)
+            if (settings_parse_uint(value, &parsed) &&
+                parsed <= (unsigned int)SETTINGS_COLOR_SCHEME_SOLAR_ORCHID)
             {
                 settings->color_scheme = (SettingsColorScheme)parsed;
             }
@@ -233,9 +241,34 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
         else if (settings_strcasecmp(key, "language") == 0)
         {
             unsigned int parsed = 0U;
-            if (settings_parse_uint(value, &parsed) && parsed <= (unsigned int)SETTINGS_LANGUAGE_FUTURE)
+            if (settings_parse_uint(value, &parsed) &&
+                parsed <= (unsigned int)SETTINGS_LANGUAGE_FUTURE)
             {
                 settings->language = (SettingsLanguage)parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "high_contrast_mode") == 0)
+        {
+            bool parsed = false;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->high_contrast_mode = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "ui_font_scale") == 0)
+        {
+            float parsed = 0.0f;
+            if (settings_parse_float(value, &parsed) && parsed > 0.1f)
+            {
+                if (parsed < 0.6f)
+                {
+                    parsed = 0.6f;
+                }
+                if (parsed > 1.8f)
+                {
+                    parsed = 1.8f;
+                }
+                settings->ui_font_scale = parsed;
             }
         }
     }
@@ -245,7 +278,8 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
     return true;
 }
 
-bool settings_save(const Settings *settings, const char *path, char *error_buffer, size_t error_buffer_size)
+bool settings_save(const Settings *settings, const char *path, char *error_buffer,
+                   size_t error_buffer_size)
 {
     if (!settings || !path)
     {
@@ -277,22 +311,26 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
     }
 #endif
 
-    int written = fprintf(stream,
-                          "graphics_quality=%u\n"
-                          "camera_rotation_sensitivity=%.4f\n"
-                          "camera_pan_sensitivity=%.4f\n"
-                          "camera_keyboard_pan_sensitivity=%.4f\n"
-                          "camera_zoom_sensitivity=%.4f\n"
-                          "auto_save_enabled=%u\n"
-                          "auto_save_interval_seconds=%u\n"
-                          "default_layout_algorithm=%u\n"
-                          "color_scheme=%u\n"
-                          "language=%u\n",
-                          (unsigned int)settings->graphics_quality, settings->camera_rotation_sensitivity,
-                          settings->camera_pan_sensitivity, settings->camera_keyboard_pan_sensitivity,
-                          settings->camera_zoom_sensitivity, settings->auto_save_enabled ? 1U : 0U,
-                          settings->auto_save_interval_seconds, (unsigned int)settings->default_layout_algorithm,
-                          (unsigned int)settings->color_scheme, (unsigned int)settings->language);
+    int written = fprintf(
+        stream,
+        "graphics_quality=%u\n"
+        "camera_rotation_sensitivity=%.4f\n"
+        "camera_pan_sensitivity=%.4f\n"
+        "camera_keyboard_pan_sensitivity=%.4f\n"
+        "camera_zoom_sensitivity=%.4f\n"
+        "auto_save_enabled=%u\n"
+        "auto_save_interval_seconds=%u\n"
+        "default_layout_algorithm=%u\n"
+        "color_scheme=%u\n"
+        "language=%u\n"
+        "high_contrast_mode=%u\n"
+        "ui_font_scale=%.3f\n",
+        (unsigned int)settings->graphics_quality, settings->camera_rotation_sensitivity,
+        settings->camera_pan_sensitivity, settings->camera_keyboard_pan_sensitivity,
+        settings->camera_zoom_sensitivity, settings->auto_save_enabled ? 1U : 0U,
+        settings->auto_save_interval_seconds, (unsigned int)settings->default_layout_algorithm,
+        (unsigned int)settings->color_scheme, (unsigned int)settings->language,
+        settings->high_contrast_mode ? 1U : 0U, settings->ui_font_scale);
 
     bool success = written >= 0;
     if (!success && error_buffer && error_buffer_size > 0U)

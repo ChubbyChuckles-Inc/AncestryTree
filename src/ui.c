@@ -32,6 +32,12 @@
 
 #define UI_SEARCH_MAX_RESULTS 64U
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+static const char *const UI_FONT_CANDIDATES[] = {"assets/fonts/AncestryTree-UI.ttf",
+                                                 "assets/fonts/Roboto-Regular.ttf",
+                                                 "assets/fonts/OpenSans-Regular.ttf"};
+#endif
+
 typedef struct UIInternal
 {
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
@@ -51,6 +57,8 @@ typedef struct UIInternal
     bool show_exit_prompt;
     bool show_error_dialog;
     UIThemePalette theme;
+    bool accessibility_high_contrast;
+    float accessibility_font_scale;
     UIAnimatedPanel about_panel_anim;
     UIAnimatedPanel help_panel_anim;
     UIAnimatedPanel settings_panel_anim;
@@ -710,15 +718,37 @@ static void ui_internal_configure_panel(UIInternal *internal, UIAnimatedPanel *p
     panel->min_alpha  = internal->theme.panel_min_alpha;
 }
 
-static void ui_internal_apply_theme(UIInternal *internal)
+static void ui_internal_refresh_panel_speeds(UIInternal *internal)
 {
     if (!internal)
     {
         return;
     }
-    ui_theme_apply_holographic(&internal->ctx, &internal->theme);
+    UIAnimatedPanel *panels[] = {
+        &internal->about_panel_anim,       &internal->help_panel_anim,
+        &internal->settings_panel_anim,    &internal->search_panel_anim,
+        &internal->add_person_panel_anim,  &internal->edit_person_panel_anim,
+        &internal->exit_prompt_panel_anim, &internal->error_dialog_panel_anim};
+    size_t count = sizeof(panels) / sizeof(panels[0]);
+    for (size_t index = 0U; index < count; ++index)
+    {
+        UIAnimatedPanel *panel = panels[index];
+        if (!panel)
+        {
+            continue;
+        }
+        panel->show_speed = internal->theme.panel_show_speed;
+        panel->hide_speed = internal->theme.panel_hide_speed;
+        panel->min_alpha  = internal->theme.panel_min_alpha;
+    }
+}
 
-    /* Keep every overlay panel aligned with the freshly applied theme timings. */
+static void ui_internal_reset_panels(UIInternal *internal)
+{
+    if (!internal)
+    {
+        return;
+    }
     UIAnimatedPanel *panels[] = {
         &internal->about_panel_anim,       &internal->help_panel_anim,
         &internal->settings_panel_anim,    &internal->search_panel_anim,
@@ -728,9 +758,190 @@ static void ui_internal_apply_theme(UIInternal *internal)
                                internal->show_settings_window,  internal->show_search_panel,
                                internal->show_add_person_panel, internal->show_edit_person_panel,
                                internal->show_exit_prompt,      internal->show_error_dialog};
-    for (size_t index = 0U; index < sizeof(panels) / sizeof(panels[0]); ++index)
+    size_t count            = sizeof(panels) / sizeof(panels[0]);
+    for (size_t index = 0U; index < count; ++index)
     {
         ui_internal_configure_panel(internal, panels[index], visibility[index]);
+    }
+}
+
+static void ui_internal_apply_theme(UIInternal *internal)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (internal->accessibility_high_contrast)
+    {
+        ui_theme_apply_high_contrast(&internal->ctx, &internal->theme);
+    }
+    else
+    {
+        ui_theme_apply_holographic(&internal->ctx, &internal->theme);
+    }
+
+    ui_internal_reset_panels(internal);
+}
+
+static float ui_internal_compute_scaled_font_size(const UIContext *ui, float scale)
+{
+    float base_size = 20.0f;
+    if (ui)
+    {
+        base_size = ui_scaling_default_font_size(ui->height);
+        if (!(base_size > 0.0f))
+        {
+            base_size = 20.0f;
+        }
+    }
+    if (!(scale > 0.0f))
+    {
+        scale = 1.0f;
+    }
+    if (scale < 0.6f)
+    {
+        scale = 0.6f;
+    }
+    if (scale > 1.8f)
+    {
+        scale = 1.8f;
+    }
+    float font_size = base_size * scale;
+    if (font_size < 16.0f)
+    {
+        font_size = 16.0f;
+    }
+    if (font_size > 48.0f)
+    {
+        font_size = 48.0f;
+    }
+    return font_size;
+}
+
+static void ui_internal_bind_font(UIInternal *internal, bool update_context)
+{
+    if (!internal)
+    {
+        return;
+    }
+    internal->font.userdata = nk_handle_ptr(&internal->rl_font);
+    internal->font.height   = internal->font_size;
+    internal->font.width    = nk_raylib_text_width;
+    internal->font.query    = nk_raylib_query_font;
+    internal->font.texture  = nk_handle_ptr(NULL);
+    if (update_context)
+    {
+        nk_style_set_font(&internal->ctx, &internal->font);
+    }
+}
+
+static void ui_internal_acquire_font(UIInternal *internal, float font_size)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (!(font_size > 0.0f))
+    {
+        font_size = 20.0f;
+    }
+
+    Font chosen       = GetFontDefault();
+    bool chosen_owned = false;
+
+    for (size_t index = 0U; index < sizeof(UI_FONT_CANDIDATES) / sizeof(UI_FONT_CANDIDATES[0]);
+         ++index)
+    {
+        const char *candidate = UI_FONT_CANDIDATES[index];
+        if (!candidate || candidate[0] == '\0')
+        {
+            continue;
+        }
+        if (!FileExists(candidate))
+        {
+            continue;
+        }
+        Font loaded = LoadFontEx(candidate, (int)ceilf(font_size), NULL, 0);
+        if (loaded.texture.id != 0)
+        {
+            chosen       = loaded;
+            chosen_owned = true;
+            SetTextureFilter(chosen.texture, TEXTURE_FILTER_BILINEAR);
+            break;
+        }
+    }
+
+    if (internal->font_owned)
+    {
+        UnloadFont(internal->rl_font);
+    }
+
+    internal->rl_font    = chosen;
+    internal->font_owned = chosen_owned;
+    internal->font_size  = font_size;
+    ui_internal_bind_font(internal, false);
+}
+
+static void ui_internal_sync_font(UIInternal *internal, const UIContext *ui, float scale)
+{
+    if (!internal)
+    {
+        return;
+    }
+    float clamped_scale = scale;
+    if (!(clamped_scale > 0.0f))
+    {
+        clamped_scale = 1.0f;
+    }
+    if (clamped_scale < 0.6f)
+    {
+        clamped_scale = 0.6f;
+    }
+    if (clamped_scale > 1.8f)
+    {
+        clamped_scale = 1.8f;
+    }
+
+    float target_size = ui_internal_compute_scaled_font_size(ui, clamped_scale);
+    if (!(target_size > 0.0f))
+    {
+        target_size = 20.0f;
+    }
+
+    bool needs_reload = fabsf(target_size - internal->font_size) >= 0.1f;
+    if (needs_reload)
+    {
+        ui_internal_acquire_font(internal, target_size);
+        ui_internal_bind_font(internal, true);
+    }
+    else
+    {
+        internal->font_size = target_size;
+        ui_internal_bind_font(internal, true);
+    }
+
+    internal->accessibility_font_scale = clamped_scale;
+}
+
+static void ui_internal_sync_accessibility(UIInternal *internal, UIContext *ui,
+                                           const Settings *settings)
+{
+    if (!internal)
+    {
+        return;
+    }
+    bool desired_high_contrast = settings ? settings->high_contrast_mode : false;
+    float desired_scale        = settings ? settings->ui_font_scale : 1.0f;
+
+    if (internal->accessibility_high_contrast != desired_high_contrast)
+    {
+        internal->accessibility_high_contrast = desired_high_contrast;
+        ui_internal_apply_theme(internal);
+    }
+
+    if (fabsf(desired_scale - internal->accessibility_font_scale) > 0.01f)
+    {
+        ui_internal_sync_font(internal, ui, desired_scale);
     }
 }
 
@@ -945,6 +1156,7 @@ static void ui_internal_tick(UIInternal *internal, float delta_seconds)
         {&internal->error_dialog_panel_anim, internal->show_error_dialog}};
     /* Manual QA: Toggle overlays from the menu bar and confirm fade timings feel responsive at 60
      * FPS. */
+    ui_internal_refresh_panel_speeds(internal);
     for (size_t index = 0U; index < sizeof(updates) / sizeof(updates[0]); ++index)
     {
         UIAnimatedPanel *panel = updates[index].panel;
@@ -952,9 +1164,6 @@ static void ui_internal_tick(UIInternal *internal, float delta_seconds)
         {
             continue;
         }
-        panel->show_speed = internal->theme.panel_show_speed;
-        panel->hide_speed = internal->theme.panel_hide_speed;
-        panel->min_alpha  = internal->theme.panel_min_alpha;
         ui_animated_panel_update(panel, updates[index].visible, delta_seconds);
     }
 #endif
@@ -1509,6 +1718,29 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
                 settings_mark_dirty(settings);
             }
             nk_combo_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacer(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_label(ctx, "Accessibility", NK_TEXT_LEFT);
+
+        nk_bool high_contrast  = settings->high_contrast_mode ? nk_true : nk_false;
+        high_contrast          = nk_check_label(ctx, "High contrast UI", high_contrast);
+        bool new_high_contrast = (high_contrast == nk_true);
+        if (new_high_contrast != settings->high_contrast_mode)
+        {
+            settings->high_contrast_mode = new_high_contrast;
+            settings_mark_dirty(settings);
+        }
+
+        float font_scale = settings->ui_font_scale;
+        nk_property_float(ctx, "Font scale", 0.6f, &font_scale, 1.8f, 0.05f, 0.01f);
+        if (fabsf(font_scale - settings->ui_font_scale) > 0.0001f)
+        {
+            settings->ui_font_scale = font_scale;
+            settings_mark_dirty(settings);
         }
 
         nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -2191,45 +2423,18 @@ bool ui_init(UIContext *ui, int width, int height)
     {
         return false;
     }
-    internal->font_owned     = false;
+    internal->font_owned                  = false;
+    internal->accessibility_high_contrast = false;
+    internal->accessibility_font_scale    = 1.0f;
+
     float computed_font_size = ui_scaling_default_font_size(height);
     if (!(computed_font_size > 0.0f))
     {
         computed_font_size = 20.0f;
     }
 
-    const char *font_candidates[] = {"assets/fonts/AncestryTree-UI.ttf",
-                                     "assets/fonts/Roboto-Regular.ttf",
-                                     "assets/fonts/OpenSans-Regular.ttf"};
-    bool font_loaded              = false;
-    for (size_t index = 0U; index < sizeof(font_candidates) / sizeof(font_candidates[0]); ++index)
-    {
-        const char *candidate = font_candidates[index];
-        if (!candidate || candidate[0] == '\0' || !FileExists(candidate))
-        {
-            continue;
-        }
-        Font loaded = LoadFontEx(candidate, (int)ceilf(computed_font_size), NULL, 0);
-        if (loaded.texture.id != 0)
-        {
-            internal->rl_font    = loaded;
-            internal->font_owned = true;
-            font_loaded          = true;
-            SetTextureFilter(internal->rl_font.texture, TEXTURE_FILTER_BILINEAR);
-            break;
-        }
-    }
-    if (!font_loaded)
-    {
-        internal->rl_font = GetFontDefault();
-    }
-    internal->font_size = computed_font_size;
+    ui_internal_acquire_font(internal, computed_font_size);
 
-    internal->font.userdata               = nk_handle_ptr(&internal->rl_font);
-    internal->font.height                 = internal->font_size;
-    internal->font.width                  = nk_raylib_text_width;
-    internal->font.query                  = nk_raylib_query_font;
-    internal->font.texture                = nk_handle_ptr(NULL);
     internal->auto_orbit                  = false;
     internal->show_error_dialog           = false;
     internal->error_dialog_title[0]       = '\0';
@@ -2260,7 +2465,7 @@ bool ui_init(UIContext *ui, int width, int height)
         AT_FREE(internal);
         return false;
     }
-    nk_style_set_font(&internal->ctx, &internal->font);
+    ui_internal_bind_font(internal, true);
     ui_internal_apply_theme(internal);
     internal->ctx.clip.copy  = ui_clipboard_copy;
     internal->ctx.clip.paste = ui_clipboard_paste;
@@ -3370,6 +3575,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         return;
     }
+    ui_internal_sync_accessibility(internal, ui, settings);
     if (internal->search_last_tree != tree)
     {
         internal->search_last_tree = tree;
