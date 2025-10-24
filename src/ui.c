@@ -943,6 +943,8 @@ static void ui_internal_tick(UIInternal *internal, float delta_seconds)
         {&internal->edit_person_panel_anim, internal->show_edit_person_panel},
         {&internal->exit_prompt_panel_anim, internal->show_exit_prompt},
         {&internal->error_dialog_panel_anim, internal->show_error_dialog}};
+    /* Manual QA: Toggle overlays from the menu bar and confirm fade timings feel responsive at 60
+     * FPS. */
     for (size_t index = 0U; index < sizeof(updates) / sizeof(updates[0]); ++index)
     {
         UIAnimatedPanel *panel = updates[index].panel;

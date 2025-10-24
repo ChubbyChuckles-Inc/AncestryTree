@@ -3,11 +3,6 @@
 #include <math.h>
 #include <string.h>
 
-#if defined(ANCESTRYTREE_HAVE_NUKLEAR) && defined(ANCESTRYTREE_HAVE_RAYLIB)
-#include "external/nuklear.h"
-#include "ui_nuklear_config.h"
-#endif
-
 #if !defined(ANCESTRYTREE_HAVE_NUKLEAR) || !defined(ANCESTRYTREE_HAVE_RAYLIB)
 
 void ui_theme_apply_holographic(struct nk_context *ctx, UIThemePalette *palette)

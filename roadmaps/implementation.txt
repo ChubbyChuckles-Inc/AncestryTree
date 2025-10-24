@@ -700,9 +700,9 @@ PHASE 10: OPTIMIZATION & POLISH
       [x] Birth/death visual indicators
       [x] Selection particles
   [ ] Improve UI aesthetics
-      [ ] Custom Nuklear theme
+      [x] Custom Nuklear theme
       [ ] Icons for buttons
-      [ ] Animations for panel transitions
+      [x] Animations for panel transitions
   [ ] Add ambient effects
       [x] Background skybox or gradient
       [x] Fog for depth perception

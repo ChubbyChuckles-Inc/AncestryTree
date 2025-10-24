@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Holographic Nuklear theme module applying cyan-accent palette, animated panel fades, and
+  regression tests covering the UI animation helpers.
 - Selection particle bursts that radiate from selected holographic spheres, configurable via
   render settings, with runtime validation safeguards and a dedicated unit test suite for the
   particle system.
