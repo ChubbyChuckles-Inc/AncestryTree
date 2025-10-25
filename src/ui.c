@@ -11,6 +11,7 @@
 #include "settings.h"
 #include "timeline.h"
 #include "tree.h"
+#include "ui_navigation.h"
 #include "ui_scaling.h"
 #include "ui_theme.h"
 
@@ -57,6 +58,8 @@ typedef struct UIInternal
     bool show_exit_prompt;
     bool show_error_dialog;
     UIThemePalette theme;
+    UINavigationState nav_state;
+    UINavigationInput nav_input;
     bool accessibility_high_contrast;
     float accessibility_font_scale;
     UIAnimatedPanel about_panel_anim;
@@ -107,6 +110,8 @@ typedef struct UIInternal
 #endif
 } UIInternal;
 
+static void ui_internal_set_status(UIInternal *internal, const char *message);
+
 static void ui_event_queue_reset(UIEventQueue *queue)
 {
     if (!queue)
@@ -155,6 +160,249 @@ static const UIInternal *ui_internal_const_cast(const UIContext *ui)
 #endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+
+static void ui_navigation_draw_focus_rect(struct nk_context *ctx, struct nk_rect bounds)
+{
+    if (!ctx)
+    {
+        return;
+    }
+    struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+    if (!canvas)
+    {
+        return;
+    }
+    const float inset = 2.0f;
+    struct nk_rect outline;
+    outline.x = bounds.x - inset;
+    outline.y = bounds.y - inset;
+    outline.w = bounds.w + inset * 2.0f;
+    outline.h = bounds.h + inset * 2.0f;
+    nk_stroke_rect(canvas, outline, 2.0f, 2.0f, nk_rgba(255, 215, 0, 230));
+}
+
+static size_t ui_navigation_register(UIInternal *internal)
+{
+    if (!internal)
+    {
+        return SIZE_MAX;
+    }
+    return ui_navigation_register_item(&internal->nav_state);
+}
+
+static bool ui_nav_button_label(UIInternal *internal, struct nk_context *ctx, const char *label)
+{
+    bool activated        = nk_button_label(ctx, label);
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    if (ui_navigation_is_focused(&internal->nav_state, index))
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if (!activated && ui_navigation_consume_activation(&internal->nav_state))
+        {
+            activated = true;
+        }
+    }
+    return activated;
+}
+
+static nk_bool ui_nav_menu_item_label(UIInternal *internal, struct nk_context *ctx,
+                                      const char *label, nk_flags alignment)
+{
+    nk_bool selected      = nk_menu_item_label(ctx, label, alignment);
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    if (ui_navigation_is_focused(&internal->nav_state, index))
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if (!selected && ui_navigation_consume_activation(&internal->nav_state))
+        {
+            selected = nk_true;
+        }
+    }
+    return selected;
+}
+
+static nk_bool ui_nav_checkbox_label(UIInternal *internal, struct nk_context *ctx,
+                                     const char *label, nk_bool *value)
+{
+    nk_bool changed       = nk_checkbox_label(ctx, label, value);
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    if (ui_navigation_is_focused(&internal->nav_state, index))
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if (ui_navigation_consume_activation(&internal->nav_state))
+        {
+            *value  = (*value == nk_true) ? nk_false : nk_true;
+            changed = nk_true;
+        }
+    }
+    return changed;
+}
+
+static bool ui_nav_combo_item_label(UIInternal *internal, struct nk_context *ctx, const char *label,
+                                    nk_flags alignment)
+{
+    bool chosen           = nk_combo_item_label(ctx, label, alignment);
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    if (ui_navigation_is_focused(&internal->nav_state, index))
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if (!chosen && ui_navigation_consume_activation(&internal->nav_state))
+        {
+            chosen = true;
+        }
+    }
+    return chosen;
+}
+
+static nk_flags ui_nav_edit_string(UIInternal *internal, struct nk_context *ctx, nk_flags flags,
+                                   char *buffer, int capacity, nk_plugin_filter filter)
+{
+    nk_flags result       = nk_edit_string_zero_terminated(ctx, flags, buffer, capacity, filter);
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    if (ui_navigation_is_focused(&internal->nav_state, index))
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if ((result & NK_EDIT_ACTIVE) == 0)
+        {
+            nk_edit_focus(ctx, 0);
+        }
+    }
+    return result;
+}
+
+static void ui_nav_property_int(UIInternal *internal, struct nk_context *ctx, const char *label,
+                                int min_value, int *value, int max_value, int step,
+                                float inc_per_pixel, const char *status_message)
+{
+    if (!internal || !ctx || !value)
+    {
+        nk_property_int(ctx, label, min_value, value, max_value, step, inc_per_pixel);
+        return;
+    }
+    int previous = *value;
+    nk_property_int(ctx, label, min_value, value, max_value, step, inc_per_pixel);
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    if (ui_navigation_is_focused(&internal->nav_state, index))
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if (internal->nav_input.arrow_up_pressed || internal->nav_input.arrow_right_pressed)
+        {
+            if (*value < max_value)
+            {
+                *value += step;
+                if (*value > max_value)
+                {
+                    *value = max_value;
+                }
+            }
+        }
+        if (internal->nav_input.arrow_down_pressed || internal->nav_input.arrow_left_pressed)
+        {
+            if (*value > min_value)
+            {
+                *value -= step;
+                if (*value < min_value)
+                {
+                    *value = min_value;
+                }
+            }
+        }
+    }
+    if (*value != previous && status_message)
+    {
+        ui_internal_set_status(internal, status_message);
+    }
+}
+
+static void ui_nav_property_float(UIInternal *internal, struct nk_context *ctx, const char *label,
+                                  float min_value, float *value, float max_value, float step,
+                                  float inc_per_pixel, float keyboard_step,
+                                  const char *status_message)
+{
+    if (!internal || !ctx || !value)
+    {
+        nk_property_float(ctx, label, min_value, value, max_value, step, inc_per_pixel);
+        return;
+    }
+    float previous = *value;
+    nk_property_float(ctx, label, min_value, value, max_value, step, inc_per_pixel);
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    if (ui_navigation_is_focused(&internal->nav_state, index))
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if (internal->nav_input.arrow_up_pressed || internal->nav_input.arrow_right_pressed)
+        {
+            *value += keyboard_step;
+            if (*value > max_value)
+            {
+                *value = max_value;
+            }
+        }
+        if (internal->nav_input.arrow_down_pressed || internal->nav_input.arrow_left_pressed)
+        {
+            *value -= keyboard_step;
+            if (*value < min_value)
+            {
+                *value = min_value;
+            }
+        }
+    }
+    if ((*value != previous) && status_message)
+    {
+        ui_internal_set_status(internal, status_message);
+    }
+}
+
+static nk_bool ui_nav_combo_begin_label(UIInternal *internal, struct nk_context *ctx,
+                                        const char *selected, struct nk_vec2 size)
+{
+    if (!internal || !ctx || !selected)
+    {
+        return nk_false;
+    }
+
+    struct nk_rect predicted = nk_layout_widget_bounds(ctx);
+    size_t nav_index         = ui_navigation_register(internal);
+    const bool nav_focus     = ui_navigation_is_focused(&internal->nav_state, nav_index);
+
+    bool simulate_click = false;
+    if (nav_focus && ui_navigation_consume_activation(&internal->nav_state))
+    {
+        simulate_click = true;
+    }
+
+    struct nk_input saved_input;
+    if (simulate_click)
+    {
+        saved_input = ctx->input;
+        int click_x = (int)(predicted.x + (predicted.w * 0.5f));
+        int click_y = (int)(predicted.y + (predicted.h * 0.5f));
+        nk_input_button(ctx, NK_BUTTON_LEFT, click_x, click_y, nk_true);
+        nk_input_button(ctx, NK_BUTTON_LEFT, click_x, click_y, nk_false);
+    }
+
+    nk_bool opened        = nk_combo_begin_label(ctx, selected, size);
+    struct nk_rect header = nk_widget_bounds(ctx);
+
+    if (simulate_click)
+    {
+        ctx->input = saved_input;
+    }
+
+    if (nav_focus)
+    {
+        ui_navigation_draw_focus_rect(ctx, header);
+    }
+
+    return opened;
+}
 
 static void ui_compose_person_name(const Person *person, char *buffer, size_t capacity);
 
@@ -1283,8 +1531,6 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
     {
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        nk_label(ctx, "AncestryTree Prototype", NK_TEXT_LEFT);
-        nk_layout_row_dynamic(ctx, 20.0f, 1);
         nk_label(ctx, "Futuristic holographic ancestry explorer.", NK_TEXT_LEFT);
         nk_label(ctx, "Current focus: rendering pipeline + UI overlays.", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 18.0f, 1);
@@ -1293,11 +1539,11 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
         nk_label(ctx, "License: MIT (see bundled LICENSE file).", NK_TEXT_LEFT);
         nk_label(ctx, "Documentation: README.md and docs/ directory.", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 28.0f, 2);
-        if (nk_button_label(ctx, "Close"))
+        if (ui_nav_button_label(internal, ctx, "Close"))
         {
             internal->show_about_window = false;
         }
-        if (nk_button_label(ctx, "Project Page"))
+        if (ui_nav_button_label(internal, ctx, "Project Page"))
         {
             ui_internal_set_status(internal, "Documentation pending public release.");
         }
@@ -1370,7 +1616,7 @@ static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
                  NK_TEXT_LEFT);
 
         nk_layout_row_dynamic(ctx, 30.0f, 1);
-        if (nk_button_label(ctx, "Close"))
+        if (ui_nav_button_label(internal, ctx, "Close"))
         {
             internal->show_help_window = false;
         }
@@ -1445,8 +1691,8 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         nk_label(ctx, "Name contains", NK_TEXT_LEFT);
         char previous_query[sizeof(internal->search_query)];
         memcpy(previous_query, internal->search_query, sizeof(previous_query));
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, internal->search_query,
-                                       (int)sizeof(internal->search_query), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, internal->search_query,
+                                 (int)sizeof(internal->search_query), nk_filter_default);
         if (strncmp(previous_query, internal->search_query, sizeof(previous_query)) != 0)
         {
             request_refresh = true;
@@ -1455,8 +1701,8 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         nk_layout_row_dynamic(ctx, 24.0f, 2);
         nk_bool include_alive    = internal->search_include_alive ? nk_true : nk_false;
         nk_bool include_deceased = internal->search_include_deceased ? nk_true : nk_false;
-        nk_checkbox_label(ctx, "Include alive", &include_alive);
-        nk_checkbox_label(ctx, "Include deceased", &include_deceased);
+        (void)ui_nav_checkbox_label(internal, ctx, "Include alive", &include_alive);
+        (void)ui_nav_checkbox_label(internal, ctx, "Include deceased", &include_deceased);
         bool new_include_alive    = (include_alive == nk_true);
         bool new_include_deceased = (include_deceased == nk_true);
         if (!new_include_alive && !new_include_deceased)
@@ -1474,7 +1720,7 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_bool range_enabled = internal->search_use_birth_year_range ? nk_true : nk_false;
-        nk_checkbox_label(ctx, "Filter by birth year", &range_enabled);
+        (void)ui_nav_checkbox_label(internal, ctx, "Filter by birth year", &range_enabled);
         bool new_range = (range_enabled == nk_true);
         if (new_range != internal->search_use_birth_year_range)
         {
@@ -1487,8 +1733,10 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
             int min_year = internal->search_birth_year_min;
             int max_year = internal->search_birth_year_max;
             nk_layout_row_dynamic(ctx, 24.0f, 2);
-            nk_property_int(ctx, "From", 1200, &min_year, 2500, 1, 5);
-            nk_property_int(ctx, "To", 1200, &max_year, 2500, 1, 5);
+            ui_nav_property_int(internal, ctx, "From", 1200, &min_year, 2500, 1, 5.0f,
+                                "Birth year filter adjusted.");
+            ui_nav_property_int(internal, ctx, "To", 1200, &max_year, 2500, 1, 5.0f,
+                                "Birth year filter adjusted.");
             if (min_year > max_year)
             {
                 int swap = min_year;
@@ -1505,11 +1753,11 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         }
 
         nk_layout_row_dynamic(ctx, 28.0f, 2);
-        if (nk_button_label(ctx, "Search"))
+        if (ui_nav_button_label(internal, ctx, "Search"))
         {
             request_refresh = true;
         }
-        if (nk_button_label(ctx, "Clear Filters"))
+        if (ui_nav_button_label(internal, ctx, "Clear Filters"))
         {
             internal->search_query[0]             = '\0';
             internal->search_include_alive        = true;
@@ -1563,7 +1811,7 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
                     internal->search_selected_index = new_selection;
                 }
 
-                if (nk_button_label(ctx, "Focus"))
+                if (ui_nav_button_label(internal, ctx, "Focus"))
                 {
                     if (ui_event_enqueue_with_u32(ui, UI_EVENT_FOCUS_PERSON, person_id))
                     {
@@ -1584,7 +1832,7 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         }
 
         nk_layout_row_dynamic(ctx, 28.0f, 1);
-        if (nk_button_label(ctx, "Focus Selected"))
+        if (ui_nav_button_label(internal, ctx, "Focus Selected"))
         {
             if (internal->search_selected_index >= 0 &&
                 (size_t)internal->search_selected_index < internal->search_result_count)
@@ -1678,18 +1926,18 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_label(ctx, "Graphics", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        if (nk_combo_begin_label(ctx,
-                                 ui_settings_graphics_quality_label(settings->graphics_quality),
-                                 nk_vec2(220.0f, 80.0f)))
+        if (ui_nav_combo_begin_label(internal, ctx,
+                                     ui_settings_graphics_quality_label(settings->graphics_quality),
+                                     nk_vec2(220.0f, 80.0f)))
         {
             nk_layout_row_dynamic(ctx, 22.0f, 1);
-            if (nk_combo_item_label(ctx, "Quality", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "Quality", NK_TEXT_LEFT) &&
                 settings->graphics_quality != SETTINGS_GRAPHICS_QUALITY_QUALITY)
             {
                 settings->graphics_quality = SETTINGS_GRAPHICS_QUALITY_QUALITY;
                 settings_mark_dirty(settings);
             }
-            if (nk_combo_item_label(ctx, "Performance", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "Performance", NK_TEXT_LEFT) &&
                 settings->graphics_quality != SETTINGS_GRAPHICS_QUALITY_PERFORMANCE)
             {
                 settings->graphics_quality = SETTINGS_GRAPHICS_QUALITY_PERFORMANCE;
@@ -1701,17 +1949,18 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_layout_row_dynamic(ctx, 20.0f, 1);
         nk_label(ctx, "Color Scheme", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        if (nk_combo_begin_label(ctx, ui_settings_color_scheme_label(settings->color_scheme),
-                                 nk_vec2(220.0f, 80.0f)))
+        if (ui_nav_combo_begin_label(internal, ctx,
+                                     ui_settings_color_scheme_label(settings->color_scheme),
+                                     nk_vec2(220.0f, 80.0f)))
         {
             nk_layout_row_dynamic(ctx, 22.0f, 1);
-            if (nk_combo_item_label(ctx, "Cyan Graph", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "Cyan Graph", NK_TEXT_LEFT) &&
                 settings->color_scheme != SETTINGS_COLOR_SCHEME_CYAN_GRAPH)
             {
                 settings->color_scheme = SETTINGS_COLOR_SCHEME_CYAN_GRAPH;
                 settings_mark_dirty(settings);
             }
-            if (nk_combo_item_label(ctx, "Solar Orchid", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "Solar Orchid", NK_TEXT_LEFT) &&
                 settings->color_scheme != SETTINGS_COLOR_SCHEME_SOLAR_ORCHID)
             {
                 settings->color_scheme = SETTINGS_COLOR_SCHEME_SOLAR_ORCHID;
@@ -1726,8 +1975,8 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_label(ctx, "Accessibility", NK_TEXT_LEFT);
 
-        nk_bool high_contrast  = settings->high_contrast_mode ? nk_true : nk_false;
-        high_contrast          = nk_check_label(ctx, "High contrast UI", high_contrast);
+        nk_bool high_contrast = settings->high_contrast_mode ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "High contrast UI", &high_contrast);
         bool new_high_contrast = (high_contrast == nk_true);
         if (new_high_contrast != settings->high_contrast_mode)
         {
@@ -1736,7 +1985,8 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         }
 
         float font_scale = settings->ui_font_scale;
-        nk_property_float(ctx, "Font scale", 0.6f, &font_scale, 1.8f, 0.05f, 0.01f);
+        ui_nav_property_float(internal, ctx, "Font scale", 0.6f, &font_scale, 1.8f, 0.05f, 0.01f,
+                              0.05f, NULL);
         if (fabsf(font_scale - settings->ui_font_scale) > 0.0001f)
         {
             settings->ui_font_scale = font_scale;
@@ -1750,7 +2000,8 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_label(ctx, "Camera Sensitivity", NK_TEXT_LEFT);
 
         float rotation = settings->camera_rotation_sensitivity;
-        nk_property_float(ctx, "Orbit", 0.05f, &rotation, 5.0f, 0.05f, 0.01f);
+        ui_nav_property_float(internal, ctx, "Orbit", 0.05f, &rotation, 5.0f, 0.05f, 0.01f, 0.05f,
+                              NULL);
         if (fabsf(rotation - settings->camera_rotation_sensitivity) > 0.0001f)
         {
             settings->camera_rotation_sensitivity = rotation;
@@ -1758,7 +2009,8 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         }
 
         float pan_mouse = settings->camera_pan_sensitivity;
-        nk_property_float(ctx, "Pan (mouse)", 0.05f, &pan_mouse, 10.0f, 0.05f, 0.01f);
+        ui_nav_property_float(internal, ctx, "Pan (mouse)", 0.05f, &pan_mouse, 10.0f, 0.05f, 0.01f,
+                              0.05f, NULL);
         if (fabsf(pan_mouse - settings->camera_pan_sensitivity) > 0.0001f)
         {
             settings->camera_pan_sensitivity = pan_mouse;
@@ -1766,7 +2018,8 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         }
 
         float pan_keyboard = settings->camera_keyboard_pan_sensitivity;
-        nk_property_float(ctx, "Pan (keys)", 0.05f, &pan_keyboard, 10.0f, 0.05f, 0.01f);
+        ui_nav_property_float(internal, ctx, "Pan (keys)", 0.05f, &pan_keyboard, 10.0f, 0.05f,
+                              0.01f, 0.05f, NULL);
         if (fabsf(pan_keyboard - settings->camera_keyboard_pan_sensitivity) > 0.0001f)
         {
             settings->camera_keyboard_pan_sensitivity = pan_keyboard;
@@ -1774,7 +2027,7 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         }
 
         float zoom = settings->camera_zoom_sensitivity;
-        nk_property_float(ctx, "Zoom", 0.05f, &zoom, 5.0f, 0.05f, 0.01f);
+        ui_nav_property_float(internal, ctx, "Zoom", 0.05f, &zoom, 5.0f, 0.05f, 0.01f, 0.05f, NULL);
         if (fabsf(zoom - settings->camera_zoom_sensitivity) > 0.0001f)
         {
             settings->camera_zoom_sensitivity = zoom;
@@ -1787,17 +2040,19 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_label(ctx, "Layout", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        if (nk_combo_begin_label(ctx, ui_settings_layout_label(settings->default_layout_algorithm),
-                                 nk_vec2(220.0f, 70.0f)))
+        if (ui_nav_combo_begin_label(internal, ctx,
+                                     ui_settings_layout_label(settings->default_layout_algorithm),
+                                     nk_vec2(220.0f, 70.0f)))
         {
             nk_layout_row_dynamic(ctx, 22.0f, 1);
-            if (nk_combo_item_label(ctx, "Hierarchical", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "Hierarchical", NK_TEXT_LEFT) &&
                 settings->default_layout_algorithm != SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL)
             {
                 settings->default_layout_algorithm = SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL;
                 settings_mark_dirty(settings);
             }
-            if (nk_combo_item_label(ctx, "Force-directed (prototype)", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "Force-directed (prototype)",
+                                        NK_TEXT_LEFT) &&
                 settings->default_layout_algorithm != SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED)
             {
                 settings->default_layout_algorithm = SETTINGS_LAYOUT_ALGORITHM_FORCE_DIRECTED;
@@ -1809,17 +2064,17 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_layout_row_dynamic(ctx, 20.0f, 1);
         nk_label(ctx, "Language", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        if (nk_combo_begin_label(ctx, ui_settings_language_label(settings->language),
-                                 nk_vec2(220.0f, 70.0f)))
+        if (ui_nav_combo_begin_label(internal, ctx, ui_settings_language_label(settings->language),
+                                     nk_vec2(220.0f, 70.0f)))
         {
             nk_layout_row_dynamic(ctx, 22.0f, 1);
-            if (nk_combo_item_label(ctx, "English", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "English", NK_TEXT_LEFT) &&
                 settings->language != SETTINGS_LANGUAGE_ENGLISH)
             {
                 settings->language = SETTINGS_LANGUAGE_ENGLISH;
                 settings_mark_dirty(settings);
             }
-            if (nk_combo_item_label(ctx, "Future Tongue", NK_TEXT_LEFT) &&
+            if (ui_nav_combo_item_label(internal, ctx, "Future Tongue", NK_TEXT_LEFT) &&
                 settings->language != SETTINGS_LANGUAGE_FUTURE)
             {
                 settings->language = SETTINGS_LANGUAGE_FUTURE;
@@ -1834,8 +2089,8 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_label(ctx, "Auto-save", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        nk_bool auto_save  = settings->auto_save_enabled ? nk_true : nk_false;
-        auto_save          = nk_check_label(ctx, "Enable auto-save", auto_save);
+        nk_bool auto_save = settings->auto_save_enabled ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "Enable auto-save", &auto_save);
         bool new_auto_save = (auto_save == nk_true);
         if (new_auto_save != settings->auto_save_enabled)
         {
@@ -1844,7 +2099,8 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         }
 
         int interval = (int)settings->auto_save_interval_seconds;
-        nk_property_int(ctx, "Interval (sec)", 15, &interval, 3600, 15, 15);
+        ui_nav_property_int(internal, ctx, "Interval (sec)", 15, &interval, 3600, 15, 15.0f,
+                            "Auto-save interval updated.");
         if (interval < 15)
         {
             interval = 15;
@@ -1859,7 +2115,7 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         nk_spacer(ctx);
 
         nk_layout_row_dynamic(ctx, 28.0f, 2);
-        if (nk_button_label(ctx, "Save to Disk"))
+        if (ui_nav_button_label(internal, ctx, "Save to Disk"))
         {
             if (ui_event_enqueue(ui, UI_EVENT_SAVE_SETTINGS))
             {
@@ -1870,7 +2126,7 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
                 ui_internal_set_status(internal, "Settings save aborted; event queue full.");
             }
         }
-        if (nk_button_label(ctx, "Reload from Disk"))
+        if (ui_nav_button_label(internal, ctx, "Reload from Disk"))
         {
             if (ui_event_enqueue(ui, UI_EVENT_RELOAD_SETTINGS))
             {
@@ -1933,11 +2189,11 @@ static void ui_draw_exit_prompt(UIInternal *internal, UIContext *ui)
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_label(ctx, "Are you sure you want to exit?", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 28.0f, 2);
-        if (nk_button_label(ctx, "Cancel"))
+        if (ui_nav_button_label(internal, ctx, "Cancel"))
         {
             internal->show_exit_prompt = false;
         }
-        if (nk_button_label(ctx, "Exit"))
+        if (ui_nav_button_label(internal, ctx, "Exit"))
         {
             internal->show_exit_prompt = false;
             if (ui_event_enqueue(ui, UI_EVENT_REQUEST_EXIT))
@@ -2005,7 +2261,7 @@ static void ui_draw_error_dialog(UIInternal *internal, UIContext *ui)
         nk_layout_row_dynamic(ctx, 18.0f, 1);
         nk_label_wrap(ctx, "The incident has been recorded in the application log.");
         nk_layout_row_dynamic(ctx, 32.0f, 1);
-        if (nk_button_label(ctx, "Dismiss"))
+        if (ui_nav_button_label(internal, ctx, "Dismiss"))
         {
             internal->show_error_dialog = false;
         }
@@ -2042,7 +2298,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT, nk_vec2(200.0f, 220.0f)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_menu_item_label(ctx, "New Tree", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "New Tree", NK_TEXT_LEFT))
             {
                 if (ui_event_enqueue(ui, UI_EVENT_NEW_TREE))
                 {
@@ -2053,7 +2309,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal, "Event queue full; new tree aborted.");
                 }
             }
-            if (nk_menu_item_label(ctx, "Open...", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Open...", NK_TEXT_LEFT))
             {
                 if (ui_event_enqueue(ui, UI_EVENT_OPEN_TREE))
                 {
@@ -2064,7 +2320,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal, "Event queue full; open aborted.");
                 }
             }
-            if (nk_menu_item_label(ctx, "Save", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Save", NK_TEXT_LEFT))
             {
                 if (ui_event_enqueue(ui, UI_EVENT_SAVE_TREE))
                 {
@@ -2075,7 +2331,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal, "Event queue full; save aborted.");
                 }
             }
-            if (nk_menu_item_label(ctx, "Save As...", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Save As...", NK_TEXT_LEFT))
             {
                 if (ui_event_enqueue(ui, UI_EVENT_SAVE_TREE_AS))
                 {
@@ -2086,7 +2342,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal, "Event queue full; Save As aborted.");
                 }
             }
-            if (nk_menu_item_label(ctx, "Exit", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Exit", NK_TEXT_LEFT))
             {
                 internal->show_exit_prompt = true;
             }
@@ -2097,7 +2353,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT, nk_vec2(160.0f, 180.0f)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_menu_item_label(ctx, "Undo", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Undo", NK_TEXT_LEFT))
             {
                 if (ui_event_enqueue(ui, UI_EVENT_UNDO))
                 {
@@ -2108,7 +2364,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal, "Event queue full; undo aborted.");
                 }
             }
-            if (nk_menu_item_label(ctx, "Redo", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Redo", NK_TEXT_LEFT))
             {
                 if (ui_event_enqueue(ui, UI_EVENT_REDO))
                 {
@@ -2122,7 +2378,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
             nk_layout_row_dynamic(ctx, 6.0f, 1);
             nk_spacing(ctx, 1);
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_menu_item_label(ctx, "Add Person...", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Add Person...", NK_TEXT_LEFT))
             {
                 internal->show_add_person_panel = true;
                 ui_add_person_form_reset(internal);
@@ -2136,24 +2392,24 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             const char *settings_label = settings_dirty ? "Settings... *" : "Settings...";
-            if (nk_menu_item_label(ctx, settings_label, NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, settings_label, NK_TEXT_LEFT))
             {
                 internal->show_settings_window = true;
             }
             const char *search_label =
                 internal->show_search_panel ? "Search / Filter... *" : "Search / Filter...";
-            if (nk_menu_item_label(ctx, search_label, NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, search_label, NK_TEXT_LEFT))
             {
                 internal->show_search_panel = true;
                 internal->search_dirty      = true;
             }
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_menu_item_label(ctx, "Reset Camera", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Reset Camera", NK_TEXT_LEFT))
             {
                 camera_controller_reset(camera);
                 ui_internal_set_status(internal, "Camera reset to default orbit.");
             }
-            if (nk_menu_item_label(ctx, "Focus Roots", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Focus Roots", NK_TEXT_LEFT))
             {
                 float center[3];
                 if (ui_compute_layout_center(layout, center))
@@ -2170,7 +2426,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
             {
                 nk_layout_row_dynamic(ctx, 20.0f, 1);
                 nk_bool show_grid = render_config->show_grid ? nk_true : nk_false;
-                nk_checkbox_label(ctx, "Show grid", &show_grid);
+                (void)ui_nav_checkbox_label(internal, ctx, "Show grid", &show_grid);
                 bool new_grid = (show_grid == nk_true);
                 if (new_grid != render_config->show_grid)
                 {
@@ -2180,7 +2436,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 }
 
                 nk_bool show_connections = render_config->show_connections ? nk_true : nk_false;
-                nk_checkbox_label(ctx, "Show connections", &show_connections);
+                (void)ui_nav_checkbox_label(internal, ctx, "Show connections", &show_connections);
                 bool new_connections = (show_connections == nk_true);
                 if (new_connections != render_config->show_connections)
                 {
@@ -2191,7 +2447,8 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 }
 
                 nk_bool show_overlay = render_config->show_overlay ? nk_true : nk_false;
-                nk_checkbox_label(ctx, "Show holographic overlay", &show_overlay);
+                (void)ui_nav_checkbox_label(internal, ctx, "Show holographic overlay",
+                                            &show_overlay);
                 bool new_overlay = (show_overlay == nk_true);
                 if (new_overlay != render_config->show_overlay)
                 {
@@ -2201,7 +2458,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 }
 
                 nk_bool show_labels = render_config->show_name_panels ? nk_true : nk_false;
-                nk_checkbox_label(ctx, "Show name panels", &show_labels);
+                (void)ui_nav_checkbox_label(internal, ctx, "Show name panels", &show_labels);
                 bool new_labels = (show_labels == nk_true);
                 if (new_labels != render_config->show_name_panels)
                 {
@@ -2212,7 +2469,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 }
 
                 nk_bool show_profiles = render_config->show_profile_images ? nk_true : nk_false;
-                nk_checkbox_label(ctx, "Show profile images", &show_profiles);
+                (void)ui_nav_checkbox_label(internal, ctx, "Show profile images", &show_profiles);
                 bool new_profiles = (show_profiles == nk_true);
                 if (new_profiles != render_config->show_profile_images)
                 {
@@ -2231,7 +2488,8 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                  */
                 nk_bool smooth_connections =
                     render_config->connection_antialiasing ? nk_true : nk_false;
-                nk_checkbox_label(ctx, "Smooth connection lines", &smooth_connections);
+                (void)ui_nav_checkbox_label(internal, ctx, "Smooth connection lines",
+                                            &smooth_connections);
                 bool new_smoothing = (smooth_connections == nk_true);
                 if (new_smoothing != render_config->connection_antialiasing)
                 {
@@ -2244,13 +2502,13 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 nk_layout_row_dynamic(ctx, 18.0f, 1);
                 nk_label(ctx, "Parent connection style", NK_TEXT_LEFT);
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_begin_label(
-                        ctx,
+                if (ui_nav_combo_begin_label(
+                        internal, ctx,
                         ui_connection_style_label(render_config->connection_style_parent_child),
                         nk_vec2(180.0f, 70.0f)))
                 {
                     nk_layout_row_dynamic(ctx, 20.0f, 1);
-                    if (nk_combo_item_label(ctx, "Straight", NK_TEXT_LEFT) &&
+                    if (ui_nav_combo_item_label(internal, ctx, "Straight", NK_TEXT_LEFT) &&
                         render_config->connection_style_parent_child !=
                             RENDER_CONNECTION_STYLE_STRAIGHT)
                     {
@@ -2259,7 +2517,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                         ui_internal_set_status(internal,
                                                "Parent connections set to straight segments.");
                     }
-                    if (nk_combo_item_label(ctx, "Bezier", NK_TEXT_LEFT) &&
+                    if (ui_nav_combo_item_label(internal, ctx, "Bezier", NK_TEXT_LEFT) &&
                         render_config->connection_style_parent_child !=
                             RENDER_CONNECTION_STYLE_BEZIER)
                     {
@@ -2274,19 +2532,20 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 nk_layout_row_dynamic(ctx, 18.0f, 1);
                 nk_label(ctx, "Spouse connection style", NK_TEXT_LEFT);
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_begin_label(
-                        ctx, ui_connection_style_label(render_config->connection_style_spouse),
+                if (ui_nav_combo_begin_label(
+                        internal, ctx,
+                        ui_connection_style_label(render_config->connection_style_spouse),
                         nk_vec2(180.0f, 70.0f)))
                 {
                     nk_layout_row_dynamic(ctx, 20.0f, 1);
-                    if (nk_combo_item_label(ctx, "Straight", NK_TEXT_LEFT) &&
+                    if (ui_nav_combo_item_label(internal, ctx, "Straight", NK_TEXT_LEFT) &&
                         render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_STRAIGHT)
                     {
                         render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_STRAIGHT;
                         ui_internal_set_status(internal,
                                                "Spouse connections set to straight segments.");
                     }
-                    if (nk_combo_item_label(ctx, "Bezier", NK_TEXT_LEFT) &&
+                    if (ui_nav_combo_item_label(internal, ctx, "Bezier", NK_TEXT_LEFT) &&
                         render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_BEZIER)
                     {
                         render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_BEZIER;
@@ -2297,22 +2556,24 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 }
 
                 float font_control = render_config->name_panel_font_size;
-                nk_property_float(ctx, "Name panel font", 16.0f, &font_control, 64.0f, 1.0f, 0.2f);
+                ui_nav_property_float(internal, ctx, "Name panel font", 16.0f, &font_control, 64.0f,
+                                      1.0f, 0.2f, 1.0f, NULL);
                 if (fabsf(font_control - render_config->name_panel_font_size) > 0.05f)
                 {
                     render_config->name_panel_font_size = font_control;
                     ui_internal_set_status(internal, "Name panel font size updated.");
                 }
             }
-            if (nk_menu_item_label(
-                    ctx, internal->auto_orbit ? "Disable Auto Orbit" : "Enable Auto Orbit",
-                    NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx,
+                                       internal->auto_orbit ? "Disable Auto Orbit"
+                                                            : "Enable Auto Orbit",
+                                       NK_TEXT_LEFT))
             {
                 internal->auto_orbit = !internal->auto_orbit;
                 ui_internal_set_status(internal, internal->auto_orbit ? "Auto orbit enabled."
                                                                       : "Auto orbit disabled.");
             }
-            if (nk_menu_item_label(ctx, "Layout Options", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Layout Options", NK_TEXT_LEFT))
             {
                 ui_internal_set_status(internal, "Layout options UI under development.");
             }
@@ -2323,15 +2584,15 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         if (nk_menu_begin_label(ctx, "Help", NK_TEXT_LEFT, nk_vec2(180.0f, 160.0f)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_menu_item_label(ctx, "About", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "About", NK_TEXT_LEFT))
             {
                 internal->show_about_window = true;
             }
-            if (nk_menu_item_label(ctx, "Quick Help", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Quick Help", NK_TEXT_LEFT))
             {
                 internal->show_help_window = true;
             }
-            if (nk_menu_item_label(ctx, "Documentation", NK_TEXT_LEFT))
+            if (ui_nav_menu_item_label(internal, ctx, "Documentation", NK_TEXT_LEFT))
             {
                 ui_internal_set_status(internal,
                                        "Documentation menu loads roadmap in future milestone.");
@@ -2366,7 +2627,12 @@ static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_se
         return;
     }
     ui_internal_tick(internal, delta_seconds);
-    struct nk_context *ctx = &internal->ctx;
+    struct nk_context *ctx               = &internal->ctx;
+    bool shift_down                      = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    bool tab_pressed                     = IsKeyPressed(KEY_TAB);
+    internal->nav_input.tab_pressed      = tab_pressed;
+    internal->nav_input.tab_with_shift   = tab_pressed && shift_down;
+    internal->nav_input.activate_pressed = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
     nk_input_begin(ctx);
     (void)ui;
     Vector2 mouse = GetMousePosition();
@@ -2390,7 +2656,7 @@ static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_se
     nk_input_key(ctx, NK_KEY_COPY, IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_C));
     nk_input_key(ctx, NK_KEY_PASTE, IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_V));
     nk_input_key(ctx, NK_KEY_CUT, IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_X));
-    nk_input_key(ctx, NK_KEY_SHIFT, IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+    nk_input_key(ctx, NK_KEY_SHIFT, shift_down);
     nk_input_key(ctx, NK_KEY_CTRL, IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL));
 
     int codepoint = GetCharPressed();
@@ -2676,7 +2942,7 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree,
         if (selected_person)
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_button_label(ctx, "Edit Selected..."))
+            if (ui_nav_button_label(internal, ctx, "Edit Selected..."))
             {
                 ui_edit_person_populate(internal, selected_person);
                 ui_internal_set_status(internal, "Edit panel opened for selected hologram.");
@@ -2690,12 +2956,12 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree,
         }
 
         nk_layout_row_dynamic(ctx, 24.0f, 2);
-        if (nk_button_label(ctx, "Reset Camera"))
+        if (ui_nav_button_label(internal, ctx, "Reset Camera"))
         {
             camera_controller_reset(camera);
             ui_internal_set_status(internal, "Camera reset to default orbit.");
         }
-        if (nk_button_label(ctx, "Focus Roots"))
+        if (ui_nav_button_label(internal, ctx, "Focus Roots"))
         {
             float center[3];
             if (ui_compute_layout_center(layout, center))
@@ -2717,8 +2983,8 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree,
         nk_label(ctx, "Mouse wheel: Zoom", NK_TEXT_LEFT);
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        nk_bool orbit       = internal->auto_orbit ? nk_true : nk_false;
-        orbit               = nk_check_label(ctx, "Auto orbit when idle", orbit);
+        nk_bool orbit = internal->auto_orbit ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "Auto orbit when idle", &orbit);
         bool new_auto_orbit = (orbit == nk_true);
         if (internal->auto_orbit != new_auto_orbit)
         {
@@ -2781,45 +3047,45 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "First", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->first, (int)sizeof(draft->first),
-                                       nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->first,
+                                 (int)sizeof(draft->first), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Middle", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->middle,
-                                       (int)sizeof(draft->middle), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->middle,
+                                 (int)sizeof(draft->middle), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Last", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->last, (int)sizeof(draft->last),
-                                       nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->last,
+                                 (int)sizeof(draft->last), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birth Date", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_date,
-                                       (int)sizeof(draft->birth_date), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->birth_date,
+                                 (int)sizeof(draft->birth_date), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birthplace", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_location,
-                                       (int)sizeof(draft->birth_location), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->birth_location,
+                                 (int)sizeof(draft->birth_location), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        nk_bool alive   = draft->is_alive ? nk_true : nk_false;
-        alive           = nk_check_label(ctx, "Is currently alive", alive);
+        nk_bool alive = draft->is_alive ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "Is currently alive", &alive);
         draft->is_alive = (alive == nk_true);
 
         if (!draft->is_alive)
@@ -2828,16 +3094,16 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Death Date", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_date,
-                                           (int)sizeof(draft->death_date), nk_filter_default);
+            (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->death_date,
+                                     (int)sizeof(draft->death_date), nk_filter_default);
             nk_layout_row_end(ctx);
 
             nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Death Place", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_location,
-                                           (int)sizeof(draft->death_location), nk_filter_default);
+            (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->death_location,
+                                     (int)sizeof(draft->death_location), nk_filter_default);
             nk_layout_row_end(ctx);
         }
         else
@@ -2876,10 +3142,10 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Father", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            if (nk_combo_begin_label(ctx, father_label, nk_vec2(260.0f, 260.0f)))
+            if (ui_nav_combo_begin_label(internal, ctx, father_label, nk_vec2(260.0f, 260.0f)))
             {
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                if (ui_nav_combo_item_label(internal, ctx, "None", NK_TEXT_LEFT))
                 {
                     draft->father_id = 0U;
                 }
@@ -2895,7 +3161,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
                         ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
                         snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer,
                                  candidate->id);
-                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        if (ui_nav_combo_item_label(internal, ctx, label_buffer, NK_TEXT_LEFT))
                         {
                             draft->father_id = candidate->id;
                         }
@@ -2929,10 +3195,10 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Mother", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            if (nk_combo_begin_label(ctx, mother_label, nk_vec2(260.0f, 260.0f)))
+            if (ui_nav_combo_begin_label(internal, ctx, mother_label, nk_vec2(260.0f, 260.0f)))
             {
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                if (ui_nav_combo_item_label(internal, ctx, "None", NK_TEXT_LEFT))
                 {
                     draft->mother_id = 0U;
                 }
@@ -2948,7 +3214,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
                         ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
                         snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer,
                                  candidate->id);
-                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        if (ui_nav_combo_item_label(internal, ctx, label_buffer, NK_TEXT_LEFT))
                         {
                             draft->mother_id = candidate->id;
                         }
@@ -2982,10 +3248,10 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Spouse", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            if (nk_combo_begin_label(ctx, spouse_label, nk_vec2(260.0f, 260.0f)))
+            if (ui_nav_combo_begin_label(internal, ctx, spouse_label, nk_vec2(260.0f, 260.0f)))
             {
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                if (ui_nav_combo_item_label(internal, ctx, "None", NK_TEXT_LEFT))
                 {
                     draft->spouse_id = 0U;
                 }
@@ -3001,7 +3267,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
                         ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
                         snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer,
                                  candidate->id);
-                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        if (ui_nav_combo_item_label(internal, ctx, label_buffer, NK_TEXT_LEFT))
                         {
                             draft->spouse_id = candidate->id;
                         }
@@ -3031,7 +3297,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, width - 140.0f);
             nk_label(ctx, item->location[0] != '\0' ? item->location : "", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, 60.0f);
-            if (nk_button_label(ctx, "Remove"))
+            if (ui_nav_button_label(internal, ctx, "Remove"))
             {
                 ui_add_person_remove_timeline_entry(draft, index);
                 --index;
@@ -3051,22 +3317,22 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Type", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        if (nk_combo_begin_label(ctx, entry_type_label, nk_vec2(220.0f, 160.0f)))
+        if (ui_nav_combo_begin_label(internal, ctx, entry_type_label, nk_vec2(220.0f, 160.0f)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_combo_item_label(ctx, "Birth", NK_TEXT_LEFT))
+            if (ui_nav_combo_item_label(internal, ctx, "Birth", NK_TEXT_LEFT))
             {
                 internal->add_person_form.new_timeline_type = TIMELINE_EVENT_BIRTH;
             }
-            if (nk_combo_item_label(ctx, "Marriage", NK_TEXT_LEFT))
+            if (ui_nav_combo_item_label(internal, ctx, "Marriage", NK_TEXT_LEFT))
             {
                 internal->add_person_form.new_timeline_type = TIMELINE_EVENT_MARRIAGE;
             }
-            if (nk_combo_item_label(ctx, "Death", NK_TEXT_LEFT))
+            if (ui_nav_combo_item_label(internal, ctx, "Death", NK_TEXT_LEFT))
             {
                 internal->add_person_form.new_timeline_type = TIMELINE_EVENT_DEATH;
             }
-            if (nk_combo_item_label(ctx, "Custom", NK_TEXT_LEFT))
+            if (ui_nav_combo_item_label(internal, ctx, "Custom", NK_TEXT_LEFT))
             {
                 internal->add_person_form.new_timeline_type = TIMELINE_EVENT_CUSTOM;
             }
@@ -3078,27 +3344,27 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Date", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(
-            ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_date,
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_date,
             (int)sizeof(internal->add_person_form.new_timeline_date), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 60.0f, 1);
-        nk_edit_string_zero_terminated(
-            ctx, NK_EDIT_BOX, internal->add_person_form.new_timeline_description,
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_BOX, internal->add_person_form.new_timeline_description,
             (int)sizeof(internal->add_person_form.new_timeline_description), nk_filter_default);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Location", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(
-            ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_location,
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_FIELD, internal->add_person_form.new_timeline_location,
             (int)sizeof(internal->add_person_form.new_timeline_location), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        if (nk_button_label(ctx, "Add Entry"))
+        if (ui_nav_button_label(internal, ctx, "Add Entry"))
         {
             if (draft->timeline_count >= UI_ADD_PERSON_MAX_TIMELINE_ENTRIES)
             {
@@ -3143,7 +3409,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, width - 120.0f);
             nk_label(ctx, draft->certificate_paths[index], NK_TEXT_LEFT);
             nk_layout_row_push(ctx, 60.0f);
-            if (nk_button_label(ctx, "Remove"))
+            if (ui_nav_button_label(internal, ctx, "Remove"))
             {
                 ui_add_person_remove_certificate(draft, index);
                 --index;
@@ -3153,11 +3419,11 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(
-            ctx, NK_EDIT_FIELD, internal->add_person_form.new_certificate_path,
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_FIELD, internal->add_person_form.new_certificate_path,
             (int)sizeof(internal->add_person_form.new_certificate_path), nk_filter_default);
         nk_layout_row_push(ctx, 60.0f);
-        if (nk_button_label(ctx, "Add"))
+        if (ui_nav_button_label(internal, ctx, "Add"))
         {
             if (internal->add_person_form.new_certificate_path[0] == '\0')
             {
@@ -3187,12 +3453,12 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_label(ctx, "Profile Image", NK_TEXT_LEFT);
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
         nk_layout_row_push(ctx, width - 40.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->profile_image_path,
-                                       (int)sizeof(draft->profile_image_path), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->profile_image_path,
+                                 (int)sizeof(draft->profile_image_path), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 30.0f, 2);
-        if (nk_button_label(ctx, "Save"))
+        if (ui_nav_button_label(internal, ctx, "Save"))
         {
             char message[192];
             message[0] = '\0';
@@ -3210,7 +3476,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
                 ui_add_person_set_error(internal, message);
             }
         }
-        if (nk_button_label(ctx, "Cancel"))
+        if (ui_nav_button_label(internal, ctx, "Cancel"))
         {
             internal->show_add_person_panel = false;
             ui_add_person_form_reset(internal);
@@ -3274,45 +3540,45 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "First", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->first, (int)sizeof(draft->first),
-                                       nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->first,
+                                 (int)sizeof(draft->first), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Middle", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->middle,
-                                       (int)sizeof(draft->middle), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->middle,
+                                 (int)sizeof(draft->middle), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Last", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->last, (int)sizeof(draft->last),
-                                       nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->last,
+                                 (int)sizeof(draft->last), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birth Date", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_date,
-                                       (int)sizeof(draft->birth_date), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->birth_date,
+                                 (int)sizeof(draft->birth_date), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birthplace", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
-        nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->birth_location,
-                                       (int)sizeof(draft->birth_location), nk_filter_default);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->birth_location,
+                                 (int)sizeof(draft->birth_location), nk_filter_default);
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_bool deceased = draft->has_death ? nk_true : nk_false;
-        deceased         = nk_check_label(ctx, "Person is deceased", deceased);
+        (void)ui_nav_checkbox_label(internal, ctx, "Person is deceased", &deceased);
         draft->has_death = (deceased == nk_true);
 
         if (draft->has_death)
@@ -3321,16 +3587,16 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Death Date", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_date,
-                                           (int)sizeof(draft->death_date), nk_filter_default);
+            (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->death_date,
+                                     (int)sizeof(draft->death_date), nk_filter_default);
             nk_layout_row_end(ctx);
 
             nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Death Place", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            nk_edit_string_zero_terminated(ctx, NK_EDIT_FIELD, draft->death_location,
-                                           (int)sizeof(draft->death_location), nk_filter_default);
+            (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->death_location,
+                                     (int)sizeof(draft->death_location), nk_filter_default);
             nk_layout_row_end(ctx);
         }
 
@@ -3349,10 +3615,10 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Father", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            if (nk_combo_begin_label(ctx, father_label, nk_vec2(260.0f, 260.0f)))
+            if (ui_nav_combo_begin_label(internal, ctx, father_label, nk_vec2(260.0f, 260.0f)))
             {
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                if (ui_nav_combo_item_label(internal, ctx, "None", NK_TEXT_LEFT))
                 {
                     draft->father_id = 0U;
                 }
@@ -3369,7 +3635,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                         ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
                         (void)snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer,
                                        candidate->id);
-                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        if (ui_nav_combo_item_label(internal, ctx, label_buffer, NK_TEXT_LEFT))
                         {
                             draft->father_id = candidate->id;
                         }
@@ -3389,10 +3655,10 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
             nk_layout_row_push(ctx, 100.0f);
             nk_label(ctx, "Mother", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, width - 120.0f);
-            if (nk_combo_begin_label(ctx, mother_label, nk_vec2(260.0f, 260.0f)))
+            if (ui_nav_combo_begin_label(internal, ctx, mother_label, nk_vec2(260.0f, 260.0f)))
             {
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                if (ui_nav_combo_item_label(internal, ctx, "None", NK_TEXT_LEFT))
                 {
                     draft->mother_id = 0U;
                 }
@@ -3409,7 +3675,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                         ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
                         (void)snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer,
                                        candidate->id);
-                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        if (ui_nav_combo_item_label(internal, ctx, label_buffer, NK_TEXT_LEFT))
                         {
                             draft->mother_id = candidate->id;
                         }
@@ -3433,10 +3699,10 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                 tree, spouse_id, label_buffer, sizeof(label_buffer));
             nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
             nk_layout_row_push(ctx, width - 120.0f);
-            if (nk_combo_begin_label(ctx, spouse_label, nk_vec2(260.0f, 300.0f)))
+            if (ui_nav_combo_begin_label(internal, ctx, spouse_label, nk_vec2(260.0f, 300.0f)))
             {
                 nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (nk_combo_item_label(ctx, "None", NK_TEXT_LEFT))
+                if (ui_nav_combo_item_label(internal, ctx, "None", NK_TEXT_LEFT))
                 {
                     draft->spouse_ids[index] = 0U;
                 }
@@ -3454,7 +3720,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                         ui_compose_person_name(candidate, name_buffer, sizeof(name_buffer));
                         (void)snprintf(label_buffer, sizeof(label_buffer), "%s (#%u)", name_buffer,
                                        candidate->id);
-                        if (nk_combo_item_label(ctx, label_buffer, NK_TEXT_LEFT))
+                        if (ui_nav_combo_item_label(internal, ctx, label_buffer, NK_TEXT_LEFT))
                         {
                             draft->spouse_ids[index] = candidate->id;
                         }
@@ -3463,7 +3729,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                 nk_combo_end(ctx);
             }
             nk_layout_row_push(ctx, 60.0f);
-            if (nk_button_label(ctx, "Remove"))
+            if (ui_nav_button_label(internal, ctx, "Remove"))
             {
                 ui_edit_person_remove_spouse(draft, index);
                 --index;
@@ -3474,7 +3740,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         if (draft->spouse_count < UI_EDIT_PERSON_MAX_SPOUSES)
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (nk_button_label(ctx, "Add Spouse Slot"))
+            if (ui_nav_button_label(internal, ctx, "Add Spouse Slot"))
             {
                 draft->spouse_ids[draft->spouse_count] = 0U;
                 draft->spouse_count += 1U;
@@ -3485,7 +3751,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         nk_spacing(ctx, 1);
 
         nk_layout_row_dynamic(ctx, 30.0f, 2);
-        if (nk_button_label(ctx, "Save Changes"))
+        if (ui_nav_button_label(internal, ctx, "Save Changes"))
         {
             char message[192];
             message[0] = '\0';
@@ -3504,7 +3770,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                 ui_edit_person_set_error(internal, message);
             }
         }
-        if (nk_button_label(ctx, "Cancel"))
+        if (ui_nav_button_label(internal, ctx, "Cancel"))
         {
             internal->show_edit_person_panel          = false;
             internal->edit_person_form.confirm_delete = false;
@@ -3517,7 +3783,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                               internal->edit_person_form.confirm_delete ? 2 : 1);
         if (!internal->edit_person_form.confirm_delete)
         {
-            if (nk_button_label(ctx, "Delete Person..."))
+            if (ui_nav_button_label(internal, ctx, "Delete Person..."))
             {
                 internal->edit_person_form.confirm_delete = true;
                 ui_internal_set_status(internal, "Confirm deletion to remove profile.");
@@ -3525,7 +3791,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         }
         else
         {
-            if (nk_button_label(ctx, "Confirm Delete"))
+            if (ui_nav_button_label(internal, ctx, "Confirm Delete"))
             {
                 if (draft->person_id != 0U &&
                     ui_event_enqueue_with_u32(ui, UI_EVENT_DELETE_PERSON, draft->person_id))
@@ -3541,7 +3807,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                     ui_internal_set_status(internal, "Event queue full; delete aborted.");
                 }
             }
-            if (nk_button_label(ctx, "Keep Person"))
+            if (ui_nav_button_label(internal, ctx, "Keep Person"))
             {
                 internal->edit_person_form.confirm_delete = false;
                 ui_internal_set_status(internal, "Deletion cancelled.");
@@ -3575,6 +3841,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         return;
     }
+    ui_navigation_begin_frame(&internal->nav_state, &internal->nav_input);
     ui_internal_sync_accessibility(internal, ui, settings);
     if (internal->search_last_tree != tree)
     {
@@ -3597,6 +3864,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         ui_draw_hover_tooltip(internal, ui, hovered_person);
     }
+    ui_navigation_end_frame(&internal->nav_state);
 #else
     (void)tree;
     (void)layout;
