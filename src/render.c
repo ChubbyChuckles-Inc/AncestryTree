@@ -46,6 +46,8 @@ static void render_draw_selection_particles(RenderState *state, const Camera3D *
 static void render_update_life_particles(RenderState *state, const LayoutResult *layout,
                                          const Camera3D *camera, float delta_seconds);
 static void render_draw_life_particles(RenderState *state, const Camera3D *camera);
+static void render_draw_shadow(RenderState *state, Vector3 position, float base_radius,
+                               float camera_distance);
 #else
 static void render_update_selection_particles(RenderState *state, const LayoutResult *layout,
                                               const Camera3D *camera, const Person *selected_person,
@@ -121,6 +123,11 @@ static void render_set_default_config(RenderConfig *config)
     config->rim_intensity                   = 1.1f;
     config->rim_power                       = 2.6f;
     config->rim_color                       = render_color_make(100, 240, 255, 255);
+    config->enable_shadows                  = true;
+    config->shadow_radius_scale             = 1.35f;
+    config->shadow_max_opacity              = 0.55f;
+    config->shadow_height_bias              = 0.02f;
+    config->shadow_softness                 = 0.6f;
     config->enable_selection_particles      = true;
     config->selection_particle_capacity     = 48U;
     config->selection_particle_lifetime     = 1.6f;
@@ -265,6 +272,25 @@ bool render_config_validate(const RenderConfig *config)
         return false;
     }
     if (!(config->rim_power >= 0.5f))
+    {
+        return false;
+    }
+    if (config->enable_shadows)
+    {
+        if (!(config->shadow_radius_scale > 0.0f))
+        {
+            return false;
+        }
+        if (!(config->shadow_max_opacity >= 0.0f && config->shadow_max_opacity <= 1.0f))
+        {
+            return false;
+        }
+        if (!(config->shadow_softness >= 0.0f && config->shadow_softness <= 1.0f))
+        {
+            return false;
+        }
+    }
+    if (!(config->shadow_height_bias >= -2.0f && config->shadow_height_bias <= 2.0f))
     {
         return false;
     }
@@ -1126,6 +1152,134 @@ static void render_draw_selection_particles(RenderState *state, const Camera3D *
     EndBlendMode();
 }
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+// Render a soft circular shadow beneath a sphere using two gradient fans.
+static void render_draw_shadow(RenderState *state, Vector3 position, float base_radius,
+                               float camera_distance)
+{
+    if (!state || !state->config.enable_shadows)
+    {
+        return;
+    }
+
+    float radius_scale = state->config.shadow_radius_scale;
+    if (!(radius_scale > 0.0f))
+    {
+        return;
+    }
+    float outer_radius = base_radius * radius_scale;
+    if (!(outer_radius > 0.0f))
+    {
+        return;
+    }
+
+    float max_opacity = state->config.shadow_max_opacity;
+    if (max_opacity <= 0.0f)
+    {
+        return;
+    }
+    if (max_opacity > 1.0f)
+    {
+        max_opacity = 1.0f;
+    }
+
+    float softness = state->config.shadow_softness;
+    if (softness < 0.0f)
+    {
+        softness = 0.0f;
+    }
+    if (softness > 1.0f)
+    {
+        softness = 1.0f;
+    }
+
+    float inner_radius = outer_radius * (0.4f + 0.4f * (1.0f - softness));
+    float radius_min   = outer_radius * 0.1f;
+    if (inner_radius < radius_min)
+    {
+        inner_radius = radius_min;
+    }
+    if (inner_radius > outer_radius)
+    {
+        inner_radius = outer_radius * 0.98f;
+    }
+
+    float center_alpha = max_opacity;
+    float mid_alpha    = max_opacity * (0.75f - 0.35f * softness);
+    if (mid_alpha < 0.0f)
+    {
+        mid_alpha = 0.0f;
+    }
+
+    Color center_color = {0, 0, 0, (unsigned char)(center_alpha * 255.0f)};
+    Color mid_color    = center_color;
+    mid_color.a        = (unsigned char)fminf(255.0f, mid_alpha * 255.0f);
+    Color edge_color   = mid_color;
+    edge_color.a       = 0U;
+
+    Color fog_center = render_apply_fog_color(state, center_color, camera_distance);
+    fog_center.a     = center_color.a;
+    Color fog_mid    = render_apply_fog_color(state, mid_color, camera_distance);
+    fog_mid.a        = mid_color.a;
+    Color fog_edge   = render_apply_fog_color(state, edge_color, camera_distance);
+    fog_edge.a       = edge_color.a;
+
+    const int segments = 48;
+    float plane_y      = position.y - base_radius + state->config.shadow_height_bias;
+
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    rlPushMatrix();
+    rlTranslatef(position.x, plane_y, position.z);
+    rlRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+
+    rlBegin(RL_TRIANGLES);
+    for (int index = 0; index < segments; ++index)
+    {
+        float angle0   = ((float)index / (float)segments) * 360.0f * DEG2RAD;
+        float angle1   = ((float)(index + 1) / (float)segments) * 360.0f * DEG2RAD;
+        float cos0     = cosf(angle0);
+        float sin0     = sinf(angle0);
+        float cos1     = cosf(angle1);
+        float sin1     = sinf(angle1);
+        float inner_x0 = cos0 * inner_radius;
+        float inner_y0 = sin0 * inner_radius;
+        float inner_x1 = cos1 * inner_radius;
+        float inner_y1 = sin1 * inner_radius;
+        float outer_x0 = cos0 * outer_radius;
+        float outer_y0 = sin0 * outer_radius;
+        float outer_x1 = cos1 * outer_radius;
+        float outer_y1 = sin1 * outer_radius;
+
+        rlColor4ub(fog_center.r, fog_center.g, fog_center.b, fog_center.a);
+        rlVertex2f(0.0f, 0.0f);
+        rlColor4ub(fog_mid.r, fog_mid.g, fog_mid.b, fog_mid.a);
+        rlVertex2f(inner_x0, inner_y0);
+        rlColor4ub(fog_mid.r, fog_mid.g, fog_mid.b, fog_mid.a);
+        rlVertex2f(inner_x1, inner_y1);
+
+        rlColor4ub(fog_mid.r, fog_mid.g, fog_mid.b, fog_mid.a);
+        rlVertex2f(inner_x0, inner_y0);
+        rlColor4ub(fog_edge.r, fog_edge.g, fog_edge.b, fog_edge.a);
+        rlVertex2f(outer_x0, outer_y0);
+        rlColor4ub(fog_edge.r, fog_edge.g, fog_edge.b, fog_edge.a);
+        rlVertex2f(outer_x1, outer_y1);
+
+        rlColor4ub(fog_mid.r, fog_mid.g, fog_mid.b, fog_mid.a);
+        rlVertex2f(inner_x0, inner_y0);
+        rlColor4ub(fog_edge.r, fog_edge.g, fog_edge.b, fog_edge.a);
+        rlVertex2f(outer_x1, outer_y1);
+        rlColor4ub(fog_mid.r, fog_mid.g, fog_mid.b, fog_mid.a);
+        rlVertex2f(inner_x1, inner_y1);
+    }
+    rlEnd();
+
+    rlPopMatrix();
+    rlEnableBackfaceCulling();
+    rlEnableDepthMask();
+}
+#endif
+
 static void render_reset_life_particle_state(RenderState *state)
 {
     if (!state)
@@ -1722,6 +1876,7 @@ static void render_draw_sphere(RenderState *state, const LayoutResult *layout,
     {
         camera_distance = Vector3Distance(camera->position, position);
     }
+    render_draw_shadow(state, position, base_radius, camera_distance);
     base_color   = render_apply_fog_color(state, base_color, camera_distance);
     int segments = render_select_sphere_segments(state, camera_distance);
     if (segments < 12)
@@ -1813,6 +1968,27 @@ static void render_draw_sphere_group(RenderState *state, const LayoutResult *lay
 
     Color base_color =
         render_color_to_raylib(is_alive ? state->config.alive_color : state->config.deceased_color);
+
+    if (state->config.enable_shadows)
+    {
+        for (size_t index = 0; index < count; ++index)
+        {
+            const LayoutNode *node = nodes[index];
+            const Person *person   = node ? node->person : NULL;
+            if (!node || !person)
+            {
+                continue;
+            }
+            if (!render_is_node_visible(state, layout, node))
+            {
+                continue;
+            }
+            Vector3 position = {node->position[0], node->position[1], node->position[2]};
+            float distance   = Vector3Distance(camera->position, position);
+            render_draw_shadow(state, position, base_radius, distance);
+        }
+    }
+
     bool use_shader = state->glow_shader_ready && is_alive;
     if (use_shader)
     {
@@ -2038,6 +2214,11 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.rim_intensity       = config->rim_intensity;
         state->config.rim_power           = config->rim_power;
         render_copy_color(&state->config.rim_color, &config->rim_color);
+        state->config.enable_shadows                  = config->enable_shadows;
+        state->config.shadow_radius_scale             = config->shadow_radius_scale;
+        state->config.shadow_max_opacity              = config->shadow_max_opacity;
+        state->config.shadow_height_bias              = config->shadow_height_bias;
+        state->config.shadow_softness                 = config->shadow_softness;
         state->config.enable_selection_particles      = config->enable_selection_particles;
         state->config.selection_particle_capacity     = config->selection_particle_capacity;
         state->config.selection_particle_lifetime     = config->selection_particle_lifetime;

@@ -11,6 +11,7 @@
 #include "settings.h"
 #include "timeline.h"
 #include "tree.h"
+#include "ui_icons.h"
 #include "ui_navigation.h"
 #include "ui_scaling.h"
 #include "ui_theme.h"
@@ -62,6 +63,8 @@ typedef struct UIInternal
     UINavigationInput nav_input;
     bool accessibility_high_contrast;
     float accessibility_font_scale;
+    UIIconLibrary icons;
+    bool icons_ready;
     UIAnimatedPanel about_panel_anim;
     UIAnimatedPanel help_panel_anim;
     UIAnimatedPanel settings_panel_anim;
@@ -194,7 +197,11 @@ static bool ui_nav_button_label(UIInternal *internal, struct nk_context *ctx, co
 {
     bool activated        = nk_button_label(ctx, label);
     struct nk_rect bounds = nk_widget_bounds(ctx);
-    size_t index          = ui_navigation_register(internal);
+    if (!internal)
+    {
+        return activated;
+    }
+    size_t index = ui_navigation_register(internal);
     if (ui_navigation_is_focused(&internal->nav_state, index))
     {
         ui_navigation_draw_focus_rect(ctx, bounds);
@@ -203,6 +210,132 @@ static bool ui_nav_button_label(UIInternal *internal, struct nk_context *ctx, co
             activated = true;
         }
     }
+    return activated;
+}
+
+static bool ui_nav_button_icon_label(UIInternal *internal, struct nk_context *ctx, UIIconType icon,
+                                     const char *label)
+{
+    if (!ctx)
+    {
+        return false;
+    }
+    if (!internal)
+    {
+        return nk_button_label(ctx, label ? label : "");
+    }
+    struct nk_style_button backup    = ctx->style.button;
+    ctx->style.button.text_alignment = NK_TEXT_LEFT;
+    ctx->style.button.padding.x      = backup.padding.x + 20.0f;
+    bool activated                   = nk_button_label(ctx, label ? label : "");
+    struct nk_rect bounds            = nk_widget_bounds(ctx);
+    bool focused                     = false;
+    if (internal)
+    {
+        size_t index = ui_navigation_register(internal);
+        focused      = ui_navigation_is_focused(&internal->nav_state, index);
+        if (focused)
+        {
+            ui_navigation_draw_focus_rect(ctx, bounds);
+            if (!activated && ui_navigation_consume_activation(&internal->nav_state))
+            {
+                activated = true;
+            }
+        }
+    }
+    ctx->style.button = backup;
+
+    struct nk_rect icon_area = bounds;
+    float icon_size          = fminf(bounds.h * 0.7f, 18.0f);
+    icon_area.x += backup.padding.x + 6.0f;
+    icon_area.y += (bounds.h - icon_size) * 0.5f;
+    icon_area.w = icon_size;
+    icon_area.h = icon_size;
+
+    struct nk_color icon_color =
+        focused ? internal->theme.accent_hover : internal->theme.accent_color;
+    float intensity = activated ? 1.15f : 0.92f;
+    bool drawn      = false;
+    if (internal->icons_ready)
+    {
+        drawn = ui_icons_draw(&internal->icons, ctx, icon, icon_area, icon_color, intensity);
+    }
+    if (!drawn)
+    {
+        struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+        if (canvas)
+        {
+            nk_stroke_rect(canvas, icon_area, 3.0f, 2.0f, icon_color);
+        }
+    }
+    return activated;
+}
+
+static bool ui_nav_icon_button(UIInternal *internal, struct nk_context *ctx, UIIconType icon,
+                               const char *tooltip, bool toggled)
+{
+    if (!internal || !ctx)
+    {
+        return false;
+    }
+    struct nk_style_button backup    = ctx->style.button;
+    ctx->style.button.padding.x      = 4.0f;
+    ctx->style.button.padding.y      = 4.0f;
+    ctx->style.button.text_alignment = NK_TEXT_CENTERED;
+    if (toggled)
+    {
+        struct nk_color active        = internal->theme.accent_active;
+        struct nk_color hover         = internal->theme.accent_hover;
+        ctx->style.button.normal      = nk_style_item_color(active);
+        ctx->style.button.hover       = nk_style_item_color(hover);
+        ctx->style.button.active      = nk_style_item_color(active);
+        ctx->style.button.text_normal = internal->theme.window_background;
+        ctx->style.button.text_hover  = internal->theme.window_background;
+        ctx->style.button.text_active = internal->theme.window_background;
+    }
+    bool activated        = nk_button_label(ctx, "");
+    struct nk_rect bounds = nk_widget_bounds(ctx);
+    size_t index          = ui_navigation_register(internal);
+    bool focused          = ui_navigation_is_focused(&internal->nav_state, index);
+    if (focused)
+    {
+        ui_navigation_draw_focus_rect(ctx, bounds);
+        if (!activated && ui_navigation_consume_activation(&internal->nav_state))
+        {
+            activated = true;
+        }
+    }
+    ctx->style.button = backup;
+
+    struct nk_color icon_color = internal->theme.accent_color;
+    if (toggled)
+    {
+        icon_color = internal->theme.accent_active;
+    }
+    if (focused)
+    {
+        icon_color = internal->theme.accent_hover;
+    }
+    float intensity = toggled ? 1.12f : 1.0f;
+    bool drawn      = false;
+    if (internal->icons_ready)
+    {
+        drawn = ui_icons_draw(&internal->icons, ctx, icon, bounds, icon_color, intensity);
+    }
+    if (!drawn)
+    {
+        struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+        if (canvas)
+        {
+            nk_stroke_rect(canvas, bounds, 2.0f, 2.0f, icon_color);
+        }
+    }
+
+    if (tooltip && tooltip[0] != '\0' && nk_input_is_mouse_hovering_rect(&ctx->input, bounds))
+    {
+        nk_tooltipf(ctx, "%s", tooltip);
+    }
+
     return activated;
 }
 
@@ -1327,6 +1460,36 @@ static void ui_internal_render(UIInternal *internal)
             }
         }
         break;
+        case NK_COMMAND_IMAGE:
+        {
+            const struct nk_command_image *img_cmd = (const struct nk_command_image *)cmd;
+            if (!img_cmd->img.handle.ptr)
+            {
+                break;
+            }
+            Texture2D *texture = (Texture2D *)img_cmd->img.handle.ptr;
+            if (!texture || texture->id == 0)
+            {
+                break;
+            }
+            Rectangle source;
+            source.x      = (float)img_cmd->img.region[0];
+            source.y      = (float)img_cmd->img.region[1];
+            source.width  = (float)img_cmd->img.region[2];
+            source.height = (float)img_cmd->img.region[3];
+            if (source.width == 0.0f || source.height == 0.0f)
+            {
+                source.x      = 0.0f;
+                source.y      = 0.0f;
+                source.width  = (float)texture->width;
+                source.height = (float)texture->height;
+            }
+            Rectangle dest = {(float)img_cmd->x, (float)img_cmd->y, (float)img_cmd->w,
+                              (float)img_cmd->h};
+            Color tint     = nk_color_to_raylib(img_cmd->col);
+            DrawTexturePro(*texture, source, dest, (Vector2){0.0f, 0.0f}, 0.0f, tint);
+        }
+        break;
         default:
             break;
         }
@@ -2189,11 +2352,11 @@ static void ui_draw_exit_prompt(UIInternal *internal, UIContext *ui)
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_label(ctx, "Are you sure you want to exit?", NK_TEXT_LEFT);
         nk_layout_row_dynamic(ctx, 28.0f, 2);
-        if (ui_nav_button_label(internal, ctx, "Cancel"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_CANCEL, "Cancel"))
         {
             internal->show_exit_prompt = false;
         }
-        if (ui_nav_button_label(internal, ctx, "Exit"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_EXIT, "Exit"))
         {
             internal->show_exit_prompt = false;
             if (ui_event_enqueue(ui, UI_EVENT_REQUEST_EXIT))
@@ -2261,7 +2424,7 @@ static void ui_draw_error_dialog(UIInternal *internal, UIContext *ui)
         nk_layout_row_dynamic(ctx, 18.0f, 1);
         nk_label_wrap(ctx, "The incident has been recorded in the application log.");
         nk_layout_row_dynamic(ctx, 32.0f, 1);
-        if (ui_nav_button_label(internal, ctx, "Dismiss"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_CANCEL, "Dismiss"))
         {
             internal->show_error_dialog = false;
         }
@@ -2292,7 +2455,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                  NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND))
     {
         nk_menubar_begin(ctx);
-        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 6);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 11);
 
         nk_layout_row_push(ctx, 60.0f);
         if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT, nk_vec2(200.0f, 220.0f)))
@@ -2600,6 +2763,52 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
             nk_menu_end(ctx);
         }
 
+        nk_layout_row_push(ctx, 10.0f);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_push(ctx, 36.0f);
+        if (ui_nav_icon_button(internal, ctx, UI_ICON_SEARCH, "Search / Filter",
+                               internal->show_search_panel))
+        {
+            internal->show_search_panel = true;
+            internal->search_dirty      = true;
+        }
+
+        nk_layout_row_push(ctx, 36.0f);
+        if (ui_nav_icon_button(internal, ctx, UI_ICON_ADD, "Add Person",
+                               internal->show_add_person_panel))
+        {
+            internal->show_add_person_panel = true;
+            ui_add_person_form_reset(internal);
+            ui_add_person_set_error(internal, NULL);
+        }
+
+        nk_layout_row_push(ctx, 36.0f);
+        if (ui_nav_icon_button(internal, ctx, UI_ICON_SETTINGS, "Settings",
+                               internal->show_settings_window))
+        {
+            internal->show_settings_window = true;
+        }
+
+        nk_layout_row_push(ctx, 36.0f);
+        if (ui_nav_icon_button(internal, ctx, UI_ICON_HELP, "Quick Help",
+                               internal->show_help_window))
+        {
+            internal->show_help_window = true;
+        }
+
+        nk_layout_row_push(ctx, 36.0f);
+        if (ui_nav_icon_button(internal, ctx, UI_ICON_INFO, "About", internal->show_about_window))
+        {
+            internal->show_about_window = true;
+        }
+
+        nk_layout_row_push(ctx, 36.0f);
+        if (ui_nav_icon_button(internal, ctx, UI_ICON_EXIT, "Exit", internal->show_exit_prompt))
+        {
+            internal->show_exit_prompt = true;
+        }
+
         nk_layout_row_end(ctx);
 
         nk_menubar_end(ctx);
@@ -2745,6 +2954,7 @@ bool ui_init(UIContext *ui, int width, int height)
     }
     ui_internal_bind_font(internal, true);
     ui_internal_apply_theme(internal);
+    internal->icons_ready    = ui_icons_init(&internal->icons);
     internal->ctx.clip.copy  = ui_clipboard_copy;
     internal->ctx.clip.paste = ui_clipboard_paste;
 
@@ -2781,6 +2991,7 @@ void ui_cleanup(UIContext *ui)
     UIInternal *internal = ui_internal_cast(ui);
     if (internal)
     {
+        ui_icons_shutdown(&internal->icons);
         nk_free(&internal->ctx);
         if (internal->font_owned)
         {
@@ -3309,7 +3520,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, width - 140.0f);
             nk_label(ctx, item->location[0] != '\0' ? item->location : "", NK_TEXT_LEFT);
             nk_layout_row_push(ctx, 60.0f);
-            if (ui_nav_button_label(internal, ctx, "Remove"))
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_DELETE, "Remove"))
             {
                 ui_add_person_remove_timeline_entry(draft, index);
                 --index;
@@ -3376,7 +3587,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
-        if (ui_nav_button_label(internal, ctx, "Add Entry"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_ADD, "Add Entry"))
         {
             if (draft->timeline_count >= UI_ADD_PERSON_MAX_TIMELINE_ENTRIES)
             {
@@ -3421,7 +3632,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_push(ctx, width - 120.0f);
             nk_label(ctx, draft->certificate_paths[index], NK_TEXT_LEFT);
             nk_layout_row_push(ctx, 60.0f);
-            if (ui_nav_button_label(internal, ctx, "Remove"))
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_DELETE, "Remove"))
             {
                 ui_add_person_remove_certificate(draft, index);
                 --index;
@@ -3435,7 +3646,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             internal, ctx, NK_EDIT_FIELD, internal->add_person_form.new_certificate_path,
             (int)sizeof(internal->add_person_form.new_certificate_path), nk_filter_default);
         nk_layout_row_push(ctx, 60.0f);
-        if (ui_nav_button_label(internal, ctx, "Add"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_ADD, "Add"))
         {
             if (internal->add_person_form.new_certificate_path[0] == '\0')
             {
@@ -3470,7 +3681,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 30.0f, 2);
-        if (ui_nav_button_label(internal, ctx, "Save"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_SAVE, "Save"))
         {
             char message[192];
             message[0] = '\0';
@@ -3488,7 +3699,7 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
                 ui_add_person_set_error(internal, message);
             }
         }
-        if (ui_nav_button_label(internal, ctx, "Cancel"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_CANCEL, "Cancel"))
         {
             internal->show_add_person_panel = false;
             ui_add_person_form_reset(internal);
@@ -3741,7 +3952,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                 nk_combo_end(ctx);
             }
             nk_layout_row_push(ctx, 60.0f);
-            if (ui_nav_button_label(internal, ctx, "Remove"))
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_DELETE, "Remove"))
             {
                 ui_edit_person_remove_spouse(draft, index);
                 --index;
@@ -3752,7 +3963,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         if (draft->spouse_count < UI_EDIT_PERSON_MAX_SPOUSES)
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
-            if (ui_nav_button_label(internal, ctx, "Add Spouse Slot"))
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_ADD, "Add Spouse Slot"))
             {
                 draft->spouse_ids[draft->spouse_count] = 0U;
                 draft->spouse_count += 1U;
@@ -3763,7 +3974,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         nk_spacing(ctx, 1);
 
         nk_layout_row_dynamic(ctx, 30.0f, 2);
-        if (ui_nav_button_label(internal, ctx, "Save Changes"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_SAVE, "Save Changes"))
         {
             char message[192];
             message[0] = '\0';
@@ -3782,7 +3993,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                 ui_edit_person_set_error(internal, message);
             }
         }
-        if (ui_nav_button_label(internal, ctx, "Cancel"))
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_CANCEL, "Cancel"))
         {
             internal->show_edit_person_panel          = false;
             internal->edit_person_form.confirm_delete = false;
@@ -3795,7 +4006,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                               internal->edit_person_form.confirm_delete ? 2 : 1);
         if (!internal->edit_person_form.confirm_delete)
         {
-            if (ui_nav_button_label(internal, ctx, "Delete Person..."))
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_DELETE, "Delete Person..."))
             {
                 internal->edit_person_form.confirm_delete = true;
                 ui_internal_set_status(internal, "Confirm deletion to remove profile.");
@@ -3803,7 +4014,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         }
         else
         {
-            if (ui_nav_button_label(internal, ctx, "Confirm Delete"))
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_DELETE, "Confirm Delete"))
             {
                 if (draft->person_id != 0U &&
                     ui_event_enqueue_with_u32(ui, UI_EVENT_DELETE_PERSON, draft->person_id))
@@ -3819,7 +4030,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                     ui_internal_set_status(internal, "Event queue full; delete aborted.");
                 }
             }
-            if (ui_nav_button_label(internal, ctx, "Keep Person"))
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_CANCEL, "Keep Person"))
             {
                 internal->edit_person_form.confirm_delete = false;
                 ui_internal_set_status(internal, "Deletion cancelled.");

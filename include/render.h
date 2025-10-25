@@ -70,6 +70,11 @@ typedef struct RenderConfig
     float rim_intensity;
     float rim_power;
     RenderColor rim_color;
+    bool enable_shadows;
+    float shadow_radius_scale;
+    float shadow_max_opacity;
+    float shadow_height_bias;
+    float shadow_softness;
     bool enable_selection_particles;
     size_t selection_particle_capacity;
     float selection_particle_lifetime;

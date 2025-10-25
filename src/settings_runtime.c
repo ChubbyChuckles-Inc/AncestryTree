@@ -83,7 +83,24 @@ static void apply_default_environment(RenderConfig *config)
     {
         config->rim_power = 2.6f;
     }
-    config->rim_color = (RenderColor){100, 240, 255, 255};
+    config->rim_color      = (RenderColor){100, 240, 255, 255};
+    config->enable_shadows = true;
+    if (!(config->shadow_radius_scale > 0.0f))
+    {
+        config->shadow_radius_scale = 1.35f;
+    }
+    if (!(config->shadow_max_opacity >= 0.0f && config->shadow_max_opacity <= 1.0f))
+    {
+        config->shadow_max_opacity = 0.55f;
+    }
+    if (!(config->shadow_height_bias >= -2.0f && config->shadow_height_bias <= 2.0f))
+    {
+        config->shadow_height_bias = 0.02f;
+    }
+    if (!(config->shadow_softness >= 0.0f && config->shadow_softness <= 1.0f))
+    {
+        config->shadow_softness = 0.6f;
+    }
 }
 
 static void apply_high_contrast_environment(RenderConfig *config)
@@ -109,6 +126,7 @@ static void apply_high_contrast_environment(RenderConfig *config)
     config->rim_power                     = fmaxf(2.4f, config->rim_power);
     config->rim_color                     = (RenderColor){255, 255, 255, 255};
     config->connection_antialiasing       = true;
+    config->enable_shadows                = false;
 }
 
 void settings_runtime_compute_input_sensitivity(const Settings *settings, float *orbit_sensitivity,
@@ -214,6 +232,7 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
         config->glow_intensity          = fmaxf(0.3f, 0.55f);
         config->connection_radius       = fmaxf(0.02f, 0.035f);
         config->show_profile_images     = false;
+        config->enable_shadows          = false;
     }
     else
     {
@@ -221,6 +240,7 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
         config->glow_intensity          = fmaxf(0.3f, 0.85f);
         config->connection_radius       = fmaxf(0.03f, 0.05f);
         config->show_profile_images     = true;
+        config->enable_shadows          = true;
     }
 
     apply_color_scheme(config, settings->color_scheme);
