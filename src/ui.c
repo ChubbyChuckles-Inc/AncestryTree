@@ -2627,12 +2627,24 @@ static void ui_process_input(UIInternal *internal, UIContext *ui, float delta_se
         return;
     }
     ui_internal_tick(internal, delta_seconds);
-    struct nk_context *ctx               = &internal->ctx;
-    bool shift_down                      = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    bool tab_pressed                     = IsKeyPressed(KEY_TAB);
-    internal->nav_input.tab_pressed      = tab_pressed;
-    internal->nav_input.tab_with_shift   = tab_pressed && shift_down;
-    internal->nav_input.activate_pressed = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+    struct nk_context *ctx = &internal->ctx;
+    bool shift_down        = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    bool tab_event         = IsKeyPressed(KEY_TAB) || IsKeyPressedRepeat(KEY_TAB);
+
+    bool enter_event = IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER);
+    bool space_event = IsKeyPressed(KEY_SPACE) || IsKeyPressedRepeat(KEY_SPACE);
+    bool left_event  = IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT);
+    bool right_event = IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT);
+    bool up_event    = IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP);
+    bool down_event  = IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN);
+
+    internal->nav_input.tab_pressed         = tab_event;
+    internal->nav_input.tab_with_shift      = tab_event && shift_down;
+    internal->nav_input.activate_pressed    = enter_event || space_event;
+    internal->nav_input.arrow_left_pressed  = left_event;
+    internal->nav_input.arrow_right_pressed = right_event;
+    internal->nav_input.arrow_up_pressed    = up_event;
+    internal->nav_input.arrow_down_pressed  = down_event;
     nk_input_begin(ctx);
     (void)ui;
     Vector2 mouse = GetMousePosition();

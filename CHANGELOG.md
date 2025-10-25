@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Keyboard-only navigation suite enabling Tab/Shift+Tab focus cycling, Enter/Space activation,
+  and arrow-driven adjustments, with a dedicated UI navigation test harness and runtime theme
+  refresh to honour high-contrast and font-scale accessibility preferences.
 - Holographic Nuklear theme module applying cyan-accent palette, animated panel fades, and
   regression tests covering the UI animation helpers.
 - Selection particle bursts that radiate from selected holographic spheres, configurable via

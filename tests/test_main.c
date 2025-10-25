@@ -40,6 +40,7 @@ void register_ui_theme_tests(TestRegistry *registry);
 void register_memory_suite_tests(TestRegistry *registry);
 void register_selection_particles_tests(TestRegistry *registry);
 void register_life_particles_tests(TestRegistry *registry);
+void register_ui_navigation_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -88,6 +89,7 @@ int main(void)
     register_bootstrap_tests(&registry);
     register_ui_scaling_tests(&registry);
     register_ui_theme_tests(&registry);
+    register_ui_navigation_tests(&registry);
 
     TestResult result = test_registry_run(&registry);
     if (result.failures != 0)
