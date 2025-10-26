@@ -717,18 +717,18 @@ PHASE 10: OPTIMIZATION & POLISH
     [x] Add configurable font sizes
 
 10.4 User Experience
-  [ ] Add tutorial/onboarding
-      [ ] First-time user guide
-      [ ] Interactive tooltips
+  [x] Add tutorial/onboarding
+      [x] First-time user guide
+      [x] Interactive tooltips
   [ ] Add sample family tree
       [ ] Pre-populated example
       [ ] Load on first run
   [ ] Improve error messages
       [ ] Clear, actionable messages
       [ ] Suggestions for fixes
-  [ ] Add progress indicators
-      [ ] Loading bar for large trees
-      [ ] Save progress indicator
+  [x] Add progress indicators
+      [x] Loading bar for large trees
+      [x] Save progress indicator
 
 10.5 Documentation
   [ ] Complete API documentation (Doxygen comments)

@@ -33,12 +33,14 @@ extern "C"
         int current_step;
         float elapsed_step;
         float completion_timer;
+        unsigned int hint_progress_mask;
     } OnboardingState;
 
     void onboarding_init(OnboardingState *state, bool completed);
     void onboarding_set_active(OnboardingState *state, bool active);
     void onboarding_mark_completed(OnboardingState *state);
     void onboarding_reset(OnboardingState *state);
+    void onboarding_skip(OnboardingState *state);
     void onboarding_update(OnboardingState *state, float delta_seconds);
     void onboarding_advance(OnboardingState *state);
     void onboarding_enable_tooltips(OnboardingState *state, bool enabled);
@@ -49,6 +51,11 @@ extern "C"
     const char *onboarding_current_body(const OnboardingState *state);
     size_t onboarding_step_count(void);
     const char *onboarding_hint_text(OnboardingHint hint);
+    bool onboarding_hint_active(const OnboardingState *state, OnboardingHint hint);
+    void onboarding_track_hint(OnboardingState *state, OnboardingHint hint);
+    size_t onboarding_remaining_hints(const OnboardingState *state);
+    size_t onboarding_step_hint_total(const OnboardingState *state);
+    float onboarding_step_completion(const OnboardingState *state);
 
 #ifdef __cplusplus
 }

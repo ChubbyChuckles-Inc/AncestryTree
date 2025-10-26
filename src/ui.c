@@ -271,13 +271,19 @@ static void ui_onboarding_show_hint(UIInternal *internal, struct nk_context *ctx
     {
         return;
     }
-    if (hint == ONBOARDING_HINT_NONE)
+    if (!onboarding_hint_active(&internal->onboarding, hint))
     {
         return;
     }
-    if (!onboarding_tooltips_enabled(&internal->onboarding))
+    struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+    if (canvas)
     {
-        return;
+        float phase          = internal->onboarding.elapsed_step * 4.5f;
+        float waveform       = 0.5f + 0.5f * sinf(phase);
+        nk_byte opacity      = (nk_byte)(160.0f + waveform * 80.0f);
+        struct nk_color glow = nk_rgba(96, 220, 255, opacity);
+        float rounding       = fminf(bounds.w, bounds.h) * 0.1f;
+        nk_stroke_rect(canvas, bounds, rounding, 3.0f, glow);
     }
     if (!nk_input_is_mouse_hovering_rect(&ctx->input, bounds))
     {
@@ -288,7 +294,20 @@ static void ui_onboarding_show_hint(UIInternal *internal, struct nk_context *ctx
     {
         return;
     }
-    nk_tooltipf(ctx, "%s", text);
+    ui_internal_set_status(internal, text);
+}
+
+static void ui_onboarding_handle_action(UIInternal *internal, OnboardingHint hint)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (hint == ONBOARDING_HINT_NONE)
+    {
+        return;
+    }
+    onboarding_track_hint(&internal->onboarding, hint);
 }
 
 static void ui_draw_progress_spinner(UIInternal *internal, struct nk_context *ctx,
@@ -344,7 +363,12 @@ static bool ui_nav_button_label(UIInternal *internal, struct nk_context *ctx, co
             activated = true;
         }
     }
-    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_button(label), bounds);
+    OnboardingHint button_hint = ui_onboarding_hint_for_button(label);
+    ui_onboarding_show_hint(internal, ctx, button_hint, bounds);
+    if (activated)
+    {
+        ui_onboarding_handle_action(internal, button_hint);
+    }
     return activated;
 }
 
@@ -403,7 +427,12 @@ static bool ui_nav_button_icon_label(UIInternal *internal, struct nk_context *ct
             nk_stroke_rect(canvas, icon_area, 3.0f, 2.0f, icon_color);
         }
     }
-    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_button(label), bounds);
+    OnboardingHint combo_hint = ui_onboarding_hint_for_button(label);
+    ui_onboarding_show_hint(internal, ctx, combo_hint, bounds);
+    if (activated)
+    {
+        ui_onboarding_handle_action(internal, combo_hint);
+    }
     return activated;
 }
 
@@ -472,7 +501,12 @@ static bool ui_nav_icon_button(UIInternal *internal, struct nk_context *ctx, UII
         nk_tooltipf(ctx, "%s", tooltip);
     }
 
-    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_icon(tooltip), bounds);
+    OnboardingHint icon_hint = ui_onboarding_hint_for_icon(tooltip);
+    ui_onboarding_show_hint(internal, ctx, icon_hint, bounds);
+    if (activated)
+    {
+        ui_onboarding_handle_action(internal, icon_hint);
+    }
 
     return activated;
 }
@@ -491,7 +525,12 @@ static nk_bool ui_nav_menu_item_label(UIInternal *internal, struct nk_context *c
             selected = nk_true;
         }
     }
-    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_menu(label), bounds);
+    OnboardingHint menu_hint = ui_onboarding_hint_for_menu(label);
+    ui_onboarding_show_hint(internal, ctx, menu_hint, bounds);
+    if (selected)
+    {
+        ui_onboarding_handle_action(internal, menu_hint);
+    }
     return selected;
 }
 
@@ -3404,8 +3443,8 @@ static void ui_draw_onboarding_overlay(UIInternal *internal, UIContext *ui)
     }
 
     struct nk_context *ctx = &internal->ctx;
-    float width            = 320.0f;
-    float height           = 160.0f;
+    float width            = 340.0f;
+    float height           = 220.0f;
     float margin           = 24.0f;
     if (ui->width <= 0)
     {
@@ -3439,8 +3478,7 @@ static void ui_draw_onboarding_overlay(UIInternal *internal, UIContext *ui)
         }
     }
     struct nk_rect bounds = nk_rect(screen_width - width - margin, top, width, height);
-    nk_flags flags =
-        NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND | NK_WINDOW_NO_INPUT;
+    nk_flags flags        = NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND;
     if (nk_begin(ctx, "OnboardingOverlay", bounds, flags))
     {
         size_t step_index =
@@ -3471,6 +3509,96 @@ static void ui_draw_onboarding_overlay(UIInternal *internal, UIContext *ui)
         {
             nk_layout_row_dynamic(ctx, 18.0f, 1);
             nk_label_wrap(ctx, body);
+        }
+
+        size_t hint_total     = onboarding_step_hint_total(&internal->onboarding);
+        size_t hint_remaining = onboarding_remaining_hints(&internal->onboarding);
+        size_t hint_completed = (hint_total >= hint_remaining) ? (hint_total - hint_remaining) : 0U;
+        float completion      = onboarding_step_completion(&internal->onboarding);
+
+        if (hint_total > 0U)
+        {
+            nk_layout_row_dynamic(ctx, 16.0f, 1);
+            char hint_status[64];
+            (void)snprintf(hint_status, sizeof(hint_status), "%u of %u guided actions completed",
+                           (unsigned int)hint_completed, (unsigned int)hint_total);
+            nk_label(ctx, hint_status, NK_TEXT_LEFT);
+
+            nk_layout_row_dynamic(ctx, 18.0f, 1);
+            nk_size progress_value = (nk_size)(completion * 100.0f + 0.5f);
+            nk_progress(ctx, &progress_value, 100, nk_false);
+
+            nk_layout_row_dynamic(ctx, 16.0f, 1);
+            if (hint_remaining == 0U)
+            {
+                nk_label_colored(ctx, "Great! Press Next to continue.", NK_TEXT_LEFT,
+                                 internal->theme.accent_active);
+            }
+            else
+            {
+                char reminder[64];
+                (void)snprintf(reminder, sizeof(reminder), "%u interaction%s remaining",
+                               (unsigned int)hint_remaining, (hint_remaining == 1U) ? "" : "s");
+                nk_label(ctx, reminder, NK_TEXT_LEFT);
+            }
+        }
+        else
+        {
+            nk_layout_row_dynamic(ctx, 16.0f, 1);
+            nk_label(ctx, "Review this holographic guide, then continue when ready.", NK_TEXT_LEFT);
+        }
+
+        bool final_step  = (step_index + 1U) >= step_total;
+        bool can_advance = (hint_total == 0U) || (hint_remaining == 0U);
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 28.0f, 2);
+        struct nk_style_button default_button  = ctx->style.button;
+        struct nk_style_button disabled_button = default_button;
+        struct nk_color disabled_colour        = nk_rgba(80, 80, 80, 180);
+        disabled_button.normal                 = nk_style_item_color(disabled_colour);
+        disabled_button.hover                  = nk_style_item_color(disabled_colour);
+        disabled_button.active                 = nk_style_item_color(disabled_colour);
+        disabled_button.text_normal            = internal->theme.window_border;
+        disabled_button.text_hover             = internal->theme.window_border;
+        disabled_button.text_active            = internal->theme.window_border;
+
+        bool next_pressed = false;
+        if (can_advance)
+        {
+            next_pressed = nk_button_label(ctx, final_step ? "Finish" : "Next");
+        }
+        else
+        {
+            ctx->style.button = disabled_button;
+            (void)nk_button_label(ctx, "Next");
+            ctx->style.button = default_button;
+        }
+
+        bool skip_pressed = nk_button_label(ctx, "Skip for now");
+
+        ctx->style.button = default_button;
+
+        if (next_pressed && can_advance)
+        {
+            if (final_step)
+            {
+                ui_onboarding_mark_completed(ui);
+            }
+            else
+            {
+                onboarding_advance(&internal->onboarding);
+            }
+        }
+
+        if (skip_pressed)
+        {
+            onboarding_skip(&internal->onboarding);
+            onboarding_enable_tooltips(&internal->onboarding, false);
+            ui_internal_set_status(internal,
+                                   "Onboarding paused. Re-enable it from Settings when ready.");
         }
     }
     nk_end(ctx);

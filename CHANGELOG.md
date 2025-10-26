@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Guided onboarding workflow with a holographic tutorial overlay, step-aware interactive tooltips
+  that highlight critical controls, progress instrumentation, skip/restart options, and new unit
+  tests validating hint activation, advancement, and skip flows.
+- Save/load progress indicators now surface staged status updates for manual saves, Save As
+  exports, and large tree loads, reusing the holographic overlay with runtime safeguards and
+  regression coverage for the onboarding-driven progress tracker APIs.
 - Ground shadow renderer projecting soft holographic discs beneath tree spheres with
   configurable density parameters, validation coverage, and graphics-preset-aware runtime
   toggles.
