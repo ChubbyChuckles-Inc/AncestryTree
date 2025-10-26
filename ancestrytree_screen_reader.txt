@@ -1,0 +1,15 @@
+Screen reader narration enabled.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Camera reset to default orbit.
+Snap the orbit camera back to its default distance and orientation.
+Camera centered on root generation.
+Ada Lovelace selected, deceased with 2 timeline events.
+William King Noel selected, deceased.
+Byron Lovelace selected, deceased.
+Write changes to the current file. Use Save As to branch into a new snapshot.
+Settings save requested.
+Settings saved.
+Settings reload requested.
+Settings reloaded from disk.
+Onboarding paused. Re-enable it from Settings when ready.

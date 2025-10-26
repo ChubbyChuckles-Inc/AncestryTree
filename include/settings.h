@@ -42,6 +42,7 @@ typedef struct Settings
     SettingsLanguage language;
     bool high_contrast_mode;
     float ui_font_scale;
+    bool screen_reader_enabled;
     bool onboarding_completed;
     unsigned int revision;
 } Settings;

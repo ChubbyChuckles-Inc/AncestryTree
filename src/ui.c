@@ -9,6 +9,7 @@
 #include "person.h"
 #include "progress_tracker.h"
 #include "render.h"
+#include "screen_reader.h"
 #include "search.h"
 #include "settings.h"
 #include "timeline.h"
@@ -30,8 +31,8 @@
 #endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-#include "external/nuklear.h"
 #include "ui_nuklear_config.h"
+#include "external/nuklear.h"
 #endif
 
 #define UI_SEARCH_MAX_RESULTS 64U
@@ -41,6 +42,19 @@ static const char *const UI_FONT_CANDIDATES[] = {"assets/fonts/AncestryTree-UI.t
                                                  "assets/fonts/Roboto-Regular.ttf",
                                                  "assets/fonts/OpenSans-Regular.ttf"};
 #endif
+
+static void ui_compose_person_name(const Person *person, char *buffer, size_t capacity);
+
+typedef struct UIScreenReaderState
+{
+    ScreenReaderChannel channel;
+    bool active;
+    uint32_t last_person_id;
+    char last_status[SCREEN_READER_MAX_MESSAGE_LENGTH];
+    char last_progress_label[SCREEN_READER_MAX_MESSAGE_LENGTH];
+    bool progress_active;
+    float last_progress_value;
+} UIScreenReaderState;
 
 typedef struct UIInternal
 {
@@ -85,6 +99,7 @@ typedef struct UIInternal
     float status_timer;
     char error_dialog_title[64];
     char error_dialog_message[256];
+    UIScreenReaderState screen_reader;
     char search_query[64];
     bool search_include_alive;
     bool search_include_deceased;
@@ -122,6 +137,7 @@ typedef struct UIInternal
 } UIInternal;
 
 static void ui_internal_set_status(UIInternal *internal, const char *message);
+static void ui_accessibility_set_enabled(UIInternal *internal, bool enabled);
 
 static void ui_event_queue_reset(UIEventQueue *queue)
 {
@@ -1502,6 +1518,12 @@ static void ui_internal_sync_accessibility(UIInternal *internal, UIContext *ui,
     {
         ui_internal_sync_font(internal, ui, desired_scale);
     }
+
+    bool desired_screen_reader = settings ? settings->screen_reader_enabled : false;
+    if (internal->screen_reader.active != desired_screen_reader)
+    {
+        ui_accessibility_set_enabled(internal, desired_screen_reader);
+    }
 }
 
 static void ui_clipboard_copy(nk_handle usr, const char *text, int len)
@@ -1680,6 +1702,202 @@ static void ui_internal_render(UIInternal *internal)
     nk_clear(ctx);
 }
 
+static void ui_accessibility_reset(UIScreenReaderState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    screen_reader_init(&state->channel);
+    screen_reader_set_log_path(&state->channel, SCREEN_READER_DEFAULT_PATH);
+    state->active                 = false;
+    state->last_person_id         = 0U;
+    state->last_status[0]         = '\0';
+    state->last_progress_label[0] = '\0';
+    state->progress_active        = false;
+    state->last_progress_value    = -1.0f;
+}
+
+static void ui_accessibility_set_enabled(UIInternal *internal, bool enabled)
+{
+    if (!internal)
+    {
+        return;
+    }
+    UIScreenReaderState *state = &internal->screen_reader;
+    screen_reader_set_enabled(&state->channel, enabled);
+    state->active = enabled;
+    if (!enabled)
+    {
+        state->last_person_id         = 0U;
+        state->last_status[0]         = '\0';
+        state->last_progress_label[0] = '\0';
+        state->progress_active        = false;
+        state->last_progress_value    = -1.0f;
+    }
+    else
+    {
+        screen_reader_announce(&state->channel, "Screen reader narration enabled.");
+    }
+}
+
+static void ui_accessibility_announce(UIInternal *internal, const char *message)
+{
+    if (!internal || !message || message[0] == '\0')
+    {
+        return;
+    }
+    UIScreenReaderState *state = &internal->screen_reader;
+    if (!state->active)
+    {
+        return;
+    }
+    screen_reader_announce(&state->channel, message);
+}
+
+static void ui_accessibility_emit_status(UIInternal *internal, const char *message)
+{
+    UIScreenReaderState *state = &internal->screen_reader;
+    if (!state->active)
+    {
+        state->last_status[0] = '\0';
+        return;
+    }
+    if (!message || message[0] == '\0')
+    {
+        state->last_status[0] = '\0';
+        return;
+    }
+    if (strncmp(state->last_status, message, sizeof(state->last_status)) == 0)
+    {
+        return;
+    }
+    screen_reader_announce(&state->channel, message);
+#if defined(_MSC_VER)
+    (void)strncpy_s(state->last_status, sizeof(state->last_status), message, _TRUNCATE);
+#else
+    (void)snprintf(state->last_status, sizeof(state->last_status), "%s", message);
+#endif
+}
+
+static void ui_accessibility_progress_begin(UIInternal *internal, const char *label)
+{
+    UIScreenReaderState *state = &internal->screen_reader;
+    if (!state->active)
+    {
+        state->progress_active     = false;
+        state->last_progress_value = -1.0f;
+        return;
+    }
+    state->progress_active     = true;
+    state->last_progress_value = 0.0f;
+    const char *spoken         = label && label[0] != '\0' ? label : "Operation in progress.";
+    screen_reader_announce(&state->channel, spoken);
+#if defined(_MSC_VER)
+    (void)strncpy_s(state->last_progress_label, sizeof(state->last_progress_label), spoken,
+                    _TRUNCATE);
+#else
+    (void)snprintf(state->last_progress_label, sizeof(state->last_progress_label), "%s", spoken);
+#endif
+}
+
+static void ui_accessibility_progress_update(UIInternal *internal, float value)
+{
+    UIScreenReaderState *state = &internal->screen_reader;
+    if (!state->active || !state->progress_active)
+    {
+        return;
+    }
+    if (!(value >= 0.0f))
+    {
+        value = 0.0f;
+    }
+    if (value > 1.0f)
+    {
+        value = 1.0f;
+    }
+    const float announce_step = 0.25f;
+    if (value < 0.999f && value < state->last_progress_value + announce_step)
+    {
+        return;
+    }
+    state->last_progress_value = value;
+    int percent                = (int)(value * 100.0f + 0.5f);
+    char buffer[128];
+    if (state->last_progress_label[0] != '\0')
+    {
+        (void)snprintf(buffer, sizeof(buffer), "%s: %d%% complete.", state->last_progress_label,
+                       percent);
+    }
+    else
+    {
+        (void)snprintf(buffer, sizeof(buffer), "Operation %d%% complete.", percent);
+    }
+    screen_reader_announce(&state->channel, buffer);
+}
+
+static void ui_accessibility_progress_complete(UIInternal *internal, bool success,
+                                               const char *label)
+{
+    UIScreenReaderState *state = &internal->screen_reader;
+    if (!state->active)
+    {
+        state->progress_active     = false;
+        state->last_progress_value = -1.0f;
+        return;
+    }
+    char buffer[160];
+    if (label && label[0] != '\0')
+    {
+        (void)snprintf(buffer, sizeof(buffer), "%s", label);
+    }
+    else
+    {
+        (void)snprintf(buffer, sizeof(buffer), "Operation %s.", success ? "completed" : "failed");
+    }
+    screen_reader_announce(&state->channel, buffer);
+    state->progress_active        = false;
+    state->last_progress_value    = -1.0f;
+    state->last_progress_label[0] = '\0';
+}
+
+static void ui_accessibility_report_selection(UIInternal *internal, const Person *selected_person)
+{
+    UIScreenReaderState *state = &internal->screen_reader;
+    uint32_t person_id         = selected_person ? selected_person->id : 0U;
+    if (!state->active)
+    {
+        state->last_person_id = person_id;
+        return;
+    }
+    if (state->last_person_id == person_id)
+    {
+        return;
+    }
+    state->last_person_id = person_id;
+    if (!selected_person)
+    {
+        screen_reader_announce(&state->channel, "Selection cleared.");
+        return;
+    }
+    char name[128];
+    ui_compose_person_name(selected_person, name, sizeof(name));
+    const char *life_state = selected_person->is_alive ? "alive" : "deceased";
+    char announcement[196];
+    size_t timeline_count = selected_person->timeline_count;
+    if (timeline_count > 0U)
+    {
+        (void)snprintf(announcement, sizeof(announcement),
+                       "%s selected, %s with %zu timeline events.", name, life_state,
+                       timeline_count);
+    }
+    else
+    {
+        (void)snprintf(announcement, sizeof(announcement), "%s selected, %s.", name, life_state);
+    }
+    screen_reader_announce(&state->channel, announcement);
+}
+
 static void ui_internal_set_status(UIInternal *internal, const char *message)
 {
     if (!internal)
@@ -1690,10 +1908,12 @@ static void ui_internal_set_status(UIInternal *internal, const char *message)
     {
         internal->status_message[0] = '\0';
         internal->status_timer      = 0.0f;
+        ui_accessibility_emit_status(internal, NULL);
         return;
     }
     (void)snprintf(internal->status_message, sizeof(internal->status_message), "%s", message);
     internal->status_timer = 4.0f;
+    ui_accessibility_emit_status(internal, message);
 }
 
 static void ui_internal_show_error(UIInternal *internal, const char *title, const char *message)
@@ -1711,6 +1931,9 @@ static void ui_internal_show_error(UIInternal *internal, const char *title, cons
                    resolved_message);
     internal->show_error_dialog = true;
     ui_internal_set_status(internal, resolved_message);
+    char spoken[SCREEN_READER_MAX_MESSAGE_LENGTH];
+    (void)snprintf(spoken, sizeof(spoken), "Error: %s", resolved_message);
+    ui_accessibility_announce(internal, spoken);
 }
 
 static void ui_internal_tick(UIInternal *internal, float delta_seconds)
@@ -2332,6 +2555,19 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         {
             settings->ui_font_scale = font_scale;
             settings_mark_dirty(settings);
+        }
+
+        nk_bool screen_reader = settings->screen_reader_enabled ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "Enable screen reader narration",
+                                    &screen_reader);
+        bool new_screen_reader = (screen_reader == nk_true);
+        if (new_screen_reader != settings->screen_reader_enabled)
+        {
+            settings->screen_reader_enabled = new_screen_reader;
+            settings_mark_dirty(settings);
+            ui_internal_set_status(internal, new_screen_reader
+                                                 ? "Screen reader narration enabled."
+                                                 : "Screen reader narration disabled.");
         }
 
         nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -3141,6 +3377,7 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->progress_target_valid  = false;
     internal->progress_spinner_phase = 0.0f;
     internal->frame_delta            = 0.0f;
+    ui_accessibility_reset(&internal->screen_reader);
 
     ui->impl      = internal;
     ui->available = true;
@@ -3175,6 +3412,7 @@ void ui_cleanup(UIContext *ui)
     UIInternal *internal = ui_internal_cast(ui);
     if (internal)
     {
+        screen_reader_shutdown(&internal->screen_reader.channel);
         ui_icons_shutdown(&internal->icons);
         nk_free(&internal->ctx);
         if (internal->font_owned)
@@ -4579,6 +4817,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     }
     ui_draw_onboarding_overlay(internal, ui);
     ui_draw_progress_overlay(internal, ui);
+    ui_accessibility_report_selection(internal, selected_person);
     ui_navigation_end_frame(&internal->nav_state);
 #else
     (void)tree;
@@ -4993,6 +5232,7 @@ void ui_progress_begin(UIContext *ui, const char *label)
     progress_tracker_begin(&internal->progress, label);
     internal->progress_target_value = 0.0f;
     internal->progress_target_valid = false;
+    ui_accessibility_progress_begin(internal, label);
     ui_internal_set_status(internal, label ? label : "Operation in progress...");
 #else
     (void)label;
@@ -5026,6 +5266,7 @@ void ui_progress_update(UIContext *ui, float value)
     }
     internal->progress_target_value = clamped;
     internal->progress_target_valid = true;
+    ui_accessibility_progress_update(internal, clamped);
 #else
     (void)value;
 #endif
@@ -5045,6 +5286,7 @@ void ui_progress_complete(UIContext *ui, bool success, const char *label)
     }
     progress_tracker_complete(&internal->progress, success, label);
     internal->progress_target_valid = false;
+    ui_accessibility_progress_complete(internal, success, label);
     if (label && label[0] != '\0')
     {
         ui_internal_set_status(internal, label);
