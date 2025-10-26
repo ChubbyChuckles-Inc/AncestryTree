@@ -664,6 +664,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         {
             ui_progress_begin(ui, "Loading holographic archive...");
             progress_started = true;
+            ui_progress_update(ui, 0.15f);
         }
         FamilyTree *loaded = persistence_tree_load(chosen_path, error_buffer, sizeof(error_buffer));
         if (!loaded)
@@ -676,6 +677,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             }
             app_report_error(ui, logger, message);
             return;
+        }
+        if (progress_started)
+        {
+            ui_progress_update(ui, 0.55f);
         }
         LayoutAlgorithm algorithm = app_select_layout_algorithm(app_state, settings);
         if (!app_swap_tree(tree, layout, loaded, algorithm))
@@ -704,10 +709,15 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             app_state_reset_history(app_state);
             app_state_clear_tree_dirty(app_state);
         }
+        if (progress_started)
+        {
+            ui_progress_update(ui, 0.9f);
+        }
         char status_message[320];
         (void)snprintf(status_message, sizeof(status_message), "Loaded tree from %s", chosen_path);
         if (progress_started)
         {
+            ui_progress_update(ui, 1.0f);
             ui_progress_complete(ui, true, status_message);
         }
         app_report_status(ui, logger, status_message);
@@ -746,6 +756,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             {
                 ui_progress_begin(ui, "Saving holographic archive...");
                 progress_started = true;
+                ui_progress_update(ui, 0.2f);
             }
             if (!app_handle_save_as(*tree, file_state, destination, error_buffer,
                                     sizeof(error_buffer), saved_path, sizeof(saved_path)))
@@ -767,6 +778,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             (void)snprintf(message, sizeof(message), "Saved tree to %s", saved_path);
             if (progress_started)
             {
+                ui_progress_update(ui, 0.85f);
                 ui_progress_complete(ui, true, message);
             }
             app_report_status(ui, logger, message);
@@ -778,6 +790,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             {
                 ui_progress_begin(ui, "Saving holographic archive...");
                 progress_started = true;
+                ui_progress_update(ui, 0.2f);
             }
             if (!app_handle_save(*tree, file_state, error_buffer, sizeof(error_buffer)))
             {
@@ -798,6 +811,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             (void)snprintf(message, sizeof(message), "Saved tree to %s", file_state->current_path);
             if (progress_started)
             {
+                ui_progress_update(ui, 0.85f);
                 ui_progress_complete(ui, true, message);
             }
             app_report_status(ui, logger, message);
@@ -831,11 +845,22 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 return;
             }
             char saved_path[512];
+            bool progress_started = false;
+            if (ui)
+            {
+                ui_progress_begin(ui, "Saving holographic archive...");
+                progress_started = true;
+                ui_progress_update(ui, 0.2f);
+            }
             if (!app_handle_save_as(*tree, file_state, destination, error_buffer,
                                     sizeof(error_buffer), saved_path, sizeof(saved_path)))
             {
                 char message[256];
                 (void)snprintf(message, sizeof(message), "Save As failed: %s", error_buffer);
+                if (progress_started)
+                {
+                    ui_progress_complete(ui, false, message);
+                }
                 app_report_error(ui, logger, message);
                 return;
             }
@@ -845,6 +870,11 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             }
             char message[256];
             (void)snprintf(message, sizeof(message), "Saved tree to %s", saved_path);
+            if (progress_started)
+            {
+                ui_progress_update(ui, 0.85f);
+                ui_progress_complete(ui, true, message);
+            }
             app_report_status(ui, logger, message);
         }
         break;
@@ -2278,6 +2308,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         {
             (void)ui_show_error_dialog(&ui, "Startup Warning", initial_warning);
         }
+        bool onboarding_pending = !settings.onboarding_completed;
+        ui_onboarding_configure(&ui, onboarding_pending, onboarding_pending);
     }
 
     SetTargetFPS((int)config.target_fps);

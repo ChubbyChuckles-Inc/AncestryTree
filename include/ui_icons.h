@@ -11,6 +11,11 @@
 #include "external/nuklear.h"
 #include "ui_nuklear_config.h"
 #endif
+#if !defined(ANCESTRYTREE_HAVE_NUKLEAR)
+struct nk_context;
+struct nk_rect;
+struct nk_color;
+#endif
 
 typedef enum UIIconType
 {
