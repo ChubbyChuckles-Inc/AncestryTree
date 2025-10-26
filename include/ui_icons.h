@@ -8,8 +8,8 @@
 #endif
 
 #if defined(ANCESTRYTREE_HAVE_NUKLEAR)
-#include "ui_nuklear_config.h"
 #include "external/nuklear.h"
+#include "ui_nuklear_config.h"
 #endif
 #if !defined(ANCESTRYTREE_HAVE_NUKLEAR)
 struct nk_context;

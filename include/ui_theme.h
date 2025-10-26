@@ -4,8 +4,8 @@
 #include <stdbool.h>
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-#include "ui_nuklear_config.h"
 #include "external/nuklear.h"
+#include "ui_nuklear_config.h"
 #else
 typedef struct nk_color
 {

@@ -31,8 +31,8 @@
 #endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-#include "ui_nuklear_config.h"
 #include "external/nuklear.h"
+#include "ui_nuklear_config.h"
 #endif
 
 #define UI_SEARCH_MAX_RESULTS 64U
