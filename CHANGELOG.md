@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Ground shadow renderer projecting soft holographic discs beneath tree spheres with
+  configurable density parameters, validation coverage, and graphics-preset-aware runtime
+  toggles.
 - Keyboard-only navigation suite enabling Tab/Shift+Tab focus cycling, Enter/Space activation,
   and arrow-driven adjustments, with a dedicated UI navigation test harness and runtime theme
   refresh to honour high-contrast and font-scale accessibility preferences.

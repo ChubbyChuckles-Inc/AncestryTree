@@ -242,6 +242,7 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
         config->show_profile_images     = true;
         config->enable_shadows          = true;
     }
+    // Manual check: toggle graphics quality in settings UI to verify shadow enablement updates.
 
     apply_color_scheme(config, settings->color_scheme);
 

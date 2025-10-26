@@ -4,6 +4,7 @@
 
 #include "layout.h"
 #include "person.h"
+#include "settings_runtime.h"
 #include "test_framework.h"
 
 #include <math.h>
@@ -60,6 +61,11 @@ TEST(test_render_config_default_is_valid)
     ASSERT_TRUE(config.death_particle_spawn_rate >= 0.0f);
     ASSERT_TRUE(config.birth_particle_vertical_bias > 0.0f);
     ASSERT_TRUE(config.death_particle_vertical_bias > 0.0f);
+    ASSERT_TRUE(config.enable_shadows);
+    ASSERT_TRUE(config.shadow_radius_scale > 0.0f);
+    ASSERT_TRUE(config.shadow_max_opacity >= 0.0f && config.shadow_max_opacity <= 1.0f);
+    ASSERT_TRUE(config.shadow_height_bias >= -2.0f && config.shadow_height_bias <= 2.0f);
+    ASSERT_TRUE(config.shadow_softness >= 0.0f && config.shadow_softness <= 1.0f);
 }
 
 TEST(test_render_find_person_position_returns_expected_coordinates)
@@ -265,6 +271,22 @@ TEST(test_render_config_validate_rejects_invalid_style)
     config.enable_selection_particles      = true;
     config.selection_particle_repeat_delay = -0.1f;
     ASSERT_FALSE(render_config_validate(&config));
+    config                     = render_config_default();
+    config.enable_shadows      = true;
+    config.shadow_radius_scale = 0.0f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                    = render_config_default();
+    config.enable_shadows     = true;
+    config.shadow_max_opacity = 1.2f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                 = render_config_default();
+    config.enable_shadows  = true;
+    config.shadow_softness = -0.1f;
+    ASSERT_FALSE(render_config_validate(&config));
+    config                    = render_config_default();
+    config.enable_shadows     = true;
+    config.shadow_height_bias = 3.5f;
+    ASSERT_FALSE(render_config_validate(&config));
 }
 
 TEST(test_render_config_validate_allows_disabled_fog_distance_ranges)
@@ -283,6 +305,32 @@ TEST(test_render_config_validate_allows_rim_lighting_toggle)
     config.rim_intensity       = 0.0f;
     config.rim_power           = 1.0f;
     ASSERT_TRUE(render_config_validate(&config));
+}
+
+TEST(test_settings_runtime_apply_render_configures_shadow_defaults)
+{
+    Settings settings;
+    settings_init_defaults(&settings);
+    settings.graphics_quality = SETTINGS_GRAPHICS_QUALITY_QUALITY;
+
+    RenderConfig config        = render_config_default();
+    config.enable_shadows      = false;
+    config.shadow_radius_scale = 0.05f;
+    config.shadow_max_opacity  = -1.0f;
+    config.shadow_height_bias  = 5.0f;
+    config.shadow_softness     = 2.0f;
+
+    ASSERT_TRUE(settings_runtime_apply_render(&settings, &config));
+    ASSERT_TRUE(config.enable_shadows);
+    ASSERT_FLOAT_NEAR(config.shadow_radius_scale, 1.35f, 0.001f);
+    ASSERT_FLOAT_NEAR(config.shadow_max_opacity, 0.55f, 0.001f);
+    ASSERT_FLOAT_NEAR(config.shadow_height_bias, 0.02f, 0.001f);
+    ASSERT_FLOAT_NEAR(config.shadow_softness, 0.6f, 0.001f);
+
+    settings.graphics_quality = SETTINGS_GRAPHICS_QUALITY_PERFORMANCE;
+    config.enable_shadows     = true;
+    ASSERT_TRUE(settings_runtime_apply_render(&settings, &config));
+    ASSERT_FALSE(config.enable_shadows);
 }
 
 TEST(test_render_batcher_plan_groups_alive_and_deceased)

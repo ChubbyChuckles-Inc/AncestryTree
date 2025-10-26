@@ -695,13 +695,13 @@ PHASE 10: OPTIMIZATION & POLISH
   [ ] Improve shaders
       [x] Better glow effect
       [x] Rim lighting on spheres
-      [ ] Shadows (optional)
+    [x] Shadows (optional)
   [ ] Add particle effects
       [x] Birth/death visual indicators
       [x] Selection particles
   [ ] Improve UI aesthetics
       [x] Custom Nuklear theme
-      [ ] Icons for buttons
+    [x] Icons for buttons
       [x] Animations for panel transitions
   [ ] Add ambient effects
       [x] Background skybox or gradient
