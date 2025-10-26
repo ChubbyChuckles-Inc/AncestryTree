@@ -4,14 +4,14 @@
 #include "assets.h"
 #include "at_log.h"
 #include "camera_controller.h"
+#include "detail_content_builder.h"
+#include "detail_view.h"
+#include "event.h"
+#include "expansion.h"
+#include "file_dialog.h"
 #include "graphics.h"
 #include "interaction.h"
 #include "layout.h"
-#include "event.h"
-#include "detail_view.h"
-#include "detail_content_builder.h"
-#include "expansion.h"
-#include "file_dialog.h"
 #include "path_utils.h"
 #include "persistence.h"
 #include "person.h"
@@ -48,10 +48,11 @@ static bool app_try_find_asset(const char *relative_path, char *resolved_path, s
     }
 
     const unsigned int level_candidates[] = {0U, 1U, 2U, 3U};
-    const char *application_dir = GetApplicationDirectory();
+    const char *application_dir           = GetApplicationDirectory();
     for (size_t index = 0U; index < sizeof(level_candidates) / sizeof(level_candidates[0]); ++index)
     {
-        if (path_join_relative(application_dir, level_candidates[index], relative_path, resolved_path, capacity) &&
+        if (path_join_relative(application_dir, level_candidates[index], relative_path,
+                               resolved_path, capacity) &&
             FileExists(resolved_path))
         {
             return true;
@@ -109,8 +110,8 @@ static bool layout_compute_center(const LayoutResult *layout, float out_center[3
 
 static FamilyTree *app_create_placeholder_tree(void);
 static FamilyTree *app_auto_save_tree_supplier(void *user_data);
-static void app_apply_settings(const Settings *settings, RenderState *render_state, CameraController *camera,
-                               PersistenceAutoSave *auto_save);
+static void app_apply_settings(const Settings *settings, RenderState *render_state,
+                               CameraController *camera, PersistenceAutoSave *auto_save);
 
 static void app_file_state_clear(AppFileState *state)
 {
@@ -220,7 +221,7 @@ static bool app_path_relativize_if_under_assets(const char *path, char *output, 
     }
     normalized[write] = '\0';
 
-    bool has_drive = strchr(normalized, ':') != NULL;
+    bool has_drive        = strchr(normalized, ':') != NULL;
     bool starts_with_root = normalized[0] == '/' || normalized[0] == '\\';
 
     size_t offset = 0U;
@@ -265,8 +266,9 @@ static bool app_path_relativize_if_under_assets(const char *path, char *output, 
     return false;
 }
 
-static bool app_prepare_asset_reference(const char *input_path, const char *subdirectory, const char *prefix,
-                                        char *output, size_t capacity, const char **out_relative, bool *out_copied,
+static bool app_prepare_asset_reference(const char *input_path, const char *subdirectory,
+                                        const char *prefix, char *output, size_t capacity,
+                                        const char **out_relative, bool *out_copied,
                                         char *error_buffer, size_t error_buffer_size)
 {
     if (out_relative)
@@ -300,10 +302,10 @@ static bool app_prepare_asset_reference(const char *input_path, const char *subd
     }
 
     AssetCopyRequest request;
-    request.source_path = input_path;
-    request.asset_root = "assets";
+    request.source_path  = input_path;
+    request.asset_root   = "assets";
     request.subdirectory = subdirectory;
-    request.name_prefix = prefix;
+    request.name_prefix  = prefix;
     if (!asset_copy(&request, output, capacity, error_buffer, error_buffer_size))
     {
         if (out_relative)
@@ -398,13 +400,15 @@ static bool app_save_tree_to_path(const FamilyTree *tree, const char *path, char
     return persistence_tree_save(tree, path, error_buffer, error_buffer_size);
 }
 
-static bool app_handle_save(FamilyTree *tree, AppFileState *files, char *error_buffer, size_t error_buffer_size)
+static bool app_handle_save(FamilyTree *tree, AppFileState *files, char *error_buffer,
+                            size_t error_buffer_size)
 {
     if (!tree || !files)
     {
         return false;
     }
-    const char *target_path = files->current_path[0] != '\0' ? files->current_path : APP_DEFAULT_SAVE_PATH;
+    const char *target_path =
+        files->current_path[0] != '\0' ? files->current_path : APP_DEFAULT_SAVE_PATH;
     if (!app_save_tree_to_path(tree, target_path, error_buffer, error_buffer_size))
     {
         return false;
@@ -444,7 +448,8 @@ static bool app_handle_save_as(FamilyTree *tree, AppFileState *files, const char
     return true;
 }
 
-static LayoutAlgorithm app_select_layout_algorithm(const AppState *app_state, const Settings *settings)
+static LayoutAlgorithm app_select_layout_algorithm(const AppState *app_state,
+                                                   const Settings *settings)
 {
     if (app_state)
     {
@@ -475,13 +480,14 @@ static bool app_swap_tree(FamilyTree **tree, LayoutResult *layout, FamilyTree *r
     {
         family_tree_destroy(*tree);
     }
-    *tree = replacement;
+    *tree   = replacement;
     *layout = new_layout;
     return true;
 }
 
-static void app_on_tree_changed(LayoutResult *layout, InteractionState *interaction_state, RenderState *render_state,
-                                CameraController *camera, PersistenceAutoSave *auto_save)
+static void app_on_tree_changed(LayoutResult *layout, InteractionState *interaction_state,
+                                RenderState *render_state, CameraController *camera,
+                                PersistenceAutoSave *auto_save)
 {
     if (!layout || !interaction_state || !render_state)
     {
@@ -496,17 +502,19 @@ static void app_on_tree_changed(LayoutResult *layout, InteractionState *interact
     }
 }
 
-static bool app_prompt_open_tree_path(const AppFileState *file_state, char *out_path, size_t capacity,
-                                      char *error_buffer, size_t error_capacity)
+static bool app_prompt_open_tree_path(const AppFileState *file_state, char *out_path,
+                                      size_t capacity, char *error_buffer, size_t error_capacity)
 {
     if (!out_path || capacity == 0U)
     {
         if (error_buffer && error_capacity > 0U)
         {
 #if defined(_MSC_VER)
-            (void)strncpy_s(error_buffer, error_capacity, "Invalid output buffer for open dialog.", _TRUNCATE);
+            (void)strncpy_s(error_buffer, error_capacity, "Invalid output buffer for open dialog.",
+                            _TRUNCATE);
 #else
-            (void)snprintf(error_buffer, error_capacity, "%s", "Invalid output buffer for open dialog.");
+            (void)snprintf(error_buffer, error_capacity, "%s",
+                           "Invalid output buffer for open dialog.");
 #endif
         }
         return false;
@@ -520,28 +528,28 @@ static bool app_prompt_open_tree_path(const AppFileState *file_state, char *out_
     {
         default_path = "assets/example_tree.json";
     }
-    FileDialogFilter filters[] = {
-        {.label = "Family Trees", .pattern = "*.json"},
-        {.label = "All Files", .pattern = "*.*"}};
-    FileDialogOptions options = {
-        .title = "Open Family Tree",
-        .default_path = default_path,
-        .filters = filters,
-        .filter_count = sizeof(filters) / sizeof(filters[0])};
+    FileDialogFilter filters[] = {{.label = "Family Trees", .pattern = "*.json"},
+                                  {.label = "All Files", .pattern = "*.*"}};
+    FileDialogOptions options  = {.title        = "Open Family Tree",
+                                  .default_path = default_path,
+                                  .filters      = filters,
+                                  .filter_count = sizeof(filters) / sizeof(filters[0])};
     return file_dialog_open(&options, out_path, capacity, error_buffer, error_capacity);
 }
 
-static bool app_prompt_save_tree_path(const AppFileState *file_state, char *out_path, size_t capacity,
-                                      char *error_buffer, size_t error_capacity)
+static bool app_prompt_save_tree_path(const AppFileState *file_state, char *out_path,
+                                      size_t capacity, char *error_buffer, size_t error_capacity)
 {
     if (!out_path || capacity == 0U)
     {
         if (error_buffer && error_capacity > 0U)
         {
 #if defined(_MSC_VER)
-            (void)strncpy_s(error_buffer, error_capacity, "Invalid output buffer for save dialog.", _TRUNCATE);
+            (void)strncpy_s(error_buffer, error_capacity, "Invalid output buffer for save dialog.",
+                            _TRUNCATE);
 #else
-            (void)snprintf(error_buffer, error_capacity, "%s", "Invalid output buffer for save dialog.");
+            (void)snprintf(error_buffer, error_capacity, "%s",
+                           "Invalid output buffer for save dialog.");
 #endif
         }
         return false;
@@ -551,14 +559,12 @@ static bool app_prompt_save_tree_path(const AppFileState *file_state, char *out_
     {
         default_path = file_state->current_path;
     }
-    FileDialogFilter filters[] = {
-        {.label = "Family Trees", .pattern = "*.json"},
-        {.label = "All Files", .pattern = "*.*"}};
-    FileDialogOptions options = {
-        .title = "Save Family Tree",
-        .default_path = default_path,
-        .filters = filters,
-        .filter_count = sizeof(filters) / sizeof(filters[0])};
+    FileDialogFilter filters[] = {{.label = "Family Trees", .pattern = "*.json"},
+                                  {.label = "All Files", .pattern = "*.*"}};
+    FileDialogOptions options  = {.title        = "Save Family Tree",
+                                  .default_path = default_path,
+                                  .filters      = filters,
+                                  .filter_count = sizeof(filters) / sizeof(filters[0])};
     if (!file_dialog_save(&options, out_path, capacity, error_buffer, error_capacity))
     {
         return false;
@@ -580,12 +586,13 @@ static bool app_prompt_save_tree_path(const AppFileState *file_state, char *out_
     return true;
 }
 
-static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileState *file_state, FamilyTree **tree,
-                                 LayoutResult *layout, InteractionState *interaction_state,
-                                 RenderState *render_state, CameraController *camera, AtLogger *logger,
-                                 Settings *settings, Settings *persisted_settings, const char *settings_path,
-                                 PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
-                                 AppState *app_state)
+static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileState *file_state,
+                                 FamilyTree **tree, LayoutResult *layout,
+                                 InteractionState *interaction_state, RenderState *render_state,
+                                 CameraController *camera, AtLogger *logger, Settings *settings,
+                                 Settings *persisted_settings, const char *settings_path,
+                                 PersistenceAutoSave *auto_save,
+                                 unsigned int *settings_applied_revision, AppState *app_state)
 {
     if (!event || !tree || !layout || !interaction_state || !render_state)
     {
@@ -617,10 +624,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         {
             layout_result_destroy(&app_state->layout_transition_start);
             layout_result_destroy(&app_state->layout_transition_target);
-            app_state->layout_transition_active = false;
-            app_state->layout_transition_elapsed = 0.0f;
+            app_state->layout_transition_active   = false;
+            app_state->layout_transition_elapsed  = 0.0f;
             app_state->layout_transition_duration = 0.0f;
-            app_state->active_layout_algorithm = algorithm;
+            app_state->active_layout_algorithm    = algorithm;
         }
         app_file_state_clear(file_state);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
@@ -671,10 +678,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         {
             layout_result_destroy(&app_state->layout_transition_start);
             layout_result_destroy(&app_state->layout_transition_target);
-            app_state->layout_transition_active = false;
-            app_state->layout_transition_elapsed = 0.0f;
+            app_state->layout_transition_active   = false;
+            app_state->layout_transition_elapsed  = 0.0f;
             app_state->layout_transition_duration = 0.0f;
-            app_state->active_layout_algorithm = algorithm;
+            app_state->active_layout_algorithm    = algorithm;
         }
         app_file_state_set(file_state, chosen_path);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
@@ -699,13 +706,14 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             char dialog_error[256];
             dialog_error[0] = '\0';
             char destination[512];
-            if (!app_prompt_save_tree_path(file_state, destination, sizeof(destination), dialog_error,
-                                           sizeof(dialog_error)))
+            if (!app_prompt_save_tree_path(file_state, destination, sizeof(destination),
+                                           dialog_error, sizeof(dialog_error)))
             {
                 if (dialog_error[0] != '\0')
                 {
                     char message[320];
-                    (void)snprintf(message, sizeof(message), "Save dialog failed: %s", dialog_error);
+                    (void)snprintf(message, sizeof(message), "Save dialog failed: %s",
+                                   dialog_error);
                     app_report_error(ui, logger, message);
                 }
                 else
@@ -715,8 +723,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 return;
             }
             char saved_path[512];
-            if (!app_handle_save_as(*tree, file_state, destination, error_buffer, sizeof(error_buffer), saved_path,
-                                    sizeof(saved_path)))
+            if (!app_handle_save_as(*tree, file_state, destination, error_buffer,
+                                    sizeof(error_buffer), saved_path, sizeof(saved_path)))
             {
                 char message[320];
                 (void)snprintf(message, sizeof(message), "Save failed: %s", error_buffer);
@@ -760,13 +768,14 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             char destination[512];
             char dialog_error[256];
             dialog_error[0] = '\0';
-            if (!app_prompt_save_tree_path(file_state, destination, sizeof(destination), dialog_error,
-                                           sizeof(dialog_error)))
+            if (!app_prompt_save_tree_path(file_state, destination, sizeof(destination),
+                                           dialog_error, sizeof(dialog_error)))
             {
                 if (dialog_error[0] != '\0')
                 {
                     char message[320];
-                    (void)snprintf(message, sizeof(message), "Save As dialog failed: %s", dialog_error);
+                    (void)snprintf(message, sizeof(message), "Save As dialog failed: %s",
+                                   dialog_error);
                     app_report_error(ui, logger, message);
                 }
                 else
@@ -776,8 +785,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 return;
             }
             char saved_path[512];
-            if (!app_handle_save_as(*tree, file_state, destination, error_buffer, sizeof(error_buffer), saved_path,
-                                    sizeof(saved_path)))
+            if (!app_handle_save_as(*tree, file_state, destination, error_buffer,
+                                    sizeof(error_buffer), saved_path, sizeof(saved_path)))
             {
                 char message[256];
                 (void)snprintf(message, sizeof(message), "Save As failed: %s", error_buffer);
@@ -824,11 +833,13 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             char message[256];
             if (delete_error[0] != '\0')
             {
-                (void)snprintf(message, sizeof(message), "Unable to delete person: %s", delete_error);
+                (void)snprintf(message, sizeof(message), "Unable to delete person: %s",
+                               delete_error);
             }
             else
             {
-                (void)snprintf(message, sizeof(message), "Unable to delete person due to an unknown error.");
+                (void)snprintf(message, sizeof(message),
+                               "Unable to delete person due to an unknown error.");
             }
             app_report_error(ui, logger, message);
             break;
@@ -844,11 +855,13 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         char status_message[192];
         if (name_buffer[0] != '\0')
         {
-            (void)snprintf(status_message, sizeof(status_message), "Deleted profile for %s.", name_buffer);
+            (void)snprintf(status_message, sizeof(status_message), "Deleted profile for %s.",
+                           name_buffer);
         }
         else
         {
-            (void)snprintf(status_message, sizeof(status_message), "Deleted person #%u.", person_id);
+            (void)snprintf(status_message, sizeof(status_message), "Deleted person #%u.",
+                           person_id);
         }
         app_report_status(ui, logger, status_message);
         if (logger)
@@ -861,7 +874,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
     {
         if (!settings || !settings_path)
         {
-            app_report_error(ui, logger, "Settings context unavailable; unable to save configuration.");
+            app_report_error(ui, logger,
+                             "Settings context unavailable; unable to save configuration.");
             break;
         }
         char settings_error[256];
@@ -871,11 +885,13 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             char message[256];
             if (settings_error[0] != '\0')
             {
-                (void)snprintf(message, sizeof(message), "Failed to save settings: %s", settings_error);
+                (void)snprintf(message, sizeof(message), "Failed to save settings: %s",
+                               settings_error);
             }
             else
             {
-                (void)snprintf(message, sizeof(message), "Failed to save settings to %s", settings_path);
+                (void)snprintf(message, sizeof(message), "Failed to save settings to %s",
+                               settings_path);
             }
             app_report_error(ui, logger, message);
         }
@@ -893,7 +909,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
     {
         if (!settings || !settings_path)
         {
-            app_report_error(ui, logger, "Settings context unavailable; unable to reload configuration.");
+            app_report_error(ui, logger,
+                             "Settings context unavailable; unable to reload configuration.");
             break;
         }
         Settings reloaded;
@@ -905,11 +922,13 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             char message[256];
             if (settings_error[0] != '\0')
             {
-                (void)snprintf(message, sizeof(message), "Failed to reload settings: %s", settings_error);
+                (void)snprintf(message, sizeof(message), "Failed to reload settings: %s",
+                               settings_error);
             }
             else
             {
-                (void)snprintf(message, sizeof(message), "Failed to reload settings from %s", settings_path);
+                (void)snprintf(message, sizeof(message), "Failed to reload settings from %s",
+                               settings_path);
             }
             app_report_error(ui, logger, message);
         }
@@ -1027,7 +1046,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         if (!target)
         {
             char message[160];
-            (void)snprintf(message, sizeof(message), "Focus failed: person %u not found.", target_id);
+            (void)snprintf(message, sizeof(message), "Focus failed: person %u not found.",
+                           target_id);
             app_report_error(ui, logger, message);
             break;
         }
@@ -1035,7 +1055,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         {
             interaction_select_person(interaction_state, target);
         }
-        bool has_position = false;
+        bool has_position       = false;
         float focus_position[3] = {0.0f, 0.0f, 0.0f};
         for (size_t index = 0U; index < layout->count; ++index)
         {
@@ -1044,7 +1064,7 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 focus_position[0] = layout->nodes[index].position[0];
                 focus_position[1] = layout->nodes[index].position[1];
                 focus_position[2] = layout->nodes[index].position[2];
-                has_position = true;
+                has_position      = true;
                 break;
             }
         }
@@ -1076,12 +1096,11 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
     }
 }
 
-static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
-                                         LayoutResult *layout, InteractionState *interaction_state,
-                                         RenderState *render_state, CameraController *camera, AtLogger *logger,
-                                         Settings *settings, Settings *persisted_settings, const char *settings_path,
-                                         PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
-                                         AppState *app_state)
+static void app_handle_pending_ui_events(
+    UIContext *ui, AppFileState *file_state, FamilyTree **tree, LayoutResult *layout,
+    InteractionState *interaction_state, RenderState *render_state, CameraController *camera,
+    AtLogger *logger, Settings *settings, Settings *persisted_settings, const char *settings_path,
+    PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision, AppState *app_state)
 {
     if (!ui)
     {
@@ -1091,16 +1110,17 @@ static void app_handle_pending_ui_events(UIContext *ui, AppFileState *file_state
     size_t count = ui_poll_events(ui, events, UI_EVENT_QUEUE_CAPACITY);
     for (size_t index = 0U; index < count; ++index)
     {
-        app_process_ui_event(&events[index], ui, file_state, tree, layout, interaction_state, render_state, camera,
-                             logger, settings, persisted_settings, settings_path, auto_save, settings_applied_revision,
-                             app_state);
+        app_process_ui_event(&events[index], ui, file_state, tree, layout, interaction_state,
+                             render_state, camera, logger, settings, persisted_settings,
+                             settings_path, auto_save, settings_applied_revision, app_state);
     }
 }
 
 static void app_process_add_person_requests(UIContext *ui, AppState *app_state, FamilyTree **tree,
-                                            LayoutResult *layout, InteractionState *interaction_state,
-                                            CameraController *camera, PersistenceAutoSave *auto_save,
-                                            AtLogger *logger)
+                                            LayoutResult *layout,
+                                            InteractionState *interaction_state,
+                                            CameraController *camera,
+                                            PersistenceAutoSave *auto_save, AtLogger *logger)
 {
     if (!ui)
     {
@@ -1118,27 +1138,30 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
 
         AppPersonCreateData data;
         memset(&data, 0, sizeof(data));
-        data.first = request.first;
-        data.middle = (request.middle[0] != '\0') ? request.middle : NULL;
-        data.last = request.last;
-        data.birth_date = request.birth_date;
+        data.first          = request.first;
+        data.middle         = (request.middle[0] != '\0') ? request.middle : NULL;
+        data.last           = request.last;
+        data.birth_date     = request.birth_date;
         data.birth_location = (request.birth_location[0] != '\0') ? request.birth_location : NULL;
-        data.is_alive = request.is_alive;
-        data.death_date = (!request.is_alive && request.death_date[0] != '\0') ? request.death_date : NULL;
-        data.death_location = (!request.is_alive && request.death_location[0] != '\0') ? request.death_location : NULL;
-        data.father_id = request.father_id;
-        data.mother_id = request.mother_id;
-        data.spouse_id = request.spouse_id;
+        data.is_alive       = request.is_alive;
+        data.death_date =
+            (!request.is_alive && request.death_date[0] != '\0') ? request.death_date : NULL;
+        data.death_location = (!request.is_alive && request.death_location[0] != '\0')
+                                  ? request.death_location
+                                  : NULL;
+        data.father_id      = request.father_id;
+        data.mother_id      = request.mother_id;
+        data.spouse_id      = request.spouse_id;
 
         char profile_buffer[256];
         const char *profile_path = NULL;
-        bool profile_copied = false;
+        bool profile_copied      = false;
         char asset_error[256];
         asset_error[0] = '\0';
 
-        if (!app_prepare_asset_reference(request.profile_image_path, "profiles", "profile", profile_buffer,
-                                         sizeof(profile_buffer), &profile_path, &profile_copied, asset_error,
-                                         sizeof(asset_error)))
+        if (!app_prepare_asset_reference(request.profile_image_path, "profiles", "profile",
+                                         profile_buffer, sizeof(profile_buffer), &profile_path,
+                                         &profile_copied, asset_error, sizeof(asset_error)))
         {
             char message[512];
             if (asset_error[0] != '\0')
@@ -1163,23 +1186,24 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
         bool certificate_copied[APP_PERSON_CREATE_MAX_CERTIFICATES];
         memset(certificate_copied, 0, sizeof(certificate_copied));
         data.certificate_count = request.certificate_count;
-        bool creation_failed = false;
+        bool creation_failed   = false;
         char failure_message[512];
         failure_message[0] = '\0';
 
         for (size_t index = 0U; index < data.certificate_count; ++index)
         {
             const char *source_path = request.certificate_paths[index];
-            const char *relative = NULL;
-            asset_error[0] = '\0';
-            if (!app_prepare_asset_reference(source_path, "certificates", "certificate", certificate_buffers[index],
-                                             sizeof(certificate_buffers[index]), &relative, &certificate_copied[index],
-                                             asset_error, sizeof(asset_error)))
+            const char *relative    = NULL;
+            asset_error[0]          = '\0';
+            if (!app_prepare_asset_reference(
+                    source_path, "certificates", "certificate", certificate_buffers[index],
+                    sizeof(certificate_buffers[index]), &relative, &certificate_copied[index],
+                    asset_error, sizeof(asset_error)))
             {
                 if (asset_error[0] != '\0')
                 {
-                    (void)snprintf(failure_message, sizeof(failure_message), "Certificate import failed: %s",
-                                   asset_error);
+                    (void)snprintf(failure_message, sizeof(failure_message),
+                                   "Certificate import failed: %s", asset_error);
                 }
                 else
                 {
@@ -1209,7 +1233,8 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
             continue;
         }
 
-        for (size_t index = data.certificate_count; index < APP_PERSON_CREATE_MAX_CERTIFICATES; ++index)
+        for (size_t index = data.certificate_count; index < APP_PERSON_CREATE_MAX_CERTIFICATES;
+             ++index)
         {
             data.certificate_paths[index] = NULL;
         }
@@ -1218,24 +1243,29 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
         for (size_t index = 0U; index < data.timeline_count; ++index)
         {
             data.timeline_entries[index].type = request.timeline_entries[index].type;
-            data.timeline_entries[index].date =
-                (request.timeline_entries[index].date[0] != '\0') ? request.timeline_entries[index].date : NULL;
+            data.timeline_entries[index].date = (request.timeline_entries[index].date[0] != '\0')
+                                                    ? request.timeline_entries[index].date
+                                                    : NULL;
             data.timeline_entries[index].description = request.timeline_entries[index].description;
             data.timeline_entries[index].location =
-                (request.timeline_entries[index].location[0] != '\0') ? request.timeline_entries[index].location : NULL;
+                (request.timeline_entries[index].location[0] != '\0')
+                    ? request.timeline_entries[index].location
+                    : NULL;
         }
-        for (size_t index = data.timeline_count; index < APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES; ++index)
+        for (size_t index = data.timeline_count; index < APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES;
+             ++index)
         {
-            data.timeline_entries[index].type = TIMELINE_EVENT_CUSTOM;
-            data.timeline_entries[index].date = NULL;
+            data.timeline_entries[index].type        = TIMELINE_EVENT_CUSTOM;
+            data.timeline_entries[index].date        = NULL;
             data.timeline_entries[index].description = NULL;
-            data.timeline_entries[index].location = NULL;
+            data.timeline_entries[index].location    = NULL;
         }
 
         char error_buffer[256];
-        error_buffer[0] = '\0';
+        error_buffer[0]        = '\0';
         uint32_t new_person_id = 0U;
-        if (!app_state_create_person(app_state, &data, &new_person_id, error_buffer, sizeof(error_buffer)))
+        if (!app_state_create_person(app_state, &data, &new_person_id, error_buffer,
+                                     sizeof(error_buffer)))
         {
             if (profile_copied)
             {
@@ -1252,11 +1282,13 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
             char message[512];
             if (error_buffer[0] != '\0')
             {
-                (void)snprintf(message, sizeof(message), "Unable to create person: %s", error_buffer);
+                (void)snprintf(message, sizeof(message), "Unable to create person: %s",
+                               error_buffer);
             }
             else
             {
-                (void)snprintf(message, sizeof(message), "Unable to create person due to an unknown error.");
+                (void)snprintf(message, sizeof(message),
+                               "Unable to create person due to an unknown error.");
             }
             app_report_error(ui, logger, message);
             continue;
@@ -1268,7 +1300,7 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
             interaction_select_person(interaction_state, created_person);
         }
 
-        bool has_position = false;
+        bool has_position       = false;
         float focus_position[3] = {0.0f, 0.0f, 0.0f};
         if (layout && layout->nodes)
         {
@@ -1279,7 +1311,7 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
                     focus_position[0] = layout->nodes[index].position[0];
                     focus_position[1] = layout->nodes[index].position[1];
                     focus_position[2] = layout->nodes[index].position[2];
-                    has_position = true;
+                    has_position      = true;
                     break;
                 }
             }
@@ -1300,13 +1332,14 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
         }
 
         char name_buffer[128];
-        if (!created_person || !person_format_display_name(created_person, name_buffer, sizeof(name_buffer)))
+        if (!created_person ||
+            !person_format_display_name(created_person, name_buffer, sizeof(name_buffer)))
         {
             (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", new_person_id);
         }
         char status_message[192];
-        (void)snprintf(status_message, sizeof(status_message), "Created holographic profile for %s (ID %u).",
-                       name_buffer, new_person_id);
+        (void)snprintf(status_message, sizeof(status_message),
+                       "Created holographic profile for %s (ID %u).", name_buffer, new_person_id);
         app_report_status(ui, logger, status_message);
         if (logger)
         {
@@ -1316,9 +1349,10 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
 }
 
 static void app_process_edit_person_requests(UIContext *ui, AppState *app_state, FamilyTree **tree,
-                                             LayoutResult *layout, InteractionState *interaction_state,
-                                             CameraController *camera, PersistenceAutoSave *auto_save,
-                                             AtLogger *logger)
+                                             LayoutResult *layout,
+                                             InteractionState *interaction_state,
+                                             CameraController *camera,
+                                             PersistenceAutoSave *auto_save, AtLogger *logger)
 {
     if (!ui)
     {
@@ -1343,37 +1377,40 @@ static void app_process_edit_person_requests(UIContext *ui, AppState *app_state,
         if (!person)
         {
             char message[256];
-            (void)snprintf(message, sizeof(message), "Person %u not found in current tree.", request.person_id);
+            (void)snprintf(message, sizeof(message), "Person %u not found in current tree.",
+                           request.person_id);
             app_report_error(ui, logger, message);
             continue;
         }
 
         AppPersonEditData edit_data;
         memset(&edit_data, 0, sizeof(edit_data));
-        edit_data.first = request.first;
-        edit_data.middle = (request.middle[0] != '\0') ? request.middle : NULL;
-        edit_data.last = request.last;
+        edit_data.first      = request.first;
+        edit_data.middle     = (request.middle[0] != '\0') ? request.middle : NULL;
+        edit_data.last       = request.last;
         edit_data.birth_date = request.birth_date;
-        edit_data.birth_location = (request.birth_location[0] != '\0') ? request.birth_location : NULL;
+        edit_data.birth_location =
+            (request.birth_location[0] != '\0') ? request.birth_location : NULL;
         if (request.has_death)
         {
             edit_data.clear_death = false;
-            edit_data.death_date = request.death_date;
-            edit_data.death_location = (request.death_location[0] != '\0') ? request.death_location : NULL;
+            edit_data.death_date  = request.death_date;
+            edit_data.death_location =
+                (request.death_location[0] != '\0') ? request.death_location : NULL;
         }
         else
         {
-            edit_data.clear_death = true;
-            edit_data.death_date = NULL;
+            edit_data.clear_death    = true;
+            edit_data.death_date     = NULL;
             edit_data.death_location = NULL;
         }
 
-        edit_data.relationships.apply_father = request.update_father;
-        edit_data.relationships.father_id = request.father_id;
-        edit_data.relationships.apply_mother = request.update_mother;
-        edit_data.relationships.mother_id = request.mother_id;
+        edit_data.relationships.apply_father  = request.update_father;
+        edit_data.relationships.father_id     = request.father_id;
+        edit_data.relationships.apply_mother  = request.update_mother;
+        edit_data.relationships.mother_id     = request.mother_id;
         edit_data.relationships.apply_spouses = request.update_spouses;
-        size_t spouse_count = request.spouse_count;
+        size_t spouse_count                   = request.spouse_count;
         if (spouse_count > APP_PERSON_EDIT_MAX_SPOUSES)
         {
             spouse_count = APP_PERSON_EDIT_MAX_SPOUSES;
@@ -1406,7 +1443,8 @@ static void app_process_edit_person_requests(UIContext *ui, AppState *app_state,
             }
             else
             {
-                (void)snprintf(message, sizeof(message), "Unable to edit person due to an unknown error.");
+                (void)snprintf(message, sizeof(message),
+                               "Unable to edit person due to an unknown error.");
             }
             app_report_error(ui, logger, message);
             continue;
@@ -1442,27 +1480,31 @@ static void app_process_edit_person_requests(UIContext *ui, AppState *app_state,
 
         char name_buffer[128];
         Person *label_person = updated ? updated : person;
-        if (!label_person || !person_format_display_name(label_person, name_buffer, sizeof(name_buffer)))
+        if (!label_person ||
+            !person_format_display_name(label_person, name_buffer, sizeof(name_buffer)))
         {
             (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", request.person_id);
         }
         char status_message[192];
-        (void)snprintf(status_message, sizeof(status_message), "Updated profile for %s.", name_buffer);
+        (void)snprintf(status_message, sizeof(status_message), "Updated profile for %s.",
+                       name_buffer);
         app_report_status(ui, logger, status_message);
         if (logger)
         {
-            AT_LOG(logger, AT_LOG_INFO, "Edited person %u via Edit Person panel", request.person_id);
+            AT_LOG(logger, AT_LOG_INFO, "Edited person %u via Edit Person panel",
+                   request.person_id);
         }
     }
 }
 
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                       LayoutResult *layout, InteractionState *interaction_state,
-                                      RenderState *render_state, CameraController *camera, AtLogger *logger,
-                                      Settings *settings, Settings *persisted_settings, const char *settings_path,
-                                      PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
-                                      AppState *app_state, ExpansionState *expansion,
-                                      DetailViewSystem *detail_view);
+                                      RenderState *render_state, CameraController *camera,
+                                      AtLogger *logger, Settings *settings,
+                                      Settings *persisted_settings, const char *settings_path,
+                                      PersistenceAutoSave *auto_save,
+                                      unsigned int *settings_applied_revision, AppState *app_state,
+                                      ExpansionState *expansion, DetailViewSystem *detail_view);
 
 typedef struct EventShortcutPayload
 {
@@ -1510,11 +1552,11 @@ static void event_shortcut_handler(void *user_data, float delta_seconds)
     {
         return;
     }
-    app_handle_shortcut_input(payload->ui, payload->file_state, payload->tree, payload->layout,
-                              payload->interaction_state, payload->render_state, payload->camera, payload->logger,
-                              payload->settings, payload->persisted_settings, payload->settings_path,
-                              payload->auto_save, payload->settings_revision, payload->app_state,
-                              payload->expansion, payload->detail_view);
+    app_handle_shortcut_input(
+        payload->ui, payload->file_state, payload->tree, payload->layout,
+        payload->interaction_state, payload->render_state, payload->camera, payload->logger,
+        payload->settings, payload->persisted_settings, payload->settings_path, payload->auto_save,
+        payload->settings_revision, payload->app_state, payload->expansion, payload->detail_view);
 }
 
 static void event_queue_handler(void *user_data, float delta_seconds)
@@ -1526,34 +1568,41 @@ static void event_queue_handler(void *user_data, float delta_seconds)
         return;
     }
     app_handle_pending_ui_events(payload->ui, payload->file_state, payload->tree, payload->layout,
-                                 payload->interaction_state, payload->render_state, payload->camera, payload->logger,
-                                 payload->settings, payload->persisted_settings, payload->settings_path,
-                                 payload->auto_save, payload->settings_revision, payload->app_state);
+                                 payload->interaction_state, payload->render_state, payload->camera,
+                                 payload->logger, payload->settings, payload->persisted_settings,
+                                 payload->settings_path, payload->auto_save,
+                                 payload->settings_revision, payload->app_state);
     app_process_add_person_requests(payload->ui, payload->app_state, payload->tree, payload->layout,
-                                    payload->interaction_state, payload->camera, payload->auto_save, payload->logger);
-    app_process_edit_person_requests(payload->ui, payload->app_state, payload->tree, payload->layout,
-                                     payload->interaction_state, payload->camera, payload->auto_save, payload->logger);
+                                    payload->interaction_state, payload->camera, payload->auto_save,
+                                    payload->logger);
+    app_process_edit_person_requests(payload->ui, payload->app_state, payload->tree,
+                                     payload->layout, payload->interaction_state, payload->camera,
+                                     payload->auto_save, payload->logger);
 }
 
 static bool app_start_detail_view_for_selection(const Person *selected, LayoutResult *layout,
-                                                ExpansionState *expansion, DetailViewSystem *detail_view,
-                                                CameraController *camera, AppState *app_state, AtLogger *logger)
+                                                ExpansionState *expansion,
+                                                DetailViewSystem *detail_view,
+                                                CameraController *camera, AppState *app_state,
+                                                AtLogger *logger)
 {
     if (!selected || !layout || layout->count == 0U || !expansion || !detail_view)
     {
         return false;
     }
-    if (expansion_is_active(expansion))
-    {
-        return false;
-    }
+
+    bool expansion_active      = expansion_is_active(expansion);
+    bool expansion_detail_mode = expansion_active && expansion_is_in_detail_mode(expansion);
+
+    bool retargeting = expansion_detail_mode;
 
     DetailViewContent content;
     if (!detail_view_content_build(selected, &content))
     {
         if (logger)
         {
-            AT_LOG(logger, AT_LOG_WARN, "Failed to build detail view content for selection %u.", selected->id);
+            AT_LOG(logger, AT_LOG_WARN, "Failed to build detail view content for selection %u.",
+                   selected->id);
         }
         return false;
     }
@@ -1561,15 +1610,39 @@ static bool app_start_detail_view_for_selection(const Person *selected, LayoutRe
     {
         if (logger)
         {
-            AT_LOG(logger, AT_LOG_WARN, "Detail view content rejected for selection %u.", selected->id);
+            AT_LOG(logger, AT_LOG_WARN, "Detail view content rejected for selection %u.",
+                   selected->id);
         }
         return false;
     }
-    if (!expansion_start(expansion, layout, selected, camera))
+    bool expansion_success = false;
+    if (retargeting)
+    {
+        expansion_success = expansion_retarget(expansion, layout, selected, camera);
+        if (!expansion_success && !expansion_is_active(expansion))
+        {
+            expansion_success = expansion_start(expansion, layout, selected, camera);
+            retargeting       = false;
+        }
+    }
+    else
+    {
+        expansion_success = expansion_start(expansion, layout, selected, camera);
+    }
+    if (!expansion_success)
     {
         if (logger)
         {
-            AT_LOG(logger, AT_LOG_WARN, "Expansion launch failed for selection %u.", selected->id);
+            if (retargeting)
+            {
+                AT_LOG(logger, AT_LOG_WARN, "Expansion retarget failed for selection %u.",
+                       selected->id);
+            }
+            else
+            {
+                AT_LOG(logger, AT_LOG_WARN, "Expansion launch failed for selection %u.",
+                       selected->id);
+            }
         }
         return false;
     }
@@ -1577,7 +1650,7 @@ static bool app_start_detail_view_for_selection(const Person *selected, LayoutRe
     if (app_state)
     {
         app_state->interaction_mode = APP_INTERACTION_MODE_DETAIL_VIEW;
-        app_state->selected_person = (Person *)selected;
+        app_state->selected_person  = (Person *)selected;
     }
     if (logger)
     {
@@ -1586,18 +1659,20 @@ static bool app_start_detail_view_for_selection(const Person *selected, LayoutRe
         {
             (void)snprintf(name_buffer, sizeof(name_buffer), "Person %u", selected->id);
         }
-        AT_LOG(logger, AT_LOG_INFO, "Entering detail view for %s.", name_buffer);
+        const char *action = retargeting ? "Switching detail view to" : "Entering detail view for";
+        AT_LOG(logger, AT_LOG_INFO, "%s %s.", action, name_buffer);
     }
     return true;
 }
 
 static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, FamilyTree **tree,
                                       LayoutResult *layout, InteractionState *interaction_state,
-                                      RenderState *render_state, CameraController *camera, AtLogger *logger,
-                                      Settings *settings, Settings *persisted_settings, const char *settings_path,
-                                      PersistenceAutoSave *auto_save, unsigned int *settings_applied_revision,
-                                      AppState *app_state, ExpansionState *expansion,
-                                      DetailViewSystem *detail_view)
+                                      RenderState *render_state, CameraController *camera,
+                                      AtLogger *logger, Settings *settings,
+                                      Settings *persisted_settings, const char *settings_path,
+                                      PersistenceAutoSave *auto_save,
+                                      unsigned int *settings_applied_revision, AppState *app_state,
+                                      ExpansionState *expansion, DetailViewSystem *detail_view)
 {
     if (!ui)
     {
@@ -1605,18 +1680,18 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
     }
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     ShortcutState state;
-    state.ctrl_down = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-    state.shift_down = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    state.key_new_pressed = IsKeyPressed(KEY_N);
-    state.key_open_pressed = IsKeyPressed(KEY_O);
-    state.key_save_pressed = IsKeyPressed(KEY_S);
-    state.key_undo_pressed = IsKeyPressed(KEY_Z);
-    state.key_redo_pressed = IsKeyPressed(KEY_Y);
-    state.key_space_pressed = IsKeyPressed(KEY_SPACE);
-    state.key_escape_pressed = IsKeyPressed(KEY_ESCAPE);
-    bool key_enter_pressed = IsKeyPressed(KEY_ENTER);
-    bool key_c_pressed = IsKeyPressed(KEY_C);
-    bool key_x_pressed = IsKeyPressed(KEY_X);
+    state.ctrl_down            = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    state.shift_down           = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    state.key_new_pressed      = IsKeyPressed(KEY_N);
+    state.key_open_pressed     = IsKeyPressed(KEY_O);
+    state.key_save_pressed     = IsKeyPressed(KEY_S);
+    state.key_undo_pressed     = IsKeyPressed(KEY_Z);
+    state.key_redo_pressed     = IsKeyPressed(KEY_Y);
+    state.key_space_pressed    = IsKeyPressed(KEY_SPACE);
+    state.key_escape_pressed   = IsKeyPressed(KEY_ESCAPE);
+    bool key_enter_pressed     = IsKeyPressed(KEY_ENTER);
+    bool key_c_pressed         = IsKeyPressed(KEY_C);
+    bool key_x_pressed         = IsKeyPressed(KEY_X);
     bool key_backspace_pressed = IsKeyPressed(KEY_BACKSPACE);
 
     ShortcutResult result;
@@ -1626,30 +1701,31 @@ static void app_handle_shortcut_input(UIContext *ui, AppFileState *file_state, F
         if (!ui_event_enqueue(ui, result.event))
         {
             UIEvent fallback_event;
-            fallback_event.type = result.event;
+            fallback_event.type      = result.event;
             fallback_event.param_u32 = 0U;
-            app_process_ui_event(&fallback_event, ui, file_state, tree, layout, interaction_state, render_state,
-                                 camera, logger, settings, persisted_settings, settings_path, auto_save,
-                                 settings_applied_revision, app_state);
+            app_process_ui_event(&fallback_event, ui, file_state, tree, layout, interaction_state,
+                                 render_state, camera, logger, settings, persisted_settings,
+                                 settings_path, auto_save, settings_applied_revision, app_state);
         }
     }
 
-    bool in_detail_mode = app_state && app_state->interaction_mode == APP_INTERACTION_MODE_DETAIL_VIEW;
+    bool in_detail_mode =
+        app_state && app_state->interaction_mode == APP_INTERACTION_MODE_DETAIL_VIEW;
     const Person *selected = interaction_state ? interaction_get_selected(interaction_state) : NULL;
     const Person *previous_selected = app_state ? app_state->selected_person : NULL;
-    bool triggered_detail_view = false;
+    bool triggered_detail_view      = false;
 
     if (key_enter_pressed && selected && expansion && detail_view && layout && layout->count > 0U)
     {
-        triggered_detail_view =
-            app_start_detail_view_for_selection(selected, layout, expansion, detail_view, camera, app_state, logger);
+        triggered_detail_view = app_start_detail_view_for_selection(
+            selected, layout, expansion, detail_view, camera, app_state, logger);
     }
 
-    if (!triggered_detail_view && app_state && selected && selected != previous_selected && expansion && detail_view &&
-        layout && layout->count > 0U)
+    if (!triggered_detail_view && app_state && selected && selected != previous_selected &&
+        expansion && detail_view && layout && layout->count > 0U)
     {
-        triggered_detail_view =
-            app_start_detail_view_for_selection(selected, layout, expansion, detail_view, camera, app_state, logger);
+        triggered_detail_view = app_start_detail_view_for_selection(
+            selected, layout, expansion, detail_view, camera, app_state, logger);
     }
 
     if (app_state)
@@ -1742,8 +1818,8 @@ static FamilyTree *app_auto_save_tree_supplier(void *user_data)
     return *tree_ref;
 }
 
-static void app_apply_settings(const Settings *settings, RenderState *render_state, CameraController *camera,
-                               PersistenceAutoSave *auto_save)
+static void app_apply_settings(const Settings *settings, RenderState *render_state,
+                               CameraController *camera, PersistenceAutoSave *auto_save)
 {
     if (camera)
     {
@@ -1760,18 +1836,18 @@ static void app_apply_settings(const Settings *settings, RenderState *render_sta
     }
 }
 
-static void app_collect_camera_input(CameraControllerInput *input, bool auto_orbit_enabled, const Settings *settings,
-                                     float wheel_delta)
+static void app_collect_camera_input(CameraControllerInput *input, bool auto_orbit_enabled,
+                                     const Settings *settings, float wheel_delta)
 {
     if (!input)
     {
         return;
     }
 
-    float orbit_sensitivity = 0.15f;
-    float pan_sensitivity = 0.5f;
+    float orbit_sensitivity        = 0.15f;
+    float pan_sensitivity          = 0.5f;
     float pan_keyboard_sensitivity = 1.0f;
-    float zoom_sensitivity = 1.0f;
+    float zoom_sensitivity         = 1.0f;
     settings_runtime_compute_input_sensitivity(settings, &orbit_sensitivity, &pan_sensitivity,
                                                &pan_keyboard_sensitivity, &zoom_sensitivity);
     static bool cursor_locked = false;
@@ -1779,7 +1855,7 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
     camera_controller_input_clear(input);
 
     Vector2 mouse_delta = GetMouseDelta();
-    bool orbiting = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+    bool orbiting       = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
     if (orbiting && !cursor_locked)
     {
         DisableCursor();
@@ -1825,8 +1901,10 @@ static void app_collect_camera_input(CameraControllerInput *input, bool auto_orb
     input->zoom_delta = wheel_delta * zoom_sensitivity;
 
     const float threshold = 0.001f;
-    bool has_manual_orbit = (fabsf(input->yaw_delta) > threshold) || (fabsf(input->pitch_delta) > threshold);
-    bool has_manual_pan = (fabsf(input->pan_right) > threshold) || (fabsf(input->pan_up) > threshold);
+    bool has_manual_orbit =
+        (fabsf(input->yaw_delta) > threshold) || (fabsf(input->pitch_delta) > threshold);
+    bool has_manual_pan =
+        (fabsf(input->pan_right) > threshold) || (fabsf(input->pan_up) > threshold);
     bool has_manual_zoom = fabsf(input->zoom_delta) > threshold;
 
     if (auto_orbit_enabled && !has_manual_orbit && !has_manual_pan && !has_manual_zoom)
@@ -1861,9 +1939,10 @@ static void app_render_scene_basic(const LayoutResult *layout, const CameraContr
         for (size_t index = 0U; index < layout->count; ++index)
         {
             const LayoutNode *node = &layout->nodes[index];
-            const Person *person = node->person;
-            Color color = person && person->is_alive ? (Color){0, 195, 255, 255} : (Color){200, 120, 240, 255};
-            float radius = 0.6f;
+            const Person *person   = node->person;
+            Color color            = person && person->is_alive ? (Color){0, 195, 255, 255}
+                                                                : (Color){200, 120, 240, 255};
+            float radius           = 0.6f;
             if (person == hovered_person && person != selected_person)
             {
                 radius *= 1.08f;
@@ -1896,7 +1975,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     graphics_state_init(&graphics_state);
 
     GraphicsConfig config = graphics_config_default();
-    config.title = "AncestryTree";
+    config.title          = "AncestryTree";
     char error_buffer[256];
     if (!graphics_window_init(&graphics_state, &config, error_buffer, sizeof(error_buffer)))
     {
@@ -1912,7 +1991,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     Settings settings;
     settings_init_defaults(&settings);
     Settings persisted_settings = settings;
-    const char *settings_path = APP_SETTINGS_PATH;
+    const char *settings_path   = APP_SETTINGS_PATH;
     char settings_error[256];
     settings_error[0] = '\0';
     if (settings_try_load(&settings, settings_path, settings_error, sizeof(settings_error)))
@@ -1924,7 +2003,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     {
         if (settings_error[0] != '\0')
         {
-            AT_LOG(logger, AT_LOG_WARN, "Settings load failed (%s); defaults in use.", settings_error);
+            AT_LOG(logger, AT_LOG_WARN, "Settings load failed (%s); defaults in use.",
+                   settings_error);
         }
         else
         {
@@ -1936,20 +2016,20 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     FamilyTree *tree = NULL;
     AppFileState file_state;
     app_file_state_clear(&file_state);
-    bool tree_loaded_from_cli = false;
+    bool tree_loaded_from_cli   = false;
     bool tree_loaded_from_asset = false;
-    bool placeholder_used = false;
+    bool placeholder_used       = false;
 
     char initial_status[256];
     initial_status[0] = '\0';
     char initial_warning[256];
-    initial_warning[0] = '\0';
+    initial_warning[0]   = '\0';
     bool warning_pending = false;
 
     char sample_tree_path[512];
     sample_tree_path[0] = '\0';
-    bool sample_tree_available = app_try_find_asset("assets/example_tree.json", sample_tree_path,
-                                                    sizeof(sample_tree_path));
+    bool sample_tree_available =
+        app_try_find_asset("assets/example_tree.json", sample_tree_path, sizeof(sample_tree_path));
 
     AppLaunchOptions default_options;
     memset(&default_options, 0, sizeof(default_options));
@@ -1958,11 +2038,13 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     AppStartupDecision startup_decision;
     char startup_message[256];
     startup_message[0] = '\0';
-    if (!app_bootstrap_decide_tree_source(effective_options,
-                                          sample_tree_available ? sample_tree_path : NULL, &startup_decision,
-                                          startup_message, sizeof(startup_message)))
+    if (!app_bootstrap_decide_tree_source(
+            effective_options, sample_tree_available ? sample_tree_path : NULL, &startup_decision,
+            startup_message, sizeof(startup_message)))
     {
-        AT_LOG(logger, AT_LOG_ERROR, "%s", (startup_message[0] != '\0') ? startup_message : "Unable to determine startup plan.");
+        AT_LOG(logger, AT_LOG_ERROR, "%s",
+               (startup_message[0] != '\0') ? startup_message
+                                            : "Unable to determine startup plan.");
         graphics_window_shutdown(&graphics_state);
         return 1;
     }
@@ -1975,11 +2057,12 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     {
     case APP_STARTUP_SOURCE_CLI_PATH:
         AT_LOG(logger, AT_LOG_INFO, "Loading tree from %s", startup_decision.resolved_path);
-        tree = persistence_tree_load(startup_decision.resolved_path, error_buffer, sizeof(error_buffer));
+        tree = persistence_tree_load(startup_decision.resolved_path, error_buffer,
+                                     sizeof(error_buffer));
         if (!tree)
         {
-            AT_LOG(logger, AT_LOG_ERROR, "Failed to load tree '%s' (%s).", startup_decision.resolved_path,
-                   error_buffer);
+            AT_LOG(logger, AT_LOG_ERROR, "Failed to load tree '%s' (%s).",
+                   startup_decision.resolved_path, error_buffer);
             (void)snprintf(initial_warning, sizeof(initial_warning),
                            "Startup load failed for '%s'. Placeholder data will be used.",
                            startup_decision.resolved_path);
@@ -1995,16 +2078,18 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         break;
     case APP_STARTUP_SOURCE_SAMPLE_ASSET:
         AT_LOG(logger, AT_LOG_INFO, "Loading sample tree from %s", startup_decision.resolved_path);
-        tree = persistence_tree_load(startup_decision.resolved_path, error_buffer, sizeof(error_buffer));
+        tree = persistence_tree_load(startup_decision.resolved_path, error_buffer,
+                                     sizeof(error_buffer));
         if (!tree)
         {
             AT_LOG(logger, AT_LOG_WARN, "Failed to load sample tree (%s). Using placeholder data.",
                    error_buffer);
             if (!warning_pending)
             {
-                (void)snprintf(initial_warning, sizeof(initial_warning),
-                               "Failed to load bundled sample tree (%s). Placeholder data will be used.",
-                               error_buffer);
+                (void)snprintf(
+                    initial_warning, sizeof(initial_warning),
+                    "Failed to load bundled sample tree (%s). Placeholder data will be used.",
+                    error_buffer);
                 warning_pending = true;
             }
         }
@@ -2021,12 +2106,14 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     case APP_STARTUP_SOURCE_PLACEHOLDER:
         break;
     default:
-        AT_LOG(logger, AT_LOG_WARN, "Unrecognised startup source; falling back to placeholder hologram.");
+        AT_LOG(logger, AT_LOG_WARN,
+               "Unrecognised startup source; falling back to placeholder hologram.");
         break;
     }
 
-    /* Manual QA: exercise `--load`, `--no-sample`, and default launches to ensure the startup planner selects
-     * the expected tree source and reports placeholder fallbacks via the status banner. */
+    /* Manual QA: exercise `--load`, `--no-sample`, and default launches to ensure the startup
+     * planner selects the expected tree source and reports placeholder fallbacks via the status
+     * banner. */
 
     if (!tree)
     {
@@ -2046,7 +2133,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     }
 
     LayoutAlgorithm initial_algorithm = app_select_layout_algorithm(NULL, &settings);
-    LayoutResult layout = layout_calculate_with_algorithm(tree, initial_algorithm);
+    LayoutResult layout               = layout_calculate_with_algorithm(tree, initial_algorithm);
     app_focus_camera_on_layout(&camera_controller, &layout);
 
     RenderState render_state;
@@ -2071,8 +2158,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
     AppState app_state;
     app_state_init(&app_state);
-    if (!app_state_configure(&app_state, &tree, &layout, &interaction_state, &camera_controller, &settings,
-                             &persisted_settings))
+    if (!app_state_configure(&app_state, &tree, &layout, &interaction_state, &camera_controller,
+                             &settings, &persisted_settings))
     {
         AT_LOG(logger, AT_LOG_ERROR, "Unable to configure application state manager.");
         layout_result_destroy(&layout);
@@ -2089,7 +2176,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     expansion_state_reset(&expansion_state);
 
     DetailViewSystem *detail_view = detail_view_create();
-    bool detail_view_ready = detail_view != NULL;
+    bool detail_view_ready        = detail_view != NULL;
     if (!detail_view_ready && logger)
     {
         AT_LOG(logger, AT_LOG_WARN, "Detail view system unavailable; immersive mode disabled.");
@@ -2101,11 +2188,12 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     char auto_save_error[256];
     auto_save_error[0] = '\0';
     PersistenceAutoSaveConfig auto_save_config;
-    auto_save_config.tree_supplier = app_auto_save_tree_supplier;
-    auto_save_config.user_data = &tree;
-    auto_save_config.path = APP_AUTO_SAVE_PATH;
+    auto_save_config.tree_supplier    = app_auto_save_tree_supplier;
+    auto_save_config.user_data        = &tree;
+    auto_save_config.path             = APP_AUTO_SAVE_PATH;
     auto_save_config.interval_seconds = settings.auto_save_interval_seconds;
-    if (persistence_auto_save_init(&auto_save, &auto_save_config, auto_save_error, sizeof(auto_save_error)))
+    if (persistence_auto_save_init(&auto_save, &auto_save_config, auto_save_error,
+                                   sizeof(auto_save_error)))
     {
         auto_save_ready = true;
         persistence_auto_save_set_enabled(&auto_save, settings.auto_save_enabled);
@@ -2116,12 +2204,14 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         AT_LOG(logger, AT_LOG_WARN, "Auto-save unavailable (%s).", auto_save_error);
     }
 
-    app_apply_settings(&settings, &render_state, &camera_controller, auto_save_ready ? &auto_save : NULL);
+    app_apply_settings(&settings, &render_state, &camera_controller,
+                       auto_save_ready ? &auto_save : NULL);
     settings_applied_revision = settings_get_revision(&settings);
 
     UIContext ui;
     bool ui_ready = ui_init(&ui, graphics_state.width, graphics_state.height);
-    AT_LOG_WARN_IF(logger, !ui_ready, "UI overlay unavailable; Nuklear or raylib might be missing.");
+    AT_LOG_WARN_IF(logger, !ui_ready,
+                   "UI overlay unavailable; Nuklear or raylib might be missing.");
 
     if (tree_loaded_from_asset || tree_loaded_from_cli)
     {
@@ -2147,62 +2237,62 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     SetTargetFPS((int)config.target_fps);
 
     EventShortcutPayload shortcut_payload;
-    shortcut_payload.ui = ui_ready ? &ui : NULL;
-    shortcut_payload.file_state = &file_state;
-    shortcut_payload.tree = &tree;
-    shortcut_payload.layout = &layout;
-    shortcut_payload.interaction_state = &interaction_state;
-    shortcut_payload.render_state = &render_state;
-    shortcut_payload.camera = &camera_controller;
-    shortcut_payload.logger = logger;
-    shortcut_payload.settings = &settings;
+    shortcut_payload.ui                 = ui_ready ? &ui : NULL;
+    shortcut_payload.file_state         = &file_state;
+    shortcut_payload.tree               = &tree;
+    shortcut_payload.layout             = &layout;
+    shortcut_payload.interaction_state  = &interaction_state;
+    shortcut_payload.render_state       = &render_state;
+    shortcut_payload.camera             = &camera_controller;
+    shortcut_payload.logger             = logger;
+    shortcut_payload.settings           = &settings;
     shortcut_payload.persisted_settings = &persisted_settings;
-    shortcut_payload.settings_path = settings_path;
-    shortcut_payload.auto_save = auto_save_ready ? &auto_save : NULL;
-    shortcut_payload.settings_revision = &settings_applied_revision;
-    shortcut_payload.app_state = &app_state;
-    shortcut_payload.expansion = &expansion_state;
-    shortcut_payload.detail_view = detail_view_ready ? detail_view : NULL;
+    shortcut_payload.settings_path      = settings_path;
+    shortcut_payload.auto_save          = auto_save_ready ? &auto_save : NULL;
+    shortcut_payload.settings_revision  = &settings_applied_revision;
+    shortcut_payload.app_state          = &app_state;
+    shortcut_payload.expansion          = &expansion_state;
+    shortcut_payload.detail_view        = detail_view_ready ? detail_view : NULL;
 
     EventQueuePayload queue_payload;
-    queue_payload.ui = ui_ready ? &ui : NULL;
-    queue_payload.file_state = &file_state;
-    queue_payload.tree = &tree;
-    queue_payload.layout = &layout;
-    queue_payload.interaction_state = &interaction_state;
-    queue_payload.render_state = &render_state;
-    queue_payload.camera = &camera_controller;
-    queue_payload.logger = logger;
-    queue_payload.settings = &settings;
+    queue_payload.ui                 = ui_ready ? &ui : NULL;
+    queue_payload.file_state         = &file_state;
+    queue_payload.tree               = &tree;
+    queue_payload.layout             = &layout;
+    queue_payload.interaction_state  = &interaction_state;
+    queue_payload.render_state       = &render_state;
+    queue_payload.camera             = &camera_controller;
+    queue_payload.logger             = logger;
+    queue_payload.settings           = &settings;
     queue_payload.persisted_settings = &persisted_settings;
-    queue_payload.settings_path = settings_path;
-    queue_payload.auto_save = auto_save_ready ? &auto_save : NULL;
-    queue_payload.settings_revision = &settings_applied_revision;
-    queue_payload.app_state = &app_state;
+    queue_payload.settings_path      = settings_path;
+    queue_payload.auto_save          = auto_save_ready ? &auto_save : NULL;
+    queue_payload.settings_revision  = &settings_applied_revision;
+    queue_payload.app_state          = &app_state;
 
     EventProcessContext event_context;
-    event_context.graphics_state = &graphics_state;
-    event_context.ui = ui_ready ? &ui : NULL;
-    event_context.interaction_state = &interaction_state;
-    event_context.layout = &layout;
-    event_context.camera = &camera_controller;
-    event_context.render_state = &render_state;
-    event_context.render_ready = render_ready;
-    event_context.render_error_buffer = render_error;
+    event_context.graphics_state        = &graphics_state;
+    event_context.ui                    = ui_ready ? &ui : NULL;
+    event_context.interaction_state     = &interaction_state;
+    event_context.layout                = &layout;
+    event_context.camera                = &camera_controller;
+    event_context.render_state          = &render_state;
+    event_context.render_ready          = render_ready;
+    event_context.render_error_buffer   = render_error;
     event_context.render_error_capacity = sizeof(render_error);
-    event_context.render_target_warned = &render_target_warned;
-    event_context.logger = logger;
-    event_context.shortcut_handler = event_shortcut_handler;
-    event_context.shortcut_user_data = &shortcut_payload;
-    event_context.queue_handler = event_queue_handler;
-    event_context.queue_user_data = &queue_payload;
+    event_context.render_target_warned  = &render_target_warned;
+    event_context.logger                = logger;
+    event_context.shortcut_handler      = event_shortcut_handler;
+    event_context.shortcut_user_data    = &shortcut_payload;
+    event_context.queue_handler         = event_queue_handler;
+    event_context.queue_user_data       = &queue_payload;
 
     bool expansion_was_active = false;
 
     while (!WindowShouldClose())
     {
-        float delta_seconds = GetFrameTime();
-        float wheel_delta = GetMouseWheelMove();
+        float delta_seconds    = GetFrameTime();
+        float wheel_delta      = GetMouseWheelMove();
         bool shift_down_global = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 
         bool detail_view_consumes_wheel = false;
@@ -2217,28 +2307,29 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         }
 
         float camera_wheel_delta = detail_view_consumes_wheel ? 0.0f : wheel_delta;
-        float ui_wheel_delta = detail_view_consumes_wheel ? 0.0f : wheel_delta;
+        float ui_wheel_delta     = detail_view_consumes_wheel ? 0.0f : wheel_delta;
 
         event_context.render_ready = render_ready;
-        event_context.ui = ui_ready ? &ui : NULL;
-        shortcut_payload.ui = event_context.ui;
-        queue_payload.ui = event_context.ui;
+        event_context.ui           = ui_ready ? &ui : NULL;
+        shortcut_payload.ui        = event_context.ui;
+        queue_payload.ui           = event_context.ui;
         shortcut_payload.auto_save = auto_save_ready ? &auto_save : NULL;
-        queue_payload.auto_save = auto_save_ready ? &auto_save : NULL;
+        queue_payload.auto_save    = auto_save_ready ? &auto_save : NULL;
 
         event_process(&event_context, EVENT_PROCESS_PHASE_PRE_FRAME, delta_seconds);
 
         CameraControllerInput controller_input;
-        app_collect_camera_input(&controller_input, ui_auto_orbit_enabled(&ui), &settings, camera_wheel_delta);
+        app_collect_camera_input(&controller_input, ui_auto_orbit_enabled(&ui), &settings,
+                                 camera_wheel_delta);
         camera_controller_update(&camera_controller, &controller_input, delta_seconds);
         app_state_tick(&app_state, delta_seconds);
 
         const ExpansionState *detail_expansion_ptr = NULL;
-        float detail_view_phase = 0.0f;
-        bool detail_view_should_render = false;
+        float detail_view_phase                    = 0.0f;
+        bool detail_view_should_render             = false;
 
         bool expansion_active_before = expansion_is_active(&expansion_state);
-        bool expansion_reversing = expansion_is_reversing(&expansion_state);
+        bool expansion_reversing     = expansion_is_reversing(&expansion_state);
         if (expansion_active_before)
         {
             (void)expansion_update(&expansion_state, delta_seconds, &camera_controller);
@@ -2258,10 +2349,10 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         if (detail_view_ready)
         {
             bool expansion_forward = expansion_active_now && !expansion_reversing;
-            float target_phase = expansion_forward ? 1.0f : 0.0f;
-            detail_view_update(detail_view, delta_seconds, detail_expansion_ptr, target_phase, target_phase,
-                               wheel_delta);
-            detail_view_phase = detail_view_get_detail_phase(detail_view);
+            float target_phase     = expansion_forward ? 1.0f : 0.0f;
+            detail_view_update(detail_view, delta_seconds, detail_expansion_ptr, target_phase,
+                               target_phase, wheel_delta);
+            detail_view_phase         = detail_view_get_detail_phase(detail_view);
             detail_view_should_render = detail_view_phase > 0.01f;
         }
 
@@ -2271,9 +2362,10 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         ClearBackground((Color){8, 10, 18, 255});
 
         const Person *selected_person = interaction_get_selected(&interaction_state);
-        const Person *hovered_person = interaction_get_hovered(&interaction_state);
+        const Person *hovered_person  = interaction_get_hovered(&interaction_state);
 
-        bool rendered = render_scene(&render_state, &layout, &camera_controller, selected_person, hovered_person);
+        bool rendered = render_scene(&render_state, &layout, &camera_controller, selected_person,
+                                     hovered_person);
         if (!rendered)
         {
             app_render_scene_basic(&layout, &camera_controller, selected_person, hovered_person,
@@ -2284,7 +2376,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         {
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
             const Camera3D *detail_camera = camera_controller_get_camera(&camera_controller);
-            detail_view_render(detail_view, detail_expansion_ptr, &render_state.config, detail_camera);
+            detail_view_render(detail_view, detail_expansion_ptr, &render_state.config,
+                               detail_camera);
 #else
             detail_view_render(detail_view, detail_expansion_ptr, &render_state.config, NULL);
 #endif
@@ -2294,14 +2387,16 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
         if (ui_frame_started)
         {
-            ui_draw_overlay(&ui, tree, &layout, &camera_controller, (float)GetFPS(), selected_person, hovered_person,
-                            &render_state.config, &settings, settings_dirty);
+            ui_draw_overlay(&ui, tree, &layout, &camera_controller, (float)GetFPS(),
+                            selected_person, hovered_person, &render_state.config, &settings,
+                            settings_dirty);
             ui_end_frame(&ui);
         }
 
         if (settings_get_revision(&settings) != settings_applied_revision)
         {
-            app_apply_settings(&settings, &render_state, &camera_controller, auto_save_ready ? &auto_save : NULL);
+            app_apply_settings(&settings, &render_state, &camera_controller,
+                               auto_save_ready ? &auto_save : NULL);
             settings_applied_revision = settings_get_revision(&settings);
         }
         EndDrawing();
@@ -2310,7 +2405,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
         if (auto_save_ready)
         {
-            if (!persistence_auto_save_tick(&auto_save, delta_seconds, auto_save_error, sizeof(auto_save_error)))
+            if (!persistence_auto_save_tick(&auto_save, delta_seconds, auto_save_error,
+                                            sizeof(auto_save_error)))
             {
                 AT_LOG(logger, AT_LOG_WARN, "Auto-save tick failed: %s", auto_save_error);
                 auto_save_error[0] = '\0';

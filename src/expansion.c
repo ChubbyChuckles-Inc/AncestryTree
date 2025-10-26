@@ -69,12 +69,12 @@ static void expansion_configure_targets(ExpansionState *state, bool entering_det
 
     if (entering_detail)
     {
-        state->radius_source = state->radius_current;
-        state->radius_target = state->detail_radius;
-        state->inactive_source = state->inactive_current;
-        state->inactive_target = 0.32f;
-        state->fade_source = state->fade_current;
-        state->fade_target = 0.12f;
+        state->radius_source     = state->radius_current;
+        state->radius_target     = state->detail_radius;
+        state->inactive_source   = state->inactive_current;
+        state->inactive_target   = 0.32f;
+        state->fade_source       = state->fade_current;
+        state->fade_target       = 0.12f;
         state->tree_light_source = state->tree_light_current;
         state->tree_light_target = 0.28f;
         state->room_light_source = state->room_light_current;
@@ -82,12 +82,12 @@ static void expansion_configure_targets(ExpansionState *state, bool entering_det
     }
     else
     {
-        state->radius_source = state->radius_current;
-        state->radius_target = state->baseline_radius;
-        state->inactive_source = state->inactive_current;
-        state->inactive_target = 1.0f;
-        state->fade_source = state->fade_current;
-        state->fade_target = 1.0f;
+        state->radius_source     = state->radius_current;
+        state->radius_target     = state->baseline_radius;
+        state->inactive_source   = state->inactive_current;
+        state->inactive_target   = 1.0f;
+        state->fade_source       = state->fade_current;
+        state->fade_target       = 1.0f;
         state->tree_light_source = state->tree_light_current;
         state->tree_light_target = 1.0f;
         state->room_light_source = state->room_light_current;
@@ -101,41 +101,42 @@ void expansion_state_reset(ExpansionState *state)
     {
         return;
     }
-    state->active = false;
-    state->animating = false;
-    state->reversing = false;
-    state->detail_mode = false;
-    state->person = NULL;
-    state->elapsed = 0.0f;
-    state->duration = EXPANSION_DEFAULT_DURATION;
+    state->active           = false;
+    state->animating        = false;
+    state->reversing        = false;
+    state->detail_mode      = false;
+    state->person           = NULL;
+    state->elapsed          = 0.0f;
+    state->duration         = EXPANSION_DEFAULT_DURATION;
     state->progress_current = 0.0f;
-    state->baseline_radius = 1.0f;
-    state->detail_radius = 3.2f;
+    state->baseline_radius  = 1.0f;
+    state->detail_radius    = 3.2f;
     memset(state->origin_position, 0, sizeof(state->origin_position));
     memset(state->detail_position, 0, sizeof(state->detail_position));
     memset(state->current_position, 0, sizeof(state->current_position));
     memset(state->camera_target_start, 0, sizeof(state->camera_target_start));
     memset(state->camera_target_detail, 0, sizeof(state->camera_target_detail));
-    state->camera_radius_start = 0.0f;
+    state->camera_radius_start  = 0.0f;
     state->camera_radius_detail = 0.0f;
-    state->radius_source = state->baseline_radius;
-    state->radius_target = state->baseline_radius;
-    state->radius_current = state->baseline_radius;
-    state->inactive_source = 1.0f;
-    state->inactive_target = 1.0f;
-    state->inactive_current = 1.0f;
-    state->fade_source = 1.0f;
-    state->fade_target = 1.0f;
-    state->fade_current = 1.0f;
-    state->tree_light_source = 1.0f;
-    state->tree_light_target = 1.0f;
-    state->tree_light_current = 1.0f;
-    state->room_light_source = 0.0f;
-    state->room_light_target = 0.0f;
-    state->room_light_current = 0.0f;
+    state->radius_source        = state->baseline_radius;
+    state->radius_target        = state->baseline_radius;
+    state->radius_current       = state->baseline_radius;
+    state->inactive_source      = 1.0f;
+    state->inactive_target      = 1.0f;
+    state->inactive_current     = 1.0f;
+    state->fade_source          = 1.0f;
+    state->fade_target          = 1.0f;
+    state->fade_current         = 1.0f;
+    state->tree_light_source    = 1.0f;
+    state->tree_light_target    = 1.0f;
+    state->tree_light_current   = 1.0f;
+    state->room_light_source    = 0.0f;
+    state->room_light_target    = 0.0f;
+    state->room_light_current   = 0.0f;
 }
 
-static bool find_person_position(const LayoutResult *layout, const struct Person *person, float out_position[3])
+static bool find_person_position(const LayoutResult *layout, const struct Person *person,
+                                 float out_position[3])
 {
     if (!layout || !person || !out_position)
     {
@@ -157,7 +158,7 @@ static bool find_person_position(const LayoutResult *layout, const struct Person
 
 static float expansion_compute_detail_radius(const ExpansionState *state)
 {
-    float base = (state && state->baseline_radius > 0.0f) ? state->baseline_radius : 1.0f;
+    float base   = (state && state->baseline_radius > 0.0f) ? state->baseline_radius : 1.0f;
     float scaled = base * 3.25f;
     if (scaled < base + 1.5f)
     {
@@ -192,26 +193,28 @@ bool expansion_start(ExpansionState *state, const LayoutResult *layout, const st
     vector_copy(state->origin_position, target_position);
     vector_copy(state->current_position, target_position);
 
-    state->active = true;
-    state->animating = true;
-    state->reversing = false;
-    state->detail_mode = false;
-    state->person = person;
-    state->elapsed = 0.0f;
-    state->duration = EXPANSION_DEFAULT_DURATION;
+    state->active           = true;
+    state->animating        = true;
+    state->reversing        = false;
+    state->detail_mode      = false;
+    state->person           = person;
+    state->elapsed          = 0.0f;
+    state->duration         = EXPANSION_DEFAULT_DURATION;
     state->progress_current = 0.0f;
-    state->baseline_radius = state->radius_current > 0.0f ? state->radius_current : state->baseline_radius;
-    state->detail_radius = expansion_compute_detail_radius(state);
+    state->baseline_radius =
+        state->radius_current > 0.0f ? state->radius_current : state->baseline_radius;
+    state->detail_radius  = expansion_compute_detail_radius(state);
     state->radius_current = state->baseline_radius;
     expansion_configure_targets(state, true);
 
     if (camera)
     {
-        const float *viewer_position = camera->view_valid ? camera->view_position : camera->position;
+        const float *viewer_position =
+            camera->view_valid ? camera->view_position : camera->position;
         vector_copy(state->detail_position, viewer_position);
         vector_copy(state->camera_target_start, camera->target);
         vector_copy(state->camera_target_detail, camera->target);
-        state->camera_radius_start = camera->radius;
+        state->camera_radius_start  = camera->radius;
         state->camera_radius_detail = camera->radius;
     }
     else
@@ -219,9 +222,52 @@ bool expansion_start(ExpansionState *state, const LayoutResult *layout, const st
         vector_copy(state->detail_position, target_position);
         vector_copy(state->camera_target_start, target_position);
         vector_copy(state->camera_target_detail, target_position);
-        state->camera_radius_start = state->baseline_radius;
+        state->camera_radius_start  = state->baseline_radius;
         state->camera_radius_detail = state->detail_radius * 0.55f;
     }
+
+    return true;
+}
+
+bool expansion_retarget(ExpansionState *state, const LayoutResult *layout,
+                        const struct Person *person, CameraController *camera)
+{
+    if (!state || !layout || !person || layout->count == 0U)
+    {
+        return false;
+    }
+
+    if (!state->active || state->reversing || !state->detail_mode)
+    {
+        return expansion_start(state, layout, person, camera);
+    }
+
+    float target_position[3];
+    if (!find_person_position(layout, person, target_position))
+    {
+        return false;
+    }
+
+    state->person = person;
+    vector_copy(state->origin_position, target_position);
+    vector_copy(state->camera_target_start, target_position);
+
+    if (!(state->camera_radius_start > 0.0f) && camera)
+    {
+        state->camera_radius_start = camera->config.default_radius;
+    }
+
+    state->elapsed            = state->duration;
+    state->progress_current   = 1.0f;
+    state->animating          = false;
+    state->reversing          = false;
+    state->detail_mode        = true;
+    state->radius_current     = state->radius_target;
+    state->inactive_current   = state->inactive_target;
+    state->fade_current       = state->fade_target;
+    state->tree_light_current = state->tree_light_target;
+    state->room_light_current = state->room_light_target;
+    vector_copy(state->current_position, state->detail_position);
 
     return true;
 }
@@ -245,11 +291,12 @@ bool expansion_update(ExpansionState *state, float delta_seconds, CameraControll
 
     state->elapsed += delta_seconds;
     float duration = fmaxf(state->duration, 0.0001f);
-    float t = clamp01(state->elapsed / duration);
-    float eased = ease_out_cubic(t);
-    float blend = state->reversing ? (1.0f - eased) : eased;
+    float t        = clamp01(state->elapsed / duration);
+    float eased    = ease_out_cubic(t);
+    float blend    = state->reversing ? (1.0f - eased) : eased;
 
-    state->radius_current = state->radius_source + (state->radius_target - state->radius_source) * blend;
+    state->radius_current =
+        state->radius_source + (state->radius_target - state->radius_source) * blend;
     state->inactive_current =
         state->inactive_source + (state->inactive_target - state->inactive_source) * blend;
     state->fade_current = state->fade_source + (state->fade_target - state->fade_source) * blend;
@@ -295,14 +342,14 @@ void expansion_complete(ExpansionState *state)
     {
         return;
     }
-    state->animating = false;
-    state->reversing = false;
-    state->detail_mode = true;
-    state->elapsed = state->duration;
-    state->progress_current = 1.0f;
-    state->radius_current = state->radius_target;
-    state->inactive_current = state->inactive_target;
-    state->fade_current = state->fade_target;
+    state->animating          = false;
+    state->reversing          = false;
+    state->detail_mode        = true;
+    state->elapsed            = state->duration;
+    state->progress_current   = 1.0f;
+    state->radius_current     = state->radius_target;
+    state->inactive_current   = state->inactive_target;
+    state->fade_current       = state->fade_target;
     state->tree_light_current = state->tree_light_target;
     state->room_light_current = state->room_light_target;
     vector_copy(state->current_position, state->detail_position);
@@ -319,11 +366,11 @@ void expansion_reverse(ExpansionState *state, CameraController *camera)
         return;
     }
 
-    state->animating = true;
-    state->reversing = true;
-    state->detail_mode = false;
-    state->elapsed = 0.0f;
-    state->duration = EXPANSION_RETURN_DURATION;
+    state->animating        = true;
+    state->reversing        = true;
+    state->detail_mode      = false;
+    state->elapsed          = 0.0f;
+    state->duration         = EXPANSION_RETURN_DURATION;
     state->progress_current = 1.0f;
     expansion_configure_targets(state, false);
 
@@ -335,15 +382,9 @@ void expansion_reverse(ExpansionState *state, CameraController *camera)
     }
 }
 
-bool expansion_is_active(const ExpansionState *state)
-{
-    return state && state->active;
-}
+bool expansion_is_active(const ExpansionState *state) { return state && state->active; }
 
-bool expansion_is_reversing(const ExpansionState *state)
-{
-    return state && state->reversing;
-}
+bool expansion_is_reversing(const ExpansionState *state) { return state && state->reversing; }
 
 bool expansion_is_in_detail_mode(const ExpansionState *state)
 {
@@ -409,10 +450,10 @@ float expansion_detail_activation(const ExpansionState *state)
     {
         return 0.0f;
     }
-    float progress = clamp01(state->progress_current);
+    float progress   = clamp01(state->progress_current);
     float room_light = clamp01(state->room_light_current);
-    float fade_gain = 1.0f - clamp01(state->fade_current);
-    float combined = (progress * 0.7f) + (room_light * 0.2f) + (fade_gain * 0.1f);
+    float fade_gain  = 1.0f - clamp01(state->fade_current);
+    float combined   = (progress * 0.7f) + (room_light * 0.2f) + (fade_gain * 0.1f);
     return clamp01(combined);
 }
 
@@ -423,7 +464,7 @@ float expansion_timeline_activation(const ExpansionState *state)
         return 0.0f;
     }
     float progress = clamp01(state->progress_current);
-    float delayed = (progress - 0.18f) / 0.82f;
+    float delayed  = (progress - 0.18f) / 0.82f;
     if (delayed < 0.0f)
     {
         delayed = 0.0f;
@@ -432,7 +473,7 @@ float expansion_timeline_activation(const ExpansionState *state)
     {
         delayed = 1.0f;
     }
-    float tree_dim = 1.0f - clamp01(state->tree_light_current);
+    float tree_dim        = 1.0f - clamp01(state->tree_light_current);
     float normalized_tree = tree_dim / 0.72f;
     if (normalized_tree < 0.0f)
     {
@@ -453,7 +494,7 @@ float expansion_panel_activation(const ExpansionState *state)
         return 0.0f;
     }
     float progress = clamp01(state->progress_current);
-    float delayed = (progress - 0.32f) / 0.68f;
+    float delayed  = (progress - 0.32f) / 0.68f;
     if (delayed < 0.0f)
     {
         delayed = 0.0f;
@@ -462,7 +503,7 @@ float expansion_panel_activation(const ExpansionState *state)
     {
         delayed = 1.0f;
     }
-    float fade_gain = 1.0f - clamp01(state->fade_current);
+    float fade_gain       = 1.0f - clamp01(state->fade_current);
     float normalized_fade = fade_gain / 0.88f;
     if (normalized_fade < 0.0f)
     {

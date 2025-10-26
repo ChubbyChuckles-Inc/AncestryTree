@@ -44,8 +44,10 @@ typedef struct ExpansionState
 } ExpansionState;
 
 void expansion_state_reset(ExpansionState *state);
-bool expansion_start(ExpansionState *state, const struct LayoutResult *layout, const struct Person *person,
-                     struct CameraController *camera);
+bool expansion_start(ExpansionState *state, const struct LayoutResult *layout,
+                     const struct Person *person, struct CameraController *camera);
+bool expansion_retarget(ExpansionState *state, const struct LayoutResult *layout,
+                        const struct Person *person, struct CameraController *camera);
 bool expansion_update(ExpansionState *state, float delta_seconds, struct CameraController *camera);
 void expansion_complete(ExpansionState *state);
 void expansion_reverse(ExpansionState *state, struct CameraController *camera);
