@@ -29,7 +29,8 @@ typedef enum UIEventType
     UI_EVENT_REQUEST_EXIT,
     UI_EVENT_SAVE_SETTINGS,
     UI_EVENT_RELOAD_SETTINGS,
-    UI_EVENT_FOCUS_PERSON
+    UI_EVENT_FOCUS_PERSON,
+    UI_EVENT_COMPLETE_ONBOARDING
 } UIEventType;
 
 typedef struct UIEvent
@@ -115,9 +116,10 @@ void ui_cleanup(UIContext *ui);
 void ui_shutdown(UIContext *ui);
 
 bool ui_begin_frame(UIContext *ui, float delta_seconds, float wheel_delta);
-void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout, CameraController *camera,
-                     float fps, const struct Person *selected_person, const struct Person *hovered_person,
-                     struct RenderConfig *render_config, Settings *settings, bool settings_dirty);
+void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
+                     CameraController *camera, float fps, const struct Person *selected_person,
+                     const struct Person *hovered_person, struct RenderConfig *render_config,
+                     Settings *settings, bool settings_dirty);
 void ui_end_frame(UIContext *ui);
 bool ui_is_available(const UIContext *ui);
 bool ui_auto_orbit_enabled(const UIContext *ui);
@@ -131,9 +133,17 @@ bool ui_consume_add_person_request(UIContext *ui, UIAddPersonRequest *out_reques
 bool ui_open_edit_person_panel(UIContext *ui, const struct Person *person);
 bool ui_consume_edit_person_request(UIContext *ui, UIEditPersonRequest *out_request);
 bool ui_pointer_over_ui(const UIContext *ui);
+void ui_onboarding_configure(UIContext *ui, bool active, bool enable_tooltips);
+void ui_onboarding_restart(UIContext *ui, bool enable_tooltips);
+bool ui_onboarding_active(const UIContext *ui);
+void ui_onboarding_mark_completed(UIContext *ui);
+void ui_progress_begin(UIContext *ui, const char *label);
+void ui_progress_update(UIContext *ui, float value);
+void ui_progress_complete(UIContext *ui, bool success, const char *label);
 
 /* Manual validation checklist (requires raylib + Nuklear):
- * 1. Open the "Add Person" panel from the Edit menu and populate name, birth, parents, spouse, and timeline.
+ * 1. Open the "Add Person" panel from the Edit menu and populate name, birth, parents, spouse, and
+ * timeline.
  * 2. Verify Save queues a request and the detail view reflects the new holographic node.
  */
 

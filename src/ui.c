@@ -5,7 +5,9 @@
 #include "camera_controller.h"
 #include "graphics.h"
 #include "layout.h"
+#include "onboarding.h"
 #include "person.h"
+#include "progress_tracker.h"
 #include "render.h"
 #include "search.h"
 #include "settings.h"
@@ -73,6 +75,12 @@ typedef struct UIInternal
     UIAnimatedPanel edit_person_panel_anim;
     UIAnimatedPanel exit_prompt_panel_anim;
     UIAnimatedPanel error_dialog_panel_anim;
+    OnboardingState onboarding;
+    ProgressTracker progress;
+    float progress_target_value;
+    bool progress_target_valid;
+    float progress_spinner_phase;
+    float frame_delta;
     char status_message[128];
     float status_timer;
     char error_dialog_title[64];
@@ -193,6 +201,132 @@ static size_t ui_navigation_register(UIInternal *internal)
     return ui_navigation_register_item(&internal->nav_state);
 }
 
+static OnboardingHint ui_onboarding_hint_for_menu(const char *label)
+{
+    if (!label)
+    {
+        return ONBOARDING_HINT_NONE;
+    }
+    if (strcmp(label, "New Tree") == 0)
+    {
+        return ONBOARDING_HINT_MENU_NEW_TREE;
+    }
+    if (strcmp(label, "Open...") == 0)
+    {
+        return ONBOARDING_HINT_MENU_OPEN_TREE;
+    }
+    if (strcmp(label, "Save") == 0)
+    {
+        return ONBOARDING_HINT_MENU_SAVE;
+    }
+    if (strcmp(label, "Save As...") == 0)
+    {
+        return ONBOARDING_HINT_MENU_SAVE_AS;
+    }
+    if (strcmp(label, "Reset Camera") == 0)
+    {
+        return ONBOARDING_HINT_RESET_CAMERA;
+    }
+    if (strcmp(label, "Focus Roots") == 0)
+    {
+        return ONBOARDING_HINT_FOCUS_ROOTS;
+    }
+    return ONBOARDING_HINT_NONE;
+}
+
+static OnboardingHint ui_onboarding_hint_for_button(const char *label)
+{
+    return ui_onboarding_hint_for_menu(label);
+}
+
+static OnboardingHint ui_onboarding_hint_for_icon(const char *tooltip)
+{
+    if (!tooltip)
+    {
+        return ONBOARDING_HINT_NONE;
+    }
+    if (strcmp(tooltip, "Search / Filter") == 0)
+    {
+        return ONBOARDING_HINT_ICON_SEARCH;
+    }
+    if (strcmp(tooltip, "Add Person") == 0)
+    {
+        return ONBOARDING_HINT_ICON_ADD_PERSON;
+    }
+    if (strcmp(tooltip, "Settings") == 0)
+    {
+        return ONBOARDING_HINT_ICON_SETTINGS;
+    }
+    if (strcmp(tooltip, "Quick Help") == 0)
+    {
+        return ONBOARDING_HINT_ICON_HELP;
+    }
+    return ONBOARDING_HINT_NONE;
+}
+
+static void ui_onboarding_show_hint(UIInternal *internal, struct nk_context *ctx,
+                                    OnboardingHint hint, struct nk_rect bounds)
+{
+    if (!internal || !ctx)
+    {
+        return;
+    }
+    if (hint == ONBOARDING_HINT_NONE)
+    {
+        return;
+    }
+    if (!onboarding_tooltips_enabled(&internal->onboarding))
+    {
+        return;
+    }
+    if (!nk_input_is_mouse_hovering_rect(&ctx->input, bounds))
+    {
+        return;
+    }
+    const char *text = onboarding_hint_text(hint);
+    if (!text || text[0] == '\0')
+    {
+        return;
+    }
+    nk_tooltipf(ctx, "%s", text);
+}
+
+static void ui_draw_progress_spinner(UIInternal *internal, struct nk_context *ctx,
+                                     struct nk_rect area)
+{
+    (void)internal;
+    if (!ctx)
+    {
+        return;
+    }
+    struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+    if (!canvas)
+    {
+        return;
+    }
+    float radius = fminf(area.w, area.h) * 0.5f - 1.0f;
+    if (!(radius > 0.0f))
+    {
+        return;
+    }
+    float center_x   = area.x + area.w * 0.5f;
+    float center_y   = area.y + area.h * 0.5f;
+    const int arcs   = 12;
+    const float step = (float)(2.0 * NK_PI) / (float)arcs;
+    float phase      = internal ? internal->progress_spinner_phase : 0.0f;
+    for (int index = 0; index < arcs; ++index)
+    {
+        float t                = phase + step * (float)index;
+        float intensity        = (float)(arcs - index) / (float)arcs;
+        float outer_x          = center_x + cosf(t) * radius;
+        float outer_y          = center_y + sinf(t) * radius;
+        float inner_x          = center_x + cosf(t) * radius * 0.55f;
+        float inner_y          = center_y + sinf(t) * radius * 0.55f;
+        struct nk_color colour = nk_rgba(96, 200, 255, (nk_byte)(110 + intensity * 120.0f));
+        nk_stroke_line(canvas, inner_x, inner_y, outer_x, outer_y, 2.2f, colour);
+    }
+}
+
 static bool ui_nav_button_label(UIInternal *internal, struct nk_context *ctx, const char *label)
 {
     bool activated        = nk_button_label(ctx, label);
@@ -210,6 +344,7 @@ static bool ui_nav_button_label(UIInternal *internal, struct nk_context *ctx, co
             activated = true;
         }
     }
+    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_button(label), bounds);
     return activated;
 }
 
@@ -268,6 +403,7 @@ static bool ui_nav_button_icon_label(UIInternal *internal, struct nk_context *ct
             nk_stroke_rect(canvas, icon_area, 3.0f, 2.0f, icon_color);
         }
     }
+    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_button(label), bounds);
     return activated;
 }
 
@@ -336,6 +472,8 @@ static bool ui_nav_icon_button(UIInternal *internal, struct nk_context *ctx, UII
         nk_tooltipf(ctx, "%s", tooltip);
     }
 
+    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_icon(tooltip), bounds);
+
     return activated;
 }
 
@@ -353,6 +491,7 @@ static nk_bool ui_nav_menu_item_label(UIInternal *internal, struct nk_context *c
             selected = nk_true;
         }
     }
+    ui_onboarding_show_hint(internal, ctx, ui_onboarding_hint_for_menu(label), bounds);
     return selected;
 }
 
@@ -2957,6 +3096,12 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->icons_ready    = ui_icons_init(&internal->icons);
     internal->ctx.clip.copy  = ui_clipboard_copy;
     internal->ctx.clip.paste = ui_clipboard_paste;
+    onboarding_init(&internal->onboarding, false);
+    progress_tracker_reset(&internal->progress);
+    internal->progress_target_value  = 0.0f;
+    internal->progress_target_valid  = false;
+    internal->progress_spinner_phase = 0.0f;
+    internal->frame_delta            = 0.0f;
 
     ui->impl      = internal;
     ui->available = true;
@@ -3022,7 +3167,29 @@ bool ui_begin_frame(UIContext *ui, float delta_seconds, float wheel_delta)
     {
         return false;
     }
-    ui_process_input(internal, ui, delta_seconds, wheel_delta);
+    float clamped_delta = delta_seconds;
+    if (!(clamped_delta > 0.0f))
+    {
+        clamped_delta = 0.0f;
+    }
+    if (clamped_delta > 0.25f)
+    {
+        clamped_delta = 0.25f;
+    }
+    internal->frame_delta = clamped_delta;
+    onboarding_update(&internal->onboarding, clamped_delta);
+    float progress_value =
+        internal->progress_target_valid ? internal->progress_target_value : -1.0f;
+    progress_tracker_update(&internal->progress, clamped_delta, progress_value);
+    internal->progress_target_valid = false;
+    float spinner_speed             = 6.0f;
+    internal->progress_spinner_phase += clamped_delta * spinner_speed;
+    if (internal->progress_spinner_phase > (float)(2.0 * NK_PI))
+    {
+        internal->progress_spinner_phase =
+            fmodf(internal->progress_spinner_phase, (float)(2.0 * NK_PI));
+    }
+    ui_process_input(internal, ui, clamped_delta, wheel_delta);
     return true;
 #else
     (void)delta_seconds;
@@ -3214,6 +3381,201 @@ static void ui_draw_tree_panel(UIInternal *internal, const FamilyTree *tree,
             internal->auto_orbit = new_auto_orbit;
             ui_internal_set_status(internal,
                                    new_auto_orbit ? "Auto orbit enabled." : "Auto orbit disabled.");
+        }
+    }
+    nk_end(ctx);
+}
+
+static void ui_draw_onboarding_overlay(UIInternal *internal, UIContext *ui)
+{
+    if (!internal || !ui)
+    {
+        return;
+    }
+    if (!onboarding_is_active(&internal->onboarding))
+    {
+        return;
+    }
+    const char *title = onboarding_current_title(&internal->onboarding);
+    const char *body  = onboarding_current_body(&internal->onboarding);
+    if ((!title || title[0] == '\0') && (!body || body[0] == '\0'))
+    {
+        return;
+    }
+
+    struct nk_context *ctx = &internal->ctx;
+    float width            = 320.0f;
+    float height           = 160.0f;
+    float margin           = 24.0f;
+    if (ui->width <= 0)
+    {
+        return;
+    }
+    float screen_width = (float)ui->width;
+    if (margin > screen_width * 0.5f)
+    {
+        margin = screen_width * 0.5f;
+    }
+    if (screen_width < width + margin)
+    {
+        width = screen_width - margin;
+        if (width <= 0.0f)
+        {
+            width  = screen_width;
+            margin = 0.0f;
+        }
+    }
+    float top = 80.0f;
+    if (ui->height > 0)
+    {
+        float max_top = (float)ui->height - height - margin;
+        if (max_top < 12.0f)
+        {
+            max_top = 12.0f;
+        }
+        if (top > max_top)
+        {
+            top = max_top;
+        }
+    }
+    struct nk_rect bounds = nk_rect(screen_width - width - margin, top, width, height);
+    nk_flags flags =
+        NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND | NK_WINDOW_NO_INPUT;
+    if (nk_begin(ctx, "OnboardingOverlay", bounds, flags))
+    {
+        size_t step_index =
+            (size_t)((internal->onboarding.current_step >= 0) ? internal->onboarding.current_step
+                                                              : 0);
+        size_t step_total = onboarding_step_count();
+        if (step_total == 0U)
+        {
+            step_total = 1U;
+        }
+        if (step_index >= step_total)
+        {
+            step_index = step_total - 1U;
+        }
+        char progress_label[48];
+        (void)snprintf(progress_label, sizeof(progress_label), "Step %u of %u",
+                       (unsigned int)(step_index + 1U), (unsigned int)step_total);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label_colored(ctx, progress_label, NK_TEXT_RIGHT, internal->theme.accent_hover);
+
+        if (title && title[0] != '\0')
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            nk_label_colored(ctx, title, NK_TEXT_LEFT, internal->theme.accent_color);
+        }
+
+        if (body && body[0] != '\0')
+        {
+            nk_layout_row_dynamic(ctx, 18.0f, 1);
+            nk_label_wrap(ctx, body);
+        }
+    }
+    nk_end(ctx);
+}
+
+static void ui_draw_progress_overlay(UIInternal *internal, UIContext *ui)
+{
+    if (!internal || !ui)
+    {
+        return;
+    }
+    if (!progress_tracker_is_active(&internal->progress))
+    {
+        return;
+    }
+
+    struct nk_context *ctx = &internal->ctx;
+    float width            = 320.0f;
+    float height           = 120.0f;
+    float margin           = 24.0f;
+    if (ui->width <= 0)
+    {
+        return;
+    }
+    float screen_width = (float)ui->width;
+    if (margin > screen_width * 0.5f)
+    {
+        margin = screen_width * 0.5f;
+    }
+    if (screen_width < width + margin)
+    {
+        width = screen_width - margin;
+        if (width <= 0.0f)
+        {
+            width  = screen_width;
+            margin = 0.0f;
+        }
+    }
+    float screen_height = (ui->height > 0) ? (float)ui->height : (height + margin + 12.0f);
+    float bottom        = screen_height - height - margin;
+    if (bottom < 12.0f)
+    {
+        bottom = 12.0f;
+    }
+    struct nk_rect bounds = nk_rect(screen_width - width - margin, bottom, width, height);
+    nk_flags flags =
+        NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND | NK_WINDOW_NO_INPUT;
+    if (nk_begin(ctx, "ProgressOverlay", bounds, flags))
+    {
+        const char *label = progress_tracker_label(&internal->progress);
+        if (!label || label[0] == '\0')
+        {
+            label = "Processing...";
+        }
+        ProgressPhase phase = progress_tracker_phase(&internal->progress);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label(ctx, "Operation Status", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label_wrap(ctx, label);
+
+        if (phase == PROGRESS_PHASE_SUCCESS)
+        {
+            const char *completion = progress_tracker_completion_label(&internal->progress);
+            if (completion && completion[0] != '\0')
+            {
+                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_label_colored(ctx, completion, NK_TEXT_LEFT, internal->theme.accent_active);
+            }
+        }
+        else if (phase == PROGRESS_PHASE_FAILURE)
+        {
+            const char *failure = progress_tracker_completion_label(&internal->progress);
+            if (failure && failure[0] != '\0')
+            {
+                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_label_colored(ctx, failure, NK_TEXT_LEFT, internal->theme.warning_color);
+            }
+        }
+
+        if (progress_tracker_has_value(&internal->progress))
+        {
+            nk_layout_row_dynamic(ctx, 16.0f, 1);
+            nk_spacing(ctx, 1);
+            struct nk_rect bar_bounds        = nk_widget_bounds(ctx);
+            struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+            if (canvas)
+            {
+                struct nk_color background = nk_rgba(40, 50, 70, 220);
+                struct nk_color foreground = nk_rgba(80, 190, 255, 255);
+                nk_fill_rect(canvas, bar_bounds, 3.0f, background);
+                struct nk_rect fill = bar_bounds;
+                fill.w *= progress_tracker_display_value(&internal->progress);
+                nk_fill_rect(canvas, fill, 3.0f, foreground);
+            }
+        }
+        else
+        {
+            nk_layout_row_dynamic(ctx, 34.0f, 1);
+            nk_label(ctx, " ", NK_TEXT_LEFT);
+            struct nk_rect spinner_bounds = nk_widget_bounds(ctx);
+            spinner_bounds.x += 4.0f;
+            spinner_bounds.y += 4.0f;
+            spinner_bounds.w = 26.0f;
+            spinner_bounds.h = 26.0f;
+            ui_draw_progress_spinner(internal, ctx, spinner_bounds);
         }
     }
     nk_end(ctx);
@@ -4087,6 +4449,8 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     {
         ui_draw_hover_tooltip(internal, ui, hovered_person);
     }
+    ui_draw_onboarding_overlay(internal, ui);
+    ui_draw_progress_overlay(internal, ui);
     ui_navigation_end_frame(&internal->nav_state);
 #else
     (void)tree;
@@ -4389,6 +4753,182 @@ bool ui_pointer_over_ui(const UIContext *ui)
 #else
     (void)ui;
     return false;
+#endif
+}
+
+void ui_onboarding_configure(UIContext *ui, bool active, bool enable_tooltips)
+{
+    if (!ui)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return;
+    }
+    if (active && onboarding_is_completed(&internal->onboarding))
+    {
+        onboarding_reset(&internal->onboarding);
+    }
+    onboarding_set_active(&internal->onboarding, active);
+    onboarding_enable_tooltips(&internal->onboarding, enable_tooltips);
+    if (active)
+    {
+        ui_internal_set_status(internal, "Onboarding started.");
+    }
+#else
+    (void)active;
+    (void)enable_tooltips;
+#endif
+}
+
+void ui_onboarding_restart(UIContext *ui, bool enable_tooltips)
+{
+    if (!ui)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return;
+    }
+    onboarding_reset(&internal->onboarding);
+    onboarding_enable_tooltips(&internal->onboarding, enable_tooltips);
+    onboarding_set_active(&internal->onboarding, true);
+    ui_internal_set_status(internal, "Onboarding restarted.");
+#else
+    (void)enable_tooltips;
+#endif
+}
+
+bool ui_onboarding_active(const UIContext *ui)
+{
+    if (!ui || !ui->available)
+    {
+        return false;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    const UIInternal *internal = ui_internal_const_cast(ui);
+    if (!internal)
+    {
+        return false;
+    }
+    return onboarding_is_active(&internal->onboarding);
+#else
+    return false;
+#endif
+}
+
+void ui_onboarding_mark_completed(UIContext *ui)
+{
+    if (!ui)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return;
+    }
+    bool already_completed = onboarding_is_completed(&internal->onboarding);
+    onboarding_mark_completed(&internal->onboarding);
+    onboarding_set_active(&internal->onboarding, false);
+    onboarding_enable_tooltips(&internal->onboarding, false);
+    ui_internal_set_status(internal, "Onboarding complete.");
+    if (!already_completed)
+    {
+        UIEvent event;
+        event.type      = UI_EVENT_COMPLETE_ONBOARDING;
+        event.param_u32 = 0U;
+        (void)ui_event_queue_push(&ui->event_queue, &event);
+    }
+#endif
+}
+
+void ui_progress_begin(UIContext *ui, const char *label)
+{
+    if (!ui || !ui->available)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return;
+    }
+    progress_tracker_begin(&internal->progress, label);
+    internal->progress_target_value = 0.0f;
+    internal->progress_target_valid = false;
+    ui_internal_set_status(internal, label ? label : "Operation in progress...");
+#else
+    (void)label;
+#endif
+}
+
+void ui_progress_update(UIContext *ui, float value)
+{
+    if (!ui || !ui->available)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return;
+    }
+    if (!progress_tracker_is_active(&internal->progress))
+    {
+        return;
+    }
+    float clamped = value;
+    if (!(clamped >= 0.0f))
+    {
+        clamped = 0.0f;
+    }
+    if (clamped > 1.0f)
+    {
+        clamped = 1.0f;
+    }
+    internal->progress_target_value = clamped;
+    internal->progress_target_valid = true;
+#else
+    (void)value;
+#endif
+}
+
+void ui_progress_complete(UIContext *ui, bool success, const char *label)
+{
+    if (!ui || !ui->available)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return;
+    }
+    progress_tracker_complete(&internal->progress, success, label);
+    internal->progress_target_valid = false;
+    if (label && label[0] != '\0')
+    {
+        ui_internal_set_status(internal, label);
+    }
+    else
+    {
+        ui_internal_set_status(internal,
+                               success ? "Operation completed successfully." : "Operation failed.");
+    }
+#else
+    (void)success;
+    (void)label;
 #endif
 }
 

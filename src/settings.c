@@ -33,6 +33,7 @@ static void settings_set_defaults(Settings *settings)
     settings->language                        = SETTINGS_LANGUAGE_ENGLISH;
     settings->high_contrast_mode              = false;
     settings->ui_font_scale                   = 1.0f;
+    settings->onboarding_completed            = false;
 }
 
 void settings_init_defaults(Settings *settings)
@@ -271,6 +272,14 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
                 settings->ui_font_scale = parsed;
             }
         }
+        else if (settings_strcasecmp(key, "onboarding_completed") == 0)
+        {
+            bool parsed = false;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->onboarding_completed = parsed;
+            }
+        }
     }
 
     fclose(stream);
@@ -324,13 +333,15 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         "color_scheme=%u\n"
         "language=%u\n"
         "high_contrast_mode=%u\n"
-        "ui_font_scale=%.3f\n",
+        "ui_font_scale=%.3f\n"
+        "onboarding_completed=%u\n",
         (unsigned int)settings->graphics_quality, settings->camera_rotation_sensitivity,
         settings->camera_pan_sensitivity, settings->camera_keyboard_pan_sensitivity,
         settings->camera_zoom_sensitivity, settings->auto_save_enabled ? 1U : 0U,
         settings->auto_save_interval_seconds, (unsigned int)settings->default_layout_algorithm,
         (unsigned int)settings->color_scheme, (unsigned int)settings->language,
-        settings->high_contrast_mode ? 1U : 0U, settings->ui_font_scale);
+        settings->high_contrast_mode ? 1U : 0U, settings->ui_font_scale,
+        settings->onboarding_completed ? 1U : 0U);
 
     bool success = written >= 0;
     if (!success && error_buffer && error_buffer_size > 0U)

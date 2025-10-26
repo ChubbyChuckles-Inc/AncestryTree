@@ -659,11 +659,21 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             }
             return;
         }
+        bool progress_started = false;
+        if (ui)
+        {
+            ui_progress_begin(ui, "Loading holographic archive...");
+            progress_started = true;
+        }
         FamilyTree *loaded = persistence_tree_load(chosen_path, error_buffer, sizeof(error_buffer));
         if (!loaded)
         {
             char message[256];
             (void)snprintf(message, sizeof(message), "Load failed: %s", error_buffer);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false, message);
+            }
             app_report_error(ui, logger, message);
             return;
         }
@@ -671,6 +681,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         if (!app_swap_tree(tree, layout, loaded, algorithm))
         {
             family_tree_destroy(loaded);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false, "Unable to replace current tree with loaded data.");
+            }
             app_report_error(ui, logger, "Unable to replace current tree with loaded data.");
             return;
         }
@@ -692,6 +706,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         }
         char status_message[320];
         (void)snprintf(status_message, sizeof(status_message), "Loaded tree from %s", chosen_path);
+        if (progress_started)
+        {
+            ui_progress_complete(ui, true, status_message);
+        }
         app_report_status(ui, logger, status_message);
     }
     break;
@@ -723,11 +741,21 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 return;
             }
             char saved_path[512];
+            bool progress_started = false;
+            if (ui)
+            {
+                ui_progress_begin(ui, "Saving holographic archive...");
+                progress_started = true;
+            }
             if (!app_handle_save_as(*tree, file_state, destination, error_buffer,
                                     sizeof(error_buffer), saved_path, sizeof(saved_path)))
             {
                 char message[320];
                 (void)snprintf(message, sizeof(message), "Save failed: %s", error_buffer);
+                if (progress_started)
+                {
+                    ui_progress_complete(ui, false, message);
+                }
                 app_report_error(ui, logger, message);
                 return;
             }
@@ -737,23 +765,41 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             }
             char message[320];
             (void)snprintf(message, sizeof(message), "Saved tree to %s", saved_path);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, true, message);
+            }
             app_report_status(ui, logger, message);
-        }
-        else if (!app_handle_save(*tree, file_state, error_buffer, sizeof(error_buffer)))
-        {
-            char message[256];
-            (void)snprintf(message, sizeof(message), "Save failed: %s", error_buffer);
-            app_report_error(ui, logger, message);
-            return;
         }
         else
         {
+            bool progress_started = false;
+            if (ui)
+            {
+                ui_progress_begin(ui, "Saving holographic archive...");
+                progress_started = true;
+            }
+            if (!app_handle_save(*tree, file_state, error_buffer, sizeof(error_buffer)))
+            {
+                char message[256];
+                (void)snprintf(message, sizeof(message), "Save failed: %s", error_buffer);
+                if (progress_started)
+                {
+                    ui_progress_complete(ui, false, message);
+                }
+                app_report_error(ui, logger, message);
+                return;
+            }
             if (app_state)
             {
                 app_state_clear_tree_dirty(app_state);
             }
             char message[256];
             (void)snprintf(message, sizeof(message), "Saved tree to %s", file_state->current_path);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, true, message);
+            }
             app_report_status(ui, logger, message);
         }
         break;
