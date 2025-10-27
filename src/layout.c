@@ -45,6 +45,10 @@ static const LayoutNode *layout_lookup_find(const LayoutLookupEntry *entries, si
 static int layout_lookup_compare(const void *lhs, const void *rhs);
 static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Person *const *members,
                                      size_t count, float level);
+static size_t layout_generation_expand_with_spouses(Person **generation, size_t count,
+                                                    size_t capacity, const Person *const *assigned,
+                                                    size_t assigned_count);
+static bool layout_person_should_defer_to_spouse(const Person *person);
 
 static void layout_result_init(LayoutResult *result)
 {
@@ -709,6 +713,87 @@ static const Person *layout_find_generation_spouse(Person *const *generation, si
     return NULL;
 }
 
+static size_t layout_generation_expand_with_spouses(Person **generation, size_t count,
+                                                    size_t capacity, const Person *const *assigned,
+                                                    size_t assigned_count)
+{
+    if (!generation)
+    {
+        return 0U;
+    }
+    size_t result         = count;
+    size_t original_count = count;
+    if (capacity == 0U)
+    {
+        return result;
+    }
+    for (size_t index = 0U; index < original_count; ++index)
+    {
+        Person *person = generation[index];
+        if (!person)
+        {
+            continue;
+        }
+        for (size_t spouse_index = 0U; spouse_index < person->spouses_count; ++spouse_index)
+        {
+            Person *spouse = person->spouses[spouse_index].partner;
+            if (!spouse)
+            {
+                continue;
+            }
+            bool spouse_has_parents =
+                spouse->parents[PERSON_PARENT_FATHER] || spouse->parents[PERSON_PARENT_MOTHER];
+            if (spouse_has_parents)
+            {
+                continue;
+            }
+            if (assigned && layout_list_contains(assigned, assigned_count, spouse))
+            {
+                continue;
+            }
+            bool already_present = false;
+            for (size_t scan = 0U; scan < result; ++scan)
+            {
+                if (generation[scan] == spouse)
+                {
+                    already_present = true;
+                    break;
+                }
+            }
+            if (!already_present && result < capacity)
+            {
+                generation[result++] = spouse;
+            }
+        }
+    }
+    return result;
+}
+
+static bool layout_person_should_defer_to_spouse(const Person *person)
+{
+    if (!person)
+    {
+        return false;
+    }
+    if (person->parents[PERSON_PARENT_FATHER] || person->parents[PERSON_PARENT_MOTHER])
+    {
+        return false;
+    }
+    for (size_t spouse_index = 0U; spouse_index < person->spouses_count; ++spouse_index)
+    {
+        const Person *spouse = person->spouses[spouse_index].partner;
+        if (!spouse)
+        {
+            continue;
+        }
+        if (spouse->parents[PERSON_PARENT_FATHER] || spouse->parents[PERSON_PARENT_MOTHER])
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void layout_generations_free(LayoutGeneration *generations, size_t count)
 {
     if (!generations)
@@ -748,13 +833,16 @@ static bool layout_build_generations(const FamilyTree *tree, LayoutGeneration **
 
     Person **current_generation = (Person **)calloc(tree->person_count, sizeof(Person *));
     Person **next_generation    = (Person **)calloc(tree->person_count, sizeof(Person *));
-    if (!current_generation || !next_generation)
+    Person **assigned_tracker   = (Person **)calloc(tree->person_count, sizeof(Person *));
+    if (!current_generation || !next_generation || !assigned_tracker)
     {
         free(current_generation);
         free(next_generation);
+        free(assigned_tracker);
         free(generations);
         return false;
     }
+    size_t assigned_count = 0U;
 
     size_t root_count = 0U;
     for (size_t index = 0U; index < tree->person_count; ++index)
@@ -766,6 +854,10 @@ static bool layout_build_generations(const FamilyTree *tree, LayoutGeneration **
         }
         if (!person->parents[PERSON_PARENT_FATHER] && !person->parents[PERSON_PARENT_MOTHER])
         {
+            if (layout_person_should_defer_to_spouse(person))
+            {
+                continue;
+            }
             current_generation[root_count++] = person;
         }
     }
@@ -778,6 +870,9 @@ static bool layout_build_generations(const FamilyTree *tree, LayoutGeneration **
     float level             = 0.0f;
     while (root_count > 0U)
     {
+        root_count = layout_generation_expand_with_spouses(
+            current_generation, root_count, tree->person_count,
+            (const Person *const *)assigned_tracker, assigned_count);
         LayoutGeneration *generation = &generations[generation_index];
         generation->count            = root_count;
         generation->level            = level;
@@ -789,9 +884,20 @@ static bool layout_build_generations(const FamilyTree *tree, LayoutGeneration **
                 layout_generations_free(generations, generation_index);
                 free(current_generation);
                 free(next_generation);
+                free(assigned_tracker);
                 return false;
             }
             memcpy(generation->members, current_generation, sizeof(Person *) * root_count);
+            for (size_t member_index = 0U; member_index < root_count; ++member_index)
+            {
+                Person *member = generation->members[member_index];
+                if (!layout_list_contains((const Person *const *)assigned_tracker, assigned_count,
+                                          member) &&
+                    assigned_count < tree->person_count)
+                {
+                    assigned_tracker[assigned_count++] = member;
+                }
+            }
         }
         generation_index += 1U;
         level -= LAYOUT_VERTICAL_SPACING;
@@ -807,6 +913,7 @@ static bool layout_build_generations(const FamilyTree *tree, LayoutGeneration **
 
     free(current_generation);
     free(next_generation);
+    free(assigned_tracker);
     *out_generations = generations;
     *out_count       = generation_index;
     return true;
@@ -1113,14 +1220,17 @@ static LayoutResult layout_calculate_hierarchical_internal(const FamilyTree *tre
     size_t node_index           = 0U;
     Person **current_generation = calloc(tree->person_count, sizeof(Person *));
     Person **next_generation    = calloc(tree->person_count, sizeof(Person *));
-    if (!current_generation || !next_generation)
+    Person **assigned_tracker   = calloc(tree->person_count, sizeof(Person *));
+    if (!current_generation || !next_generation || !assigned_tracker)
     {
         free(scratch);
         free(current_generation);
         free(next_generation);
+        free(assigned_tracker);
         layout_result_destroy(&result);
         return result;
     }
+    size_t assigned_count = 0U;
 
     size_t root_count = 0U;
     for (size_t index = 0U; index < tree->person_count; ++index)
@@ -1132,6 +1242,10 @@ static LayoutResult layout_calculate_hierarchical_internal(const FamilyTree *tre
         }
         if (!person->parents[PERSON_PARENT_FATHER] && !person->parents[PERSON_PARENT_MOTHER])
         {
+            if (layout_person_should_defer_to_spouse(person))
+            {
+                continue;
+            }
             current_generation[root_count++] = person;
         }
     }
@@ -1143,7 +1257,20 @@ static LayoutResult layout_calculate_hierarchical_internal(const FamilyTree *tre
     float level = 0.0f;
     while (root_count > 0U)
     {
+        root_count = layout_generation_expand_with_spouses(
+            current_generation, root_count, tree->person_count,
+            (const Person *const *)assigned_tracker, assigned_count);
         layout_assign_generation(result.nodes, node_index, current_generation, root_count, level);
+        for (size_t member_index = 0U; member_index < root_count; ++member_index)
+        {
+            Person *member = current_generation[member_index];
+            if (!layout_list_contains((const Person *const *)assigned_tracker, assigned_count,
+                                      member) &&
+                assigned_count < tree->person_count)
+            {
+                assigned_tracker[assigned_count++] = member;
+            }
+        }
         node_index += root_count;
         level -= LAYOUT_VERTICAL_SPACING;
 
@@ -1159,6 +1286,7 @@ static LayoutResult layout_calculate_hierarchical_internal(const FamilyTree *tre
     free(scratch);
     free(current_generation);
     free(next_generation);
+    free(assigned_tracker);
     return result;
 }
 

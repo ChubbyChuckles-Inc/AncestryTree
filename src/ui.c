@@ -871,8 +871,8 @@ static void ui_add_person_remove_certificate(UIAddPersonRequest *request, size_t
     }
     for (size_t shift = index + 1U; shift < request->certificate_count; ++shift)
     {
-        memcpy(request->certificate_paths[shift - 1U], request->certificate_paths[shift],
-               sizeof(request->certificate_paths[shift]));
+        memmove(request->certificate_paths[shift - 1U], request->certificate_paths[shift],
+                sizeof(request->certificate_paths[shift]));
     }
     request->certificate_count -= 1U;
 }

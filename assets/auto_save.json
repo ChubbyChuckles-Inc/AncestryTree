@@ -141,7 +141,7 @@
         "is_alive": true
       },
       "parents": [1, 2],
-      "children": [],
+      "children": [7],
       "spouses": [
         {
           "id": 6,
@@ -171,13 +171,38 @@
         "is_alive": true
       },
       "parents": [null, null],
-      "children": [],
+      "children": [7],
       "spouses": [
         {
           "id": 5,
           "marriage_date": "",
           "marriage_location": ""
         }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 7,
+      "name": {
+        "first": "Christian",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1989-01-01",
+        "birth_location": "Schlkeuditz",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [6, 5],
+      "children": [],
+      "spouses": [
       ],
       "certificates": [],
       "profile_image": "",
