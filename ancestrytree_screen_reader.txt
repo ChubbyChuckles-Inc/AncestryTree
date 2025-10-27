@@ -171,3 +171,106 @@ Loading holographic archive...: 90% complete.
 Loading holographic archive...: 100% complete.
 Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\example_tree_2.json
 Relationship analysis refreshed.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\example_tree_2.json
+William King Noel selected, deceased.
+Relationship analysis refreshed.
+Byron Lovelace selected, deceased.
+William King Noel selected, deceased.
+Ada Lovelace selected, deceased with 2 timeline events.
+Selection cleared.
+Select a person before focusing.
+Birth year filter adjusted.
+Select a person before focusing.
+Ada Lovelace selected, deceased with 2 timeline events.
+Byron Lovelace selected, deceased.
+William King Noel selected, deceased.
+Ada Lovelace selected, deceased with 2 timeline events.
+William King Noel selected, deceased.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Avery Prototype selected, alive.
+Edit panel opened for selected hologram.
+Camera reset to default orbit.
+Edit-person request queued.
+Updated profile for Martin Massalsky.
+Add-person request queued.
+Created holographic profile for Jutta Massalsky (ID 2).
+Jutta Massalsky selected, deceased.
+Auto-save interval updated.
+Settings save requested.
+Settings saved.
+Save As request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Selection cleared.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Harald Massalsky (ID 3).
+Harald Massalsky selected, alive.
+Add-person request queued.
+Created holographic profile for Ramona Massalky (ID 4).
+Ramona Massalky selected, alive.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Screen reader narration enabled.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Silvia Massalsky (ID 5).
+Silvia Massalsky selected, alive.
+Add-person request queued.
+Created holographic profile for Thomas Rickert (ID 6).
+Thomas Rickert selected, alive.
+Onboarding paused. Re-enable it from Settings when ready.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Screen reader narration enabled.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Onboarding paused. Re-enable it from Settings when ready.
+Add-person request queued.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
