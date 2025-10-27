@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Contextual startup and settings error advisor now surfaces actionable recovery hints when
+  tree loads or persistence saves fail, with new unit tests covering the messaging helpers.
 - Basic screen reader narration channel wired into status, progress, and selection events with a
   settings toggle, duplicate suppression guard, file logging, and a new test suite covering
   lifecycle and sink behaviour.

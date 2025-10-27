@@ -22,3 +22,35 @@ Selection cleared.
 Byron Lovelace selected, deceased.
 William King Noel selected, deceased.
 Camera reset to default orbit.
+Screen reader narration enabled.
+Avery Prototype selected, alive.
+Camera reset to default orbit.
+Snap the orbit camera back to its default distance and orientation.
+Camera centered on root generation.
+New tree request queued.
+New placeholder tree created.
+Selection cleared.
+Create a fresh holographic tree. Existing data remains cached until you save.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\example_tree.json
+Create a fresh holographic tree. Existing data remains cached until you save.
+Load an existing JSON tree file. We recommend keeping backups before editing.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\example_tree.json
+Create a fresh holographic tree. Existing data remains cached until you save.
+Load an existing JSON tree file. We recommend keeping backups before editing.
+Write changes to the current file. Use Save As to branch into a new snapshot.
+Save As request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\example_tree_2.json
+Search by name, alive status, or birth year range. Select a result to focus it.
+Add a new holographic profile with relationships, documents, and timeline events.
+Tune graphics quality, camera sensitivity, color schemes, and auto-save cadence.
+Open quick help with keyboard shortcuts, troubleshooting tips, and support links.

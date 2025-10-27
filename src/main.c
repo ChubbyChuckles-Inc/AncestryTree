@@ -19,6 +19,7 @@
 #include "settings.h"
 #include "settings_runtime.h"
 #include "shortcuts.h"
+#include "status_messages.h"
 #include "tree.h"
 #include "ui.h"
 
@@ -264,6 +265,32 @@ static bool app_path_relativize_if_under_assets(const char *path, char *output, 
     }
 
     return false;
+}
+
+static void app_append_message(char *buffer, size_t capacity, const char *message)
+{
+    if (!buffer || capacity == 0U || !message || message[0] == '\0')
+    {
+        return;
+    }
+    size_t existing = strlen(buffer);
+    if (existing > 0U && existing + 1U < capacity)
+    {
+        buffer[existing++] = ' ';
+        buffer[existing]   = '\0';
+    }
+    size_t available = (capacity - 1U > existing) ? (capacity - 1U - existing) : 0U;
+    if (available == 0U)
+    {
+        return;
+    }
+    size_t length = strlen(message);
+    if (length > available)
+    {
+        length = available;
+    }
+    memcpy(buffer + existing, message, length);
+    buffer[existing + length] = '\0';
 }
 
 static bool app_prepare_asset_reference(const char *input_path, const char *subdirectory,
@@ -2137,11 +2164,23 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
                                      sizeof(error_buffer));
         if (!tree)
         {
-            AT_LOG(logger, AT_LOG_ERROR, "Failed to load tree '%s' (%s).",
-                   startup_decision.resolved_path, error_buffer);
-            (void)snprintf(initial_warning, sizeof(initial_warning),
-                           "Startup load failed for '%s'. Placeholder data will be used.",
-                           startup_decision.resolved_path);
+            const char *detail = (error_buffer[0] != '\0') ? error_buffer : NULL;
+            char load_hint[256];
+            if (!status_message_format_load_error(startup_decision.resolved_path, detail, load_hint,
+                                                  sizeof(load_hint)))
+            {
+                (void)snprintf(load_hint, sizeof(load_hint),
+                               "Unable to load the family tree from '%s'. %s.",
+                               startup_decision.resolved_path, detail ? detail : "Unknown error");
+            }
+            AT_LOG(logger, AT_LOG_ERROR, "%s Placeholder data will be used.", load_hint);
+            if (!warning_pending)
+            {
+                initial_warning[0] = '\0';
+            }
+            app_append_message(initial_warning, sizeof(initial_warning), load_hint);
+            app_append_message(initial_warning, sizeof(initial_warning),
+                               "Placeholder data will be used.");
             warning_pending = true;
         }
         else
@@ -2158,16 +2197,27 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
                                      sizeof(error_buffer));
         if (!tree)
         {
-            AT_LOG(logger, AT_LOG_WARN, "Failed to load sample tree (%s). Using placeholder data.",
-                   error_buffer);
+            const char *detail = (error_buffer[0] != '\0') ? error_buffer : NULL;
+            char sample_hint[256];
+            if (!status_message_format_load_error(startup_decision.resolved_path, detail,
+                                                  sample_hint, sizeof(sample_hint)))
+            {
+                (void)snprintf(sample_hint, sizeof(sample_hint),
+                               "Unable to load the family tree from '%s'. %s.",
+                               startup_decision.resolved_path, detail ? detail : "Unknown error");
+            }
+            AT_LOG(logger, AT_LOG_WARN, "%s Placeholder data will be used.", sample_hint);
             if (!warning_pending)
             {
-                (void)snprintf(
-                    initial_warning, sizeof(initial_warning),
-                    "Failed to load bundled sample tree (%s). Placeholder data will be used.",
-                    error_buffer);
-                warning_pending = true;
+                initial_warning[0] = '\0';
             }
+            app_append_message(initial_warning, sizeof(initial_warning), sample_hint);
+            app_append_message(initial_warning, sizeof(initial_warning),
+                               "Re-run scripts/setup_dependencies to refresh the bundled example "
+                               "or open a different tree with Ctrl+O.");
+            app_append_message(initial_warning, sizeof(initial_warning),
+                               "Placeholder data will be used.");
+            warning_pending = true;
         }
         else
         {
@@ -2208,8 +2258,24 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         }
         else
         {
-            AT_LOG(logger, AT_LOG_WARN, "Unable to persist settings changes (%s).",
-                   (save_error[0] != '\0') ? save_error : "unknown error");
+            const char *detail = (save_error[0] != '\0') ? save_error : NULL;
+            char save_hint[256];
+            if (!status_message_format_save_error(settings_path, detail, save_hint,
+                                                  sizeof(save_hint)))
+            {
+                (void)snprintf(save_hint, sizeof(save_hint), "Could not save settings to '%s'. %s.",
+                               settings_path, detail ? detail : "Unknown error");
+            }
+            AT_LOG(logger, AT_LOG_WARN, "%s Settings changes will persist only for this session.",
+                   save_hint);
+            if (!warning_pending)
+            {
+                initial_warning[0] = '\0';
+            }
+            app_append_message(initial_warning, sizeof(initial_warning), save_hint);
+            app_append_message(initial_warning, sizeof(initial_warning),
+                               "Settings changes will persist only for this session.");
+            warning_pending = true;
         }
     }
 

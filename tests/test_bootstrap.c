@@ -12,12 +12,13 @@ DECLARE_TEST(test_bootstrap_prefers_cli_path)
     (void)snprintf(options.tree_path, sizeof(options.tree_path), "%s", "custom.json");
 
     AppStartupDecision decision;
-    char message[128];
+    char message[256];
     ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_CLI_PATH);
     ASSERT_STREQ(decision.resolved_path, "custom.json");
     ASSERT_TRUE(strstr(message, "custom.json") != NULL);
+    ASSERT_TRUE(strstr(message, "Ctrl+O") != NULL);
 }
 
 DECLARE_TEST(test_bootstrap_uses_sample_when_available)
@@ -26,7 +27,7 @@ DECLARE_TEST(test_bootstrap_uses_sample_when_available)
     memset(&options, 0, sizeof(options));
 
     AppStartupDecision decision;
-    char message[128];
+    char message[256];
     ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_SAMPLE_ASSET);
@@ -40,11 +41,12 @@ DECLARE_TEST(test_bootstrap_respects_disable_flag)
     options.disable_sample_tree = true;
 
     AppStartupDecision decision;
-    char message[128];
+    char message[256];
     ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_PLACEHOLDER);
     ASSERT_STREQ(decision.resolved_path, "");
+    ASSERT_TRUE(strstr(message, "--no-sample") != NULL);
     ASSERT_TRUE(strstr(message, "placeholder") != NULL);
 }
 
@@ -54,17 +56,18 @@ DECLARE_TEST(test_bootstrap_handles_missing_sample)
     memset(&options, 0, sizeof(options));
 
     AppStartupDecision decision;
-    char message[128];
+    char message[256];
     ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, NULL, true, &decision, message,
                                                  sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_PLACEHOLDER);
+    ASSERT_TRUE(strstr(message, "scripts/setup_dependencies") != NULL);
     ASSERT_TRUE(strstr(message, "placeholder") != NULL);
 }
 
 DECLARE_TEST(test_bootstrap_rejects_null_inputs)
 {
     AppStartupDecision decision;
-    char message[64];
+    char message[256];
     ASSERT_FALSE(
         app_bootstrap_decide_tree_source(NULL, NULL, true, &decision, message, sizeof(message)));
     ASSERT_TRUE(strstr(message, "Invalid") != NULL);
@@ -76,11 +79,12 @@ DECLARE_TEST(test_bootstrap_respects_sample_history_flag)
     memset(&options, 0, sizeof(options));
 
     AppStartupDecision decision;
-    char message[128];
+    char message[256];
     ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", false,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_PLACEHOLDER);
     ASSERT_TRUE(strstr(message, "already showcased") != NULL);
+    ASSERT_TRUE(strstr(message, "has_loaded_sample_tree") != NULL);
 }
 
 void register_bootstrap_tests(TestRegistry *registry)

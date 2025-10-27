@@ -3,7 +3,7 @@
     "version": "1.0",
     "name": "Example Holographic Tree",
     "creation_date": "2025-10-15",
-    "root_ids": [1, 3]
+    "root_ids": [1]
   },
   "persons": [
     {
@@ -70,14 +70,11 @@
       },
       "parents": [1, 3],
       "children": [],
-      "spouses": [
-      ],
+      "spouses": [],
       "certificates": [],
       "profile_image": "",
-      "timeline": [
-      ],
-      "metadata": {
-      }
+      "timeline": [],
+      "metadata": {}
     },
     {
       "id": 3,
@@ -104,10 +101,8 @@
       ],
       "certificates": [],
       "profile_image": "",
-      "timeline": [
-      ],
-      "metadata": {
-      }
+      "timeline": [],
+      "metadata": {}
     }
   ]
 }

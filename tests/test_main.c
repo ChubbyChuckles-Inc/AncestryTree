@@ -43,6 +43,7 @@ void register_life_particles_tests(TestRegistry *registry);
 void register_ui_navigation_tests(TestRegistry *registry);
 void register_onboarding_tests(TestRegistry *registry);
 void register_screen_reader_tests(TestRegistry *registry);
+void register_status_message_tests(TestRegistry *registry);
 
 int main(void)
 {
@@ -85,6 +86,7 @@ int main(void)
     register_search_tests(&registry);
     register_integration_tests(&registry);
     register_error_tests(&registry);
+    register_status_message_tests(&registry);
     register_assets_tests(&registry);
     register_cli_tests(&registry);
     register_file_dialog_tests(&registry);

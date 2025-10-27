@@ -723,9 +723,9 @@ PHASE 10: OPTIMIZATION & POLISH
   [x] Add sample family tree
       [x] Pre-populated example
       [x] Load on first run
-  [ ] Improve error messages
-      [ ] Clear, actionable messages
-      [ ] Suggestions for fixes
+  [x] Improve error messages
+      [x] Clear, actionable messages
+      [x] Suggestions for fixes
   [x] Add progress indicators
       [x] Loading bar for large trees
       [x] Save progress indicator
