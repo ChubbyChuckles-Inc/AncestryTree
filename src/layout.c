@@ -20,6 +20,32 @@
 #define LAYOUT_FORCE_TARGET_DISTANCE 2.5f
 #define LAYOUT_FORCE_LAYER_STRENGTH 0.18f
 
+typedef struct LayoutGeneration
+{
+    Person **members;
+    size_t count;
+    float level;
+} LayoutGeneration;
+
+typedef struct LayoutLookupEntry
+{
+    const Person *person;
+    const LayoutNode *node;
+} LayoutLookupEntry;
+
+static size_t layout_collect_all(Person **scratch, const FamilyTree *tree);
+static bool layout_build_generations(const FamilyTree *tree, LayoutGeneration **out_generations,
+                                     size_t *out_count);
+static void layout_generations_free(LayoutGeneration *generations, size_t count);
+static bool layout_list_contains(const Person *const *list, size_t count, const Person *person);
+static bool layout_impact_add(const Person **buffer, size_t *count, size_t capacity,
+                              const Person *person);
+static const LayoutNode *layout_lookup_find(const LayoutLookupEntry *entries, size_t count,
+                                            const Person *person);
+static int layout_lookup_compare(const void *lhs, const void *rhs);
+static void layout_assign_generation(LayoutNode *nodes, size_t start_index, Person *const *members,
+                                     size_t count, float level);
+
 static void layout_result_init(LayoutResult *result)
 {
     if (!result)
@@ -103,6 +129,11 @@ void layout_cache_init(LayoutCache *cache)
     }
     cache->count      = 0U;
     cache->next_index = 0U;
+    for (size_t algo = 0U; algo < LAYOUT_ALGORITHM_COUNT; ++algo)
+    {
+        cache->last_valid[algo] = false;
+        cache->last_index[algo] = 0U;
+    }
     for (size_t index = 0U; index < LAYOUT_CACHE_MAX_ENTRIES; ++index)
     {
         cache->entries[index].algorithm    = LAYOUT_ALGORITHM_HIERARCHICAL;
@@ -133,6 +164,11 @@ void layout_cache_reset(LayoutCache *cache)
     }
     cache->count      = 0U;
     cache->next_index = 0U;
+    for (size_t algo = 0U; algo < LAYOUT_ALGORITHM_COUNT; ++algo)
+    {
+        cache->last_valid[algo] = false;
+        cache->last_index[algo] = 0U;
+    }
 }
 
 void layout_cache_invalidate(LayoutCache *cache) { layout_cache_reset(cache); }
@@ -254,9 +290,38 @@ static LayoutCacheEntry *layout_cache_store(LayoutCache *cache, LayoutAlgorithm 
 
     layout_result_destroy(&entry->layout);
     layout_result_move(&entry->layout, layout);
-    entry->algorithm = algorithm;
-    entry->signature = signature;
-    entry->valid     = true;
+    entry->algorithm   = algorithm;
+    entry->signature   = signature;
+    entry->valid       = true;
+    size_t entry_index = (size_t)(entry - cache->entries);
+    if (algorithm >= 0 && algorithm < LAYOUT_ALGORITHM_COUNT)
+    {
+        cache->last_valid[algorithm] = true;
+        cache->last_index[algorithm] = entry_index;
+    }
+    return entry;
+}
+
+static LayoutCacheEntry *layout_cache_latest(LayoutCache *cache, LayoutAlgorithm algorithm)
+{
+    if (!cache || algorithm < 0 || algorithm >= LAYOUT_ALGORITHM_COUNT)
+    {
+        return NULL;
+    }
+    if (!cache->last_valid[algorithm])
+    {
+        return NULL;
+    }
+    size_t index = cache->last_index[algorithm];
+    if (index >= LAYOUT_CACHE_MAX_ENTRIES)
+    {
+        return NULL;
+    }
+    LayoutCacheEntry *entry = &cache->entries[index];
+    if (!entry->valid || entry->algorithm != algorithm)
+    {
+        return NULL;
+    }
     return entry;
 }
 
@@ -301,6 +366,255 @@ bool layout_cache_calculate(LayoutCache *cache, const FamilyTree *tree, LayoutAl
     if (!stored)
     {
         layout_result_destroy(&computed);
+        return false;
+    }
+
+    if (!layout_result_copy(out, &stored->layout))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool layout_cache_incremental(LayoutCache *cache, const FamilyTree *tree, LayoutAlgorithm algorithm,
+                              const Person *const *changed, size_t changed_count, LayoutResult *out)
+{
+    if (!out)
+    {
+        return false;
+    }
+    out->nodes = NULL;
+    out->count = 0U;
+
+    if (!tree || tree->person_count == 0U || !changed || changed_count == 0U)
+    {
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+    if (algorithm != LAYOUT_ALGORITHM_HIERARCHICAL)
+    {
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+
+    LayoutCacheEntry *previous = layout_cache_latest(cache, algorithm);
+    if (!previous || !previous->valid || previous->layout.count == 0U)
+    {
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+
+    size_t impact_capacity = tree->person_count * 2U + 8U;
+    const Person **impact  = (const Person **)calloc(impact_capacity, sizeof(const Person *));
+    if (!impact)
+    {
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+    size_t impact_count = 0U;
+    bool success        = true;
+
+    for (size_t change_index = 0U; change_index < changed_count && success; ++change_index)
+    {
+        const Person *person = changed[change_index];
+        if (!layout_impact_add(impact, &impact_count, impact_capacity, person))
+        {
+            success = false;
+            break;
+        }
+        if (!person)
+        {
+            continue;
+        }
+        for (size_t parent_slot = 0U; parent_slot < 2U && success; ++parent_slot)
+        {
+            Person *parent = person->parents[parent_slot];
+            if (!layout_impact_add(impact, &impact_count, impact_capacity, parent))
+            {
+                success = false;
+                break;
+            }
+            if (parent)
+            {
+                for (size_t child_index = 0U; child_index < parent->children_count && success;
+                     ++child_index)
+                {
+                    Person *sibling = parent->children[child_index];
+                    if (!layout_impact_add(impact, &impact_count, impact_capacity, sibling))
+                    {
+                        success = false;
+                    }
+                }
+            }
+        }
+        for (size_t child_index = 0U; child_index < person->children_count && success;
+             ++child_index)
+        {
+            Person *child = person->children[child_index];
+            if (!layout_impact_add(impact, &impact_count, impact_capacity, child))
+            {
+                success = false;
+            }
+        }
+        for (size_t spouse_index = 0U; spouse_index < person->spouses_count && success;
+             ++spouse_index)
+        {
+            Person *partner = person->spouses[spouse_index].partner;
+            if (!layout_impact_add(impact, &impact_count, impact_capacity, partner))
+            {
+                success = false;
+            }
+            if (partner)
+            {
+                for (size_t partner_child = 0U; partner_child < partner->children_count && success;
+                     ++partner_child)
+                {
+                    Person *shared_child = partner->children[partner_child];
+                    if (!layout_impact_add(impact, &impact_count, impact_capacity, shared_child))
+                    {
+                        success = false;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!success)
+    {
+        free(impact);
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+
+    LayoutGeneration *generations = NULL;
+    size_t generation_count       = 0U;
+    if (!layout_build_generations(tree, &generations, &generation_count))
+    {
+        free(impact);
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+
+    LayoutLookupEntry *lookup =
+        (LayoutLookupEntry *)calloc(previous->layout.count, sizeof(LayoutLookupEntry));
+    if (!lookup)
+    {
+        layout_generations_free(generations, generation_count);
+        free(impact);
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+    for (size_t index = 0U; index < previous->layout.count; ++index)
+    {
+        lookup[index].person = previous->layout.nodes[index].person;
+        lookup[index].node   = &previous->layout.nodes[index];
+    }
+    if (previous->layout.count > 1U)
+    {
+        qsort(lookup, previous->layout.count, sizeof(LayoutLookupEntry), layout_lookup_compare);
+    }
+
+    LayoutResult incremental;
+    layout_result_init(&incremental);
+    if (!layout_allocate_nodes(&incremental, tree->person_count))
+    {
+        free(lookup);
+        layout_generations_free(generations, generation_count);
+        free(impact);
+        return layout_cache_calculate(cache, tree, algorithm, out);
+    }
+
+    size_t node_index = 0U;
+    for (size_t gen_index = 0U; gen_index < generation_count; ++gen_index)
+    {
+        LayoutGeneration *generation = &generations[gen_index];
+        if (generation->count == 0U)
+        {
+            continue;
+        }
+
+        bool generation_changed = false;
+        for (size_t member_index = 0U; member_index < generation->count; ++member_index)
+        {
+            if (layout_list_contains(impact, impact_count, generation->members[member_index]))
+            {
+                generation_changed = true;
+                break;
+            }
+        }
+
+        bool reuse_positions = !generation_changed;
+        if (reuse_positions)
+        {
+            for (size_t member_index = 0U; member_index < generation->count; ++member_index)
+            {
+                const LayoutNode *previous_node = layout_lookup_find(
+                    lookup, previous->layout.count, generation->members[member_index]);
+                if (!previous_node)
+                {
+                    reuse_positions = false;
+                    break;
+                }
+            }
+        }
+
+        if (!reuse_positions)
+        {
+            LayoutNode *temp = (LayoutNode *)calloc(generation->count, sizeof(LayoutNode));
+            if (!temp)
+            {
+                layout_result_destroy(&incremental);
+                free(lookup);
+                layout_generations_free(generations, generation_count);
+                free(impact);
+                return layout_cache_calculate(cache, tree, algorithm, out);
+            }
+            layout_assign_generation(temp, 0U, generation->members, generation->count,
+                                     generation->level);
+            for (size_t member_index = 0U; member_index < generation->count; ++member_index)
+            {
+                incremental.nodes[node_index + member_index] = temp[member_index];
+            }
+            free(temp);
+        }
+        else
+        {
+            for (size_t member_index = 0U; member_index < generation->count; ++member_index)
+            {
+                const LayoutNode *previous_node = layout_lookup_find(
+                    lookup, previous->layout.count, generation->members[member_index]);
+                LayoutNode *destination = &incremental.nodes[node_index + member_index];
+                destination->person     = generation->members[member_index];
+                if (previous_node)
+                {
+                    destination->position[0] = previous_node->position[0];
+                    destination->position[1] = previous_node->position[1];
+                    destination->position[2] = previous_node->position[2];
+                }
+                else
+                {
+                    destination->position[0] = 0.0f;
+                    destination->position[1] = generation->level;
+                    destination->position[2] = 0.0f;
+                }
+            }
+        }
+
+        node_index += generation->count;
+    }
+    incremental.count = node_index;
+
+    free(lookup);
+    layout_generations_free(generations, generation_count);
+    free(impact);
+
+    uint64_t signature = layout_tree_signature(tree);
+    if (!cache)
+    {
+        layout_result_destroy(out);
+        out->nodes = incremental.nodes;
+        out->count = incremental.count;
+        return true;
+    }
+
+    LayoutCacheEntry *stored = layout_cache_store(cache, algorithm, signature, &incremental);
+    if (!stored)
+    {
+        layout_result_destroy(&incremental);
         return false;
     }
 
@@ -393,6 +707,175 @@ static const Person *layout_find_generation_spouse(Person *const *generation, si
         }
     }
     return NULL;
+}
+
+static void layout_generations_free(LayoutGeneration *generations, size_t count)
+{
+    if (!generations)
+    {
+        return;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        free(generations[index].members);
+        generations[index].members = NULL;
+        generations[index].count   = 0U;
+        generations[index].level   = 0.0f;
+    }
+    free(generations);
+}
+
+static bool layout_build_generations(const FamilyTree *tree, LayoutGeneration **out_generations,
+                                     size_t *out_count)
+{
+    if (!out_generations || !out_count)
+    {
+        return false;
+    }
+    *out_generations = NULL;
+    *out_count       = 0U;
+    if (!tree || tree->person_count == 0U)
+    {
+        return true;
+    }
+
+    LayoutGeneration *generations =
+        (LayoutGeneration *)calloc(tree->person_count, sizeof(LayoutGeneration));
+    if (!generations)
+    {
+        return false;
+    }
+
+    Person **current_generation = (Person **)calloc(tree->person_count, sizeof(Person *));
+    Person **next_generation    = (Person **)calloc(tree->person_count, sizeof(Person *));
+    if (!current_generation || !next_generation)
+    {
+        free(current_generation);
+        free(next_generation);
+        free(generations);
+        return false;
+    }
+
+    size_t root_count = 0U;
+    for (size_t index = 0U; index < tree->person_count; ++index)
+    {
+        Person *person = tree->persons[index];
+        if (!person)
+        {
+            continue;
+        }
+        if (!person->parents[PERSON_PARENT_FATHER] && !person->parents[PERSON_PARENT_MOTHER])
+        {
+            current_generation[root_count++] = person;
+        }
+    }
+    if (root_count == 0U)
+    {
+        root_count = layout_collect_all(current_generation, tree);
+    }
+
+    size_t generation_index = 0U;
+    float level             = 0.0f;
+    while (root_count > 0U)
+    {
+        LayoutGeneration *generation = &generations[generation_index];
+        generation->count            = root_count;
+        generation->level            = level;
+        if (root_count > 0U)
+        {
+            generation->members = (Person **)calloc(root_count, sizeof(Person *));
+            if (!generation->members)
+            {
+                layout_generations_free(generations, generation_index);
+                free(current_generation);
+                free(next_generation);
+                return false;
+            }
+            memcpy(generation->members, current_generation, sizeof(Person *) * root_count);
+        }
+        generation_index += 1U;
+        level -= LAYOUT_VERTICAL_SPACING;
+
+        size_t next_count =
+            layout_collect_generation(next_generation, tree->person_count,
+                                      (const Person *const *)current_generation, root_count);
+        memset(current_generation, 0, sizeof(Person *) * tree->person_count);
+        memcpy(current_generation, next_generation, sizeof(Person *) * next_count);
+        memset(next_generation, 0, sizeof(Person *) * tree->person_count);
+        root_count = next_count;
+    }
+
+    free(current_generation);
+    free(next_generation);
+    *out_generations = generations;
+    *out_count       = generation_index;
+    return true;
+}
+
+static bool layout_list_contains(const Person *const *list, size_t count, const Person *person)
+{
+    if (!list || !person)
+    {
+        return false;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        if (list[index] == person)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool layout_impact_add(const Person **buffer, size_t *count, size_t capacity,
+                              const Person *person)
+{
+    if (!buffer || !count || !person)
+    {
+        return true;
+    }
+    if (layout_list_contains(buffer, *count, person))
+    {
+        return true;
+    }
+    if (*count >= capacity)
+    {
+        return false;
+    }
+    buffer[*count] = person;
+    *count += 1U;
+    return true;
+}
+
+static int layout_lookup_compare(const void *lhs, const void *rhs)
+{
+    const LayoutLookupEntry *a = (const LayoutLookupEntry *)lhs;
+    const LayoutLookupEntry *b = (const LayoutLookupEntry *)rhs;
+    if (a->person < b->person)
+    {
+        return -1;
+    }
+    if (a->person > b->person)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+static const LayoutNode *layout_lookup_find(const LayoutLookupEntry *entries, size_t count,
+                                            const Person *person)
+{
+    if (!entries || count == 0U || !person)
+    {
+        return NULL;
+    }
+    LayoutLookupEntry key;
+    key.person                      = person;
+    key.node                        = NULL;
+    const LayoutLookupEntry *result = (const LayoutLookupEntry *)bsearch(
+        &key, entries, count, sizeof(LayoutLookupEntry), layout_lookup_compare);
+    return result ? result->node : NULL;
 }
 
 static const LayoutNode *layout_find_node(const LayoutResult *layout, const Person *person)

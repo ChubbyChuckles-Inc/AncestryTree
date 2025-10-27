@@ -16,7 +16,15 @@ typedef enum JsonValueType
 
 typedef struct JsonValue JsonValue;
 
-JsonValue *json_parse(const char *text, char *error_buffer, size_t error_buffer_size, int *error_line, int *error_column);
+typedef struct JsonAllocatorStats
+{
+    size_t total_blocks;
+    size_t block_capacity;
+    size_t free_values;
+} JsonAllocatorStats;
+
+JsonValue *json_parse(const char *text, char *error_buffer, size_t error_buffer_size,
+                      int *error_line, int *error_column);
 void json_value_destroy(JsonValue *value);
 
 JsonValueType json_value_type(const JsonValue *value);
@@ -29,5 +37,8 @@ JsonValue *json_value_object_get(const JsonValue *value, const char *key);
 size_t json_value_object_size(const JsonValue *value);
 const char *json_value_object_key(const JsonValue *value, size_t index);
 JsonValue *json_value_object_value(const JsonValue *value, size_t index);
+
+JsonAllocatorStats json_parser_allocator_stats(void);
+void json_parser_allocator_reset(void);
 
 #endif /* JSON_PARSER_H */

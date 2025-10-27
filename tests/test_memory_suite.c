@@ -1,13 +1,15 @@
-#include "test_framework.h"
 #include "at_memory.h"
-#include "person.h"
-#include "tree.h"
 #include "persistence.h"
+#include "person.h"
+#include "test_framework.h"
 #include "test_persistence_helpers.h"
+#include "tree.h"
 
+#include <stdio.h>
 #include <string.h>
 
-/* Manual check: run scripts/run_memory_checks.(sh|ps1) to review full valgrind/Dr. Memory reports after changes. */
+/* Manual check: run scripts/run_memory_checks.(sh|ps1) to review full valgrind/Dr. Memory reports
+ * after changes. */
 
 TEST(test_family_tree_person_lifecycle_releases_memory)
 {
@@ -54,10 +56,13 @@ TEST(test_persistence_load_destroy_releases_memory)
     const char *asset_path = test_resolve_asset_path("assets/example_tree.json");
     ASSERT_NOT_NULL(asset_path);
 
+    fprintf(stderr, "[debug] loading tree\n");
     FamilyTree *tree = persistence_tree_load(asset_path, error_buffer, sizeof(error_buffer));
     ASSERT_NOT_NULL(tree);
 
+    fprintf(stderr, "[debug] destroying tree\n");
     family_tree_destroy(tree);
+    fprintf(stderr, "[debug] destroyed tree\n");
 
 #if AT_MEMORY_ENABLE_TRACKING
     ASSERT_EQ(at_memory_outstanding_allocations(), 0U);

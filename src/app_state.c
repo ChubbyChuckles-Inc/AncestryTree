@@ -329,8 +329,104 @@ static LayoutAlgorithm app_state_resolve_algorithm_from_settings(const Settings 
                : LAYOUT_ALGORITHM_HIERARCHICAL;
 }
 
+static bool app_state_add_unique_person(Person **buffer, size_t *count, size_t capacity,
+                                        Person *person)
+{
+    if (!buffer || !count || capacity == 0U || !person)
+    {
+        return true;
+    }
+    for (size_t index = 0U; index < *count; ++index)
+    {
+        if (buffer[index] == person)
+        {
+            return true;
+        }
+    }
+    if (*count >= capacity)
+    {
+        return false;
+    }
+    buffer[*count] = person;
+    *count += 1U;
+    return true;
+}
+
+static size_t app_state_collect_layout_neighbourhood(Person *person, Person **buffer,
+                                                     size_t capacity)
+{
+    if (!buffer || capacity == 0U)
+    {
+        return 0U;
+    }
+    size_t count    = 0U;
+    bool overflowed = false;
+
+    if (!app_state_add_unique_person(buffer, &count, capacity, person))
+    {
+        overflowed = true;
+    }
+
+    if (!person)
+    {
+        return overflowed ? 0U : count;
+    }
+
+    for (size_t slot = 0U; slot < 2U; ++slot)
+    {
+        Person *parent = person->parents[slot];
+        if (!app_state_add_unique_person(buffer, &count, capacity, parent))
+        {
+            overflowed = true;
+        }
+        if (parent)
+        {
+            for (size_t child_index = 0U; child_index < parent->children_count; ++child_index)
+            {
+                Person *sibling = parent->children[child_index];
+                if (!app_state_add_unique_person(buffer, &count, capacity, sibling))
+                {
+                    overflowed = true;
+                }
+            }
+        }
+    }
+
+    for (size_t child_index = 0U; child_index < person->children_count; ++child_index)
+    {
+        Person *child = person->children[child_index];
+        if (!app_state_add_unique_person(buffer, &count, capacity, child))
+        {
+            overflowed = true;
+        }
+    }
+
+    for (size_t spouse_index = 0U; spouse_index < person->spouses_count; ++spouse_index)
+    {
+        Person *partner = person->spouses[spouse_index].partner;
+        if (!app_state_add_unique_person(buffer, &count, capacity, partner))
+        {
+            overflowed = true;
+        }
+        if (partner)
+        {
+            for (size_t child_index = 0U; child_index < partner->children_count; ++child_index)
+            {
+                Person *shared_child = partner->children[child_index];
+                if (!app_state_add_unique_person(buffer, &count, capacity, shared_child))
+                {
+                    overflowed = true;
+                }
+            }
+        }
+    }
+
+    return overflowed ? 0U : count;
+}
+
 static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
-                                     bool allow_animation)
+                                     bool allow_animation, Person *const *changed,
+                                     size_t changed_count)
 {
     if (!state || !state->tree || !state->layout)
     {
@@ -349,9 +445,19 @@ static void app_state_refresh_layout(AppState *state, LayoutAlgorithm algorithm,
     }
 
     LayoutResult target;
-    if (!layout_cache_calculate(&state->layout_cache, tree, algorithm, &target))
+    bool have_target = false;
+    if (changed && changed_count > 0U)
     {
-        return;
+        have_target =
+            layout_cache_incremental(&state->layout_cache, tree, algorithm,
+                                     (const Person *const *)changed, changed_count, &target);
+    }
+    if (!have_target)
+    {
+        if (!layout_cache_calculate(&state->layout_cache, tree, algorithm, &target))
+        {
+            return;
+        }
     }
     if (tree->person_count > 0U && (!target.nodes || target.count == 0U))
     {
@@ -424,7 +530,7 @@ void app_state_tick(AppState *state, float delta_seconds)
         LayoutAlgorithm desired = app_state_resolve_algorithm_from_settings(state->settings);
         if (desired != state->active_layout_algorithm)
         {
-            app_state_refresh_layout(state, desired, true);
+            app_state_refresh_layout(state, desired, true, NULL, 0U);
         }
     }
 
@@ -502,7 +608,11 @@ bool app_state_add_person(AppState *state, Person *person, char *error_buffer,
         }
         return false;
     }
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    Person *neighbors[32];
+    size_t neighbor_count = app_state_collect_layout_neighbourhood(
+        person, neighbors, sizeof(neighbors) / sizeof(neighbors[0]));
+    app_state_refresh_layout(state, state->active_layout_algorithm, true,
+                             (neighbor_count > 0U) ? neighbors : NULL, neighbor_count);
     app_state_mark_tree_dirty(state);
     return true;
 }
@@ -824,6 +934,20 @@ bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_bu
         }
         return false;
     }
+    Person *neighbors[32];
+    size_t neighbor_count = app_state_collect_layout_neighbourhood(
+        person, neighbors, sizeof(neighbors) / sizeof(neighbors[0]));
+
+    Person *filtered[32];
+    size_t filtered_count = 0U;
+    for (size_t index = 0U; index < neighbor_count; ++index)
+    {
+        if (neighbors[index] && neighbors[index] != person)
+        {
+            filtered[filtered_count++] = neighbors[index];
+        }
+    }
+
     app_remove_person_relationship_links(*state->tree, person);
     if (!family_tree_remove_person(*state->tree, person_id))
     {
@@ -834,7 +958,8 @@ bool app_state_delete_person(AppState *state, uint32_t person_id, char *error_bu
         }
         return false;
     }
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false,
+                             (filtered_count > 0U) ? filtered : NULL, filtered_count);
     app_state_mark_tree_dirty(state);
     return true;
 }
@@ -982,6 +1107,21 @@ void app_state_clear_tree_dirty(AppState *state)
     state->tree_dirty = false;
 }
 
+void app_state_on_tree_replaced(AppState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    layout_cache_invalidate(&state->layout_cache);
+    layout_result_destroy(&state->layout_transition_start);
+    layout_result_destroy(&state->layout_transition_target);
+    state->layout_transition_active   = false;
+    state->layout_transition_elapsed  = 0.0f;
+    state->layout_transition_duration = 0.0f;
+    state->selected_person            = NULL;
+}
+
 static void app_state_clear_selection_if_matches(AppState *state, const Person *person)
 {
     if (!state)
@@ -1099,7 +1239,7 @@ static bool app_command_add_person_execute(AppCommand *command, AppState *state)
         (void)family_tree_extract_person(*state->tree, self->person->id);
         return false;
     }
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false, NULL, 0U);
     app_state_mark_tree_dirty(state);
     state->selected_person = self->person;
     self->inserted         = true;
@@ -1124,7 +1264,7 @@ static bool app_command_add_person_undo(AppCommand *command, AppState *state)
     }
     self->inserted = false;
     app_state_clear_selection_if_matches(state, self->person);
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false, NULL, 0U);
     return true;
 }
 
@@ -1182,7 +1322,7 @@ static bool app_command_delete_person_execute(AppCommand *command, AppState *sta
     }
     self->inserted = false;
     app_state_clear_selection_if_matches(state, person);
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false, NULL, 0U);
     app_state_mark_tree_dirty(state);
     return true;
 }
@@ -1212,7 +1352,7 @@ static bool app_command_delete_person_undo(AppCommand *command, AppState *state)
     {
         state->selected_person = self->person;
     }
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false, NULL, 0U);
     app_state_mark_tree_dirty(state);
     return true;
 }
@@ -1616,7 +1756,7 @@ static bool app_command_edit_person_execute(AppCommand *command, AppState *state
     }
     self->applied_new_state = true;
     state->selected_person  = person;
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false, NULL, 0U);
     app_state_mark_tree_dirty(state);
     return true;
 }
@@ -1639,7 +1779,7 @@ static bool app_command_edit_person_undo(AppCommand *command, AppState *state)
     }
     self->applied_new_state = false;
     state->selected_person  = person;
-    app_state_refresh_layout(state, state->active_layout_algorithm, false);
+    app_state_refresh_layout(state, state->active_layout_algorithm, false, NULL, 0U);
     app_state_mark_tree_dirty(state);
     return true;
 }

@@ -172,6 +172,7 @@ extern "C"
     bool app_state_is_history_empty(const AppState *state);
     void app_state_mark_tree_dirty(AppState *state);
     void app_state_clear_tree_dirty(AppState *state);
+    void app_state_on_tree_replaced(AppState *state);
 
     AppCommand *app_command_create_add_person(Person *person);
     AppCommand *app_command_create_delete_person(uint32_t person_id);

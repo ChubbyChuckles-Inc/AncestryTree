@@ -24,6 +24,7 @@ void register_detail_content_tests(TestRegistry *registry);
 void register_image_panel_tests(TestRegistry *registry);
 void register_expansion_tests(TestRegistry *registry);
 void register_render_labels_tests(TestRegistry *registry);
+void register_texture_atlas_tests(TestRegistry *registry);
 void register_shortcuts_tests(TestRegistry *registry);
 void register_settings_tests(TestRegistry *registry);
 void register_settings_runtime_tests(TestRegistry *registry);
@@ -72,6 +73,7 @@ int main(void)
     register_path_utils_tests(&registry);
     register_render_tests(&registry);
     register_render_labels_tests(&registry);
+    register_texture_atlas_tests(&registry);
     register_selection_particles_tests(&registry);
     register_life_particles_tests(&registry);
     register_interaction_tests(&registry);

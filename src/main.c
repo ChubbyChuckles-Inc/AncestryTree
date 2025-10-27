@@ -649,12 +649,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         }
         if (app_state)
         {
-            layout_result_destroy(&app_state->layout_transition_start);
-            layout_result_destroy(&app_state->layout_transition_target);
-            app_state->layout_transition_active   = false;
-            app_state->layout_transition_elapsed  = 0.0f;
-            app_state->layout_transition_duration = 0.0f;
-            app_state->active_layout_algorithm    = algorithm;
+            app_state_on_tree_replaced(app_state);
+            app_state->active_layout_algorithm = algorithm;
         }
         app_file_state_clear(file_state);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
@@ -722,12 +718,8 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
         }
         if (app_state)
         {
-            layout_result_destroy(&app_state->layout_transition_start);
-            layout_result_destroy(&app_state->layout_transition_target);
-            app_state->layout_transition_active   = false;
-            app_state->layout_transition_elapsed  = 0.0f;
-            app_state->layout_transition_duration = 0.0f;
-            app_state->active_layout_algorithm    = algorithm;
+            app_state_on_tree_replaced(app_state);
+            app_state->active_layout_algorithm = algorithm;
         }
         app_file_state_set(file_state, chosen_path);
         app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);

@@ -514,7 +514,7 @@ static bool ui_nav_icon_button(UIInternal *internal, struct nk_context *ctx, UII
 
     if (tooltip && tooltip[0] != '\0' && nk_input_is_mouse_hovering_rect(&ctx->input, bounds))
     {
-        nk_tooltipf(ctx, "%s", tooltip);
+        nk_tooltip(ctx, tooltip);
     }
 
     OnboardingHint icon_hint = ui_onboarding_hint_for_icon(tooltip);

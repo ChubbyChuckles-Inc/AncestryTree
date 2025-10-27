@@ -2,7 +2,9 @@
 
 #include "persistence_internal.h"
 
+#include <assert.h>
 #include <ctype.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +37,29 @@ struct JsonValue
     } data;
 };
 
+typedef struct JsonValueHandle
+{
+    JsonValue value;
+    struct JsonValueHandle *next;
+} JsonValueHandle;
+
+typedef struct JsonValuePoolBlock
+{
+    JsonValueHandle *handles;
+    size_t count;
+    struct JsonValuePoolBlock *next;
+} JsonValuePoolBlock;
+
+typedef struct JsonValuePool
+{
+    JsonValueHandle *free_list;
+    JsonValuePoolBlock *blocks;
+    size_t block_size;
+    size_t total_blocks;
+} JsonValuePool;
+
+static JsonValuePool g_json_value_pool = {NULL, NULL, 128U, 0U};
+
 typedef struct StringBuilder
 {
     char *data;
@@ -51,16 +76,16 @@ typedef struct JsonParser
 
 static void string_builder_init(StringBuilder *builder)
 {
-    builder->data = NULL;
-    builder->length = 0U;
+    builder->data     = NULL;
+    builder->length   = 0U;
     builder->capacity = 0U;
 }
 
 static void string_builder_free(StringBuilder *builder)
 {
     free(builder->data);
-    builder->data = NULL;
-    builder->length = 0U;
+    builder->data     = NULL;
+    builder->length   = 0U;
     builder->capacity = 0U;
 }
 
@@ -80,7 +105,7 @@ static bool string_builder_reserve(StringBuilder *builder, size_t additional)
     {
         return false;
     }
-    builder->data = buffer;
+    builder->data     = buffer;
     builder->capacity = new_capacity;
     return true;
 }
@@ -92,7 +117,7 @@ static bool string_builder_append_byte(StringBuilder *builder, unsigned char val
         return false;
     }
     builder->data[builder->length++] = (char)value;
-    builder->data[builder->length] = '\0';
+    builder->data[builder->length]   = '\0';
     return true;
 }
 
@@ -138,10 +163,90 @@ static bool string_builder_append_utf8(StringBuilder *builder, unsigned int code
     return true;
 }
 
-static char parser_peek(const JsonParser *parser)
+static JsonValueHandle *json_value_handle_from_value(JsonValue *value)
 {
-    return parser->cursor[0];
+    if (!value)
+    {
+        return NULL;
+    }
+    return (JsonValueHandle *)((unsigned char *)value - offsetof(JsonValueHandle, value));
 }
+
+static bool json_value_pool_grow(JsonValuePool *pool)
+{
+    if (!pool)
+    {
+        return false;
+    }
+    size_t count = pool->block_size;
+    if (count == 0U)
+    {
+        count = 128U;
+    }
+    JsonValueHandle *handles = (JsonValueHandle *)calloc(count, sizeof(JsonValueHandle));
+    if (!handles)
+    {
+        return false;
+    }
+    JsonValuePoolBlock *block = (JsonValuePoolBlock *)calloc(1U, sizeof(JsonValuePoolBlock));
+    if (!block)
+    {
+        free(handles);
+        return false;
+    }
+    block->handles = handles;
+    block->count   = count;
+    block->next    = pool->blocks;
+    pool->blocks   = block;
+    pool->total_blocks += 1U;
+
+    for (size_t index = 0; index < count; ++index)
+    {
+        handles[index].next = pool->free_list;
+        pool->free_list     = &handles[index];
+    }
+
+    if (pool->block_size < 2048U)
+    {
+        pool->block_size *= 2U;
+    }
+    return true;
+}
+
+static JsonValue *json_pool_acquire(void)
+{
+    JsonValuePool *pool = &g_json_value_pool;
+    if (!pool->free_list)
+    {
+        if (!json_value_pool_grow(pool))
+        {
+            return NULL;
+        }
+    }
+    JsonValueHandle *handle = pool->free_list;
+    pool->free_list         = handle->next;
+    memset(&handle->value, 0, sizeof(handle->value));
+    handle->next = NULL;
+    return &handle->value;
+}
+
+static void json_pool_release(JsonValue *value)
+{
+    if (!value)
+    {
+        return;
+    }
+    JsonValueHandle *handle = json_value_handle_from_value(value);
+    if (!handle)
+    {
+        free(value);
+        return;
+    }
+    handle->next                = g_json_value_pool.free_list;
+    g_json_value_pool.free_list = handle;
+}
+
+static char parser_peek(const JsonParser *parser) { return parser->cursor[0]; }
 
 static char parser_next(JsonParser *parser)
 {
@@ -167,10 +272,12 @@ static void parser_skip_whitespace(JsonParser *parser)
     }
 }
 
-static bool parser_set_error(JsonParser *parser, char *buffer, size_t buffer_size, const char *message)
+static bool parser_set_error(JsonParser *parser, char *buffer, size_t buffer_size,
+                             const char *message)
 {
     char formatted[256];
-    (void)snprintf(formatted, sizeof(formatted), "line %d, column %d: %s", parser->line, parser->column, message);
+    (void)snprintf(formatted, sizeof(formatted), "line %d, column %d: %s", parser->line,
+                   parser->column, message);
     return persistence_set_error_message(buffer, buffer_size, formatted);
 }
 
@@ -191,17 +298,18 @@ static int parse_hex_digit(char ch)
     return -1;
 }
 
-static bool parser_parse_unicode_escape(JsonParser *parser, unsigned int *out_codepoint, char *error_buffer,
-                                        size_t error_buffer_size)
+static bool parser_parse_unicode_escape(JsonParser *parser, unsigned int *out_codepoint,
+                                        char *error_buffer, size_t error_buffer_size)
 {
     unsigned int codepoint = 0U;
     for (int index = 0; index < 4; ++index)
     {
-        char ch = parser_next(parser);
+        char ch   = parser_next(parser);
         int digit = parse_hex_digit(ch);
         if (digit < 0)
         {
-            return parser_set_error(parser, error_buffer, error_buffer_size, "invalid unicode escape");
+            return parser_set_error(parser, error_buffer, error_buffer_size,
+                                    "invalid unicode escape");
         }
         codepoint = (codepoint << 4U) | (unsigned int)digit;
     }
@@ -209,24 +317,27 @@ static bool parser_parse_unicode_escape(JsonParser *parser, unsigned int *out_co
     {
         if (parser_peek(parser) != '\\' || parser->cursor[1] != 'u')
         {
-            return parser_set_error(parser, error_buffer, error_buffer_size, "unterminated surrogate pair");
+            return parser_set_error(parser, error_buffer, error_buffer_size,
+                                    "unterminated surrogate pair");
         }
         parser_next(parser);
         parser_next(parser);
         unsigned int low = 0U;
         for (int index = 0; index < 4; ++index)
         {
-            char ch = parser_next(parser);
+            char ch   = parser_next(parser);
             int digit = parse_hex_digit(ch);
             if (digit < 0)
             {
-                return parser_set_error(parser, error_buffer, error_buffer_size, "invalid unicode escape");
+                return parser_set_error(parser, error_buffer, error_buffer_size,
+                                        "invalid unicode escape");
             }
             low = (low << 4U) | (unsigned int)digit;
         }
         if (low < 0xDC00U || low > 0xDFFFU)
         {
-            return parser_set_error(parser, error_buffer, error_buffer_size, "invalid surrogate pair");
+            return parser_set_error(parser, error_buffer, error_buffer_size,
+                                    "invalid surrogate pair");
         }
         codepoint = 0x10000U + (((codepoint - 0xD800U) << 10U) | (low - 0xDC00U));
     }
@@ -240,7 +351,7 @@ static bool parser_parse_unicode_escape(JsonParser *parser, unsigned int *out_co
 
 static JsonValue *json_value_new(JsonValueType type)
 {
-    JsonValue *value = calloc(1U, sizeof(JsonValue));
+    JsonValue *value = json_pool_acquire();
     if (!value)
     {
         return NULL;
@@ -249,7 +360,8 @@ static JsonValue *json_value_new(JsonValueType type)
     return value;
 }
 
-static JsonValue *parser_parse_string(JsonParser *parser, char *error_buffer, size_t error_buffer_size)
+static JsonValue *parser_parse_string(JsonParser *parser, char *error_buffer,
+                                      size_t error_buffer_size)
 {
     StringBuilder builder;
     string_builder_init(&builder);
@@ -277,7 +389,8 @@ static JsonValue *parser_parse_string(JsonParser *parser, char *error_buffer, si
         if ((unsigned char)ch < 0x20U)
         {
             string_builder_free(&builder);
-            parser_set_error(parser, error_buffer, error_buffer_size, "control character in string");
+            parser_set_error(parser, error_buffer, error_buffer_size,
+                             "control character in string");
             return NULL;
         }
         if (ch == '\\')
@@ -332,7 +445,8 @@ static JsonValue *parser_parse_string(JsonParser *parser, char *error_buffer, si
             case 'u':
             {
                 unsigned int codepoint = 0U;
-                if (!parser_parse_unicode_escape(parser, &codepoint, error_buffer, error_buffer_size) ||
+                if (!parser_parse_unicode_escape(parser, &codepoint, error_buffer,
+                                                 error_buffer_size) ||
                     !string_builder_append_utf8(&builder, codepoint))
                 {
                     string_builder_free(&builder);
@@ -342,7 +456,8 @@ static JsonValue *parser_parse_string(JsonParser *parser, char *error_buffer, si
             }
             default:
                 string_builder_free(&builder);
-                parser_set_error(parser, error_buffer, error_buffer_size, "invalid escape sequence");
+                parser_set_error(parser, error_buffer, error_buffer_size,
+                                 "invalid escape sequence");
                 return NULL;
             }
         }
@@ -360,8 +475,9 @@ static JsonValue *parser_parse_string(JsonParser *parser, char *error_buffer, si
     return NULL;
 }
 
-static JsonValue *parser_parse_literal(JsonParser *parser, const char *literal, JsonValueType type, bool bool_value,
-                                       char *error_buffer, size_t error_buffer_size)
+static JsonValue *parser_parse_literal(JsonParser *parser, const char *literal, JsonValueType type,
+                                       bool bool_value, char *error_buffer,
+                                       size_t error_buffer_size)
 {
     size_t length = strlen(literal);
     for (size_t index = 0; index < length; ++index)
@@ -385,11 +501,12 @@ static JsonValue *parser_parse_literal(JsonParser *parser, const char *literal, 
     return value;
 }
 
-static JsonValue *parser_parse_number(JsonParser *parser, char *error_buffer, size_t error_buffer_size)
+static JsonValue *parser_parse_number(JsonParser *parser, char *error_buffer,
+                                      size_t error_buffer_size)
 {
     const char *start = parser->cursor;
-    char *endptr = NULL;
-    double number = strtod(parser->cursor, &endptr);
+    char *endptr      = NULL;
+    double number     = strtod(parser->cursor, &endptr);
     if (endptr == start)
     {
         parser_set_error(parser, error_buffer, error_buffer_size, "invalid number");
@@ -414,12 +531,12 @@ static bool array_push(JsonArray *array, JsonValue *value)
     if (array->count == array->capacity)
     {
         size_t new_capacity = array->capacity == 0U ? 4U : array->capacity * 2U;
-        JsonValue **items = realloc(array->items, new_capacity * sizeof(JsonValue *));
+        JsonValue **items   = realloc(array->items, new_capacity * sizeof(JsonValue *));
         if (!items)
         {
             return false;
         }
-        array->items = items;
+        array->items    = items;
         array->capacity = new_capacity;
     }
     array->items[array->count++] = value;
@@ -431,7 +548,7 @@ static bool object_put(JsonObject *object, char *key, JsonValue *value)
     if (object->count == object->capacity)
     {
         size_t new_capacity = object->capacity == 0U ? 4U : object->capacity * 2U;
-        char **keys = realloc(object->keys, new_capacity * sizeof(char *));
+        char **keys         = realloc(object->keys, new_capacity * sizeof(char *));
         if (!keys)
         {
             return false;
@@ -442,19 +559,21 @@ static bool object_put(JsonObject *object, char *key, JsonValue *value)
             free(keys);
             return false;
         }
-        object->keys = keys;
-        object->values = values;
+        object->keys     = keys;
+        object->values   = values;
         object->capacity = new_capacity;
     }
-    object->keys[object->count] = key;
+    object->keys[object->count]   = key;
     object->values[object->count] = value;
     object->count++;
     return true;
 }
 
-static JsonValue *parser_parse_value(JsonParser *parser, char *error_buffer, size_t error_buffer_size);
+static JsonValue *parser_parse_value(JsonParser *parser, char *error_buffer,
+                                     size_t error_buffer_size);
 
-static JsonValue *parser_parse_array(JsonParser *parser, char *error_buffer, size_t error_buffer_size)
+static JsonValue *parser_parse_array(JsonParser *parser, char *error_buffer,
+                                     size_t error_buffer_size)
 {
     JsonValue *value = json_value_new(JSON_VALUE_ARRAY);
     if (!value)
@@ -495,14 +614,16 @@ static JsonValue *parser_parse_array(JsonParser *parser, char *error_buffer, siz
             parser_next(parser);
             break;
         }
-        parser_set_error(parser, error_buffer, error_buffer_size, "expected comma or closing bracket");
+        parser_set_error(parser, error_buffer, error_buffer_size,
+                         "expected comma or closing bracket");
         json_value_destroy(value);
         return NULL;
     }
     return value;
 }
 
-static JsonValue *parser_parse_object(JsonParser *parser, char *error_buffer, size_t error_buffer_size)
+static JsonValue *parser_parse_object(JsonParser *parser, char *error_buffer,
+                                      size_t error_buffer_size)
 {
     JsonValue *value = json_value_new(JSON_VALUE_OBJECT);
     if (!value)
@@ -531,7 +652,7 @@ static JsonValue *parser_parse_object(JsonParser *parser, char *error_buffer, si
             return NULL;
         }
         char *key = key_value->data.string;
-        free(key_value);
+        json_pool_release(key_value);
         parser_skip_whitespace(parser);
         if (parser_peek(parser) != ':')
         {
@@ -569,14 +690,16 @@ static JsonValue *parser_parse_object(JsonParser *parser, char *error_buffer, si
             parser_next(parser);
             break;
         }
-        parser_set_error(parser, error_buffer, error_buffer_size, "expected comma or closing brace");
+        parser_set_error(parser, error_buffer, error_buffer_size,
+                         "expected comma or closing brace");
         json_value_destroy(value);
         return NULL;
     }
     return value;
 }
 
-static JsonValue *parser_parse_value(JsonParser *parser, char *error_buffer, size_t error_buffer_size)
+static JsonValue *parser_parse_value(JsonParser *parser, char *error_buffer,
+                                     size_t error_buffer_size)
 {
     parser_skip_whitespace(parser);
     char ch = parser_peek(parser);
@@ -594,15 +717,18 @@ static JsonValue *parser_parse_value(JsonParser *parser, char *error_buffer, siz
     }
     if (ch == 't')
     {
-        return parser_parse_literal(parser, "true", JSON_VALUE_BOOL, true, error_buffer, error_buffer_size);
+        return parser_parse_literal(parser, "true", JSON_VALUE_BOOL, true, error_buffer,
+                                    error_buffer_size);
     }
     if (ch == 'f')
     {
-        return parser_parse_literal(parser, "false", JSON_VALUE_BOOL, false, error_buffer, error_buffer_size);
+        return parser_parse_literal(parser, "false", JSON_VALUE_BOOL, false, error_buffer,
+                                    error_buffer_size);
     }
     if (ch == 'n')
     {
-        return parser_parse_literal(parser, "null", JSON_VALUE_NULL, false, error_buffer, error_buffer_size);
+        return parser_parse_literal(parser, "null", JSON_VALUE_NULL, false, error_buffer,
+                                    error_buffer_size);
     }
     if (ch == '-' || ch == '+' || isdigit((unsigned char)ch))
     {
@@ -612,7 +738,8 @@ static JsonValue *parser_parse_value(JsonParser *parser, char *error_buffer, siz
     return NULL;
 }
 
-JsonValue *json_parse(const char *text, char *error_buffer, size_t error_buffer_size, int *error_line, int *error_column)
+JsonValue *json_parse(const char *text, char *error_buffer, size_t error_buffer_size,
+                      int *error_line, int *error_column)
 {
     if (!text)
     {
@@ -620,9 +747,9 @@ JsonValue *json_parse(const char *text, char *error_buffer, size_t error_buffer_
         return NULL;
     }
     JsonParser parser;
-    parser.cursor = text;
-    parser.line = 1;
-    parser.column = 1;
+    parser.cursor   = text;
+    parser.line     = 1;
+    parser.column   = 1;
     JsonValue *root = parser_parse_value(&parser, error_buffer, error_buffer_size);
     if (!root)
     {
@@ -692,7 +819,46 @@ void json_value_destroy(JsonValue *value)
     default:
         break;
     }
-    free(value);
+    json_pool_release(value);
+}
+
+JsonAllocatorStats json_parser_allocator_stats(void)
+{
+    JsonAllocatorStats stats  = {0};
+    const JsonValuePool *pool = &g_json_value_pool;
+    stats.total_blocks        = pool->total_blocks;
+
+    size_t capacity = 0;
+    for (const JsonValuePoolBlock *block = pool->blocks; block; block = block->next)
+    {
+        capacity += block->count;
+    }
+    stats.block_capacity = capacity;
+
+    size_t free_count = 0;
+    for (const JsonValueHandle *handle = pool->free_list; handle; handle = handle->next)
+    {
+        free_count += 1U;
+    }
+    stats.free_values = free_count;
+    return stats;
+}
+
+void json_parser_allocator_reset(void)
+{
+    JsonValuePool *pool       = &g_json_value_pool;
+    JsonValuePoolBlock *block = pool->blocks;
+    while (block)
+    {
+        JsonValuePoolBlock *next = block->next;
+        free(block->handles);
+        free(block);
+        block = next;
+    }
+    pool->blocks       = NULL;
+    pool->free_list    = NULL;
+    pool->total_blocks = 0U;
+    pool->block_size   = 128U;
 }
 
 JsonValueType json_value_type(const JsonValue *value)

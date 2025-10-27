@@ -1,5 +1,7 @@
 #include "ui_icons.h"
 
+#include "texture_atlas.h"
+
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
@@ -477,9 +479,7 @@ bool ui_icons_init(UIIconLibrary *library)
         library->density[icon] = density;
     }
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-    Image atlas =
-        GenImageColor(UI_ICON_DIMENSION * UI_ICON_COUNT, UI_ICON_DIMENSION, (Color){0, 0, 0, 0});
-    if (!atlas.data)
+    if (!texture_atlas_init(&library->atlas, UI_ICON_DIMENSION * 6, UI_ICON_DIMENSION * 6, 1))
     {
         library->ready = false;
         return false;
@@ -488,6 +488,13 @@ bool ui_icons_init(UIIconLibrary *library)
     for (int icon = 0; icon < UI_ICON_COUNT; ++icon)
     {
         ui_icon_generate((UIIconType)icon, buffer);
+        Image icon_image = GenImageColor(UI_ICON_DIMENSION, UI_ICON_DIMENSION, (Color){0, 0, 0, 0});
+        if (!icon_image.data)
+        {
+            texture_atlas_shutdown(&library->atlas);
+            library->ready = false;
+            return false;
+        }
         for (int y = 0; y < UI_ICON_DIMENSION; ++y)
         {
             for (int x = 0; x < UI_ICON_DIMENSION; ++x)
@@ -503,30 +510,39 @@ bool ui_icons_init(UIIconLibrary *library)
                 }
                 unsigned char alpha = (unsigned char)(value * 255.0f);
                 Color pixel         = {255, 255, 255, alpha};
-                ImageDrawPixel(&atlas, icon * UI_ICON_DIMENSION + x, y, pixel);
+                ImageDrawPixel(&icon_image, x, y, pixel);
             }
         }
+        TextureAtlasRegion region;
+        if (!texture_atlas_pack_image(&library->atlas, &icon_image, &region))
+        {
+            UnloadImage(icon_image);
+            texture_atlas_shutdown(&library->atlas);
+            library->ready = false;
+            return false;
+        }
+        library->regions[icon] = region;
+        UnloadImage(icon_image);
     }
-    Texture2D texture = LoadTextureFromImage(atlas);
-    UnloadImage(atlas);
-    if (texture.id == 0)
+    if (!texture_atlas_finalize(&library->atlas))
     {
+        texture_atlas_shutdown(&library->atlas);
         library->ready = false;
         return false;
     }
-    SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
-    library->atlas = texture;
+
+    Texture2D texture = texture_atlas_texture(&library->atlas);
     for (int icon = 0; icon < UI_ICON_COUNT; ++icon)
     {
         struct nk_image image;
         memset(&image, 0, sizeof(image));
-        image.handle.ptr      = &library->atlas;
-        image.w               = (unsigned short)library->atlas.width;
-        image.h               = (unsigned short)library->atlas.height;
-        image.region[0]       = (unsigned short)(icon * UI_ICON_DIMENSION);
-        image.region[1]       = 0;
-        image.region[2]       = (unsigned short)UI_ICON_DIMENSION;
-        image.region[3]       = (unsigned short)UI_ICON_DIMENSION;
+        image.handle.ptr      = (void *)&library->atlas.texture;
+        image.w               = (unsigned short)texture.width;
+        image.h               = (unsigned short)texture.height;
+        image.region[0]       = (unsigned short)library->regions[icon].x;
+        image.region[1]       = (unsigned short)library->regions[icon].y;
+        image.region[2]       = (unsigned short)library->regions[icon].width;
+        image.region[3]       = (unsigned short)library->regions[icon].height;
         library->glyphs[icon] = image;
     }
     library->ready = true;
@@ -543,11 +559,7 @@ void ui_icons_shutdown(UIIconLibrary *library)
         return;
     }
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-    if (library->ready && library->atlas.id != 0)
-    {
-        UnloadTexture(library->atlas);
-        library->atlas.id = 0;
-    }
+    texture_atlas_shutdown(&library->atlas);
 #endif
     library->ready = false;
 }

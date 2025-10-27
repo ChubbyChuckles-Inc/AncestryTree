@@ -7,6 +7,10 @@
 #include <raylib.h>
 #endif
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+#include "texture_atlas.h"
+#endif
+
 #if defined(ANCESTRYTREE_HAVE_NUKLEAR)
 #include "external/nuklear.h"
 #include "ui_nuklear_config.h"
@@ -37,7 +41,8 @@ typedef struct UIIconLibrary
     int dimension;
     bool ready;
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
-    Texture2D atlas;
+    TextureAtlas atlas;
+    TextureAtlasRegion regions[UI_ICON_COUNT];
     struct nk_image glyphs[UI_ICON_COUNT];
 #endif
 } UIIconLibrary;

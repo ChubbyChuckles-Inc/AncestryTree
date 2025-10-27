@@ -6,6 +6,7 @@
 #include "at_memory.h"
 #include "at_string.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,8 +40,7 @@ static bool assign_string(char **target, const char *value)
 static bool ctx_set_error(LoadContext *ctx, const char *message)
 {
     return persistence_set_error_message(ctx ? ctx->error_buffer : NULL,
-                                         ctx ? ctx->error_buffer_size : 0U,
-                                         message);
+                                         ctx ? ctx->error_buffer_size : 0U, message);
 }
 
 static bool validate_string_field(const char *value, const char *field, LoadContext *ctx)
@@ -67,12 +67,14 @@ static bool load_person_dates(Person *person, const JsonValue *dates, LoadContex
     {
         return false;
     }
-    const char *birth_location = json_value_get_string(json_value_object_get(dates, "birth_location"));
+    const char *birth_location =
+        json_value_get_string(json_value_object_get(dates, "birth_location"));
     if (birth_location && !persistence_utf8_validate(birth_location))
     {
         return ctx_set_error(ctx, "birth location contains invalid UTF-8");
     }
-    if (!person_set_birth(person, birth_date, birth_location && birth_location[0] != '\0' ? birth_location : NULL))
+    if (!person_set_birth(person, birth_date,
+                          birth_location && birth_location[0] != '\0' ? birth_location : NULL))
     {
         return ctx_set_error(ctx, "failed to assign birth location");
     }
@@ -84,7 +86,8 @@ static bool load_person_dates(Person *person, const JsonValue *dates, LoadContex
         {
             return ctx_set_error(ctx, "death date contains invalid UTF-8");
         }
-        const char *death_location = json_value_get_string(json_value_object_get(dates, "death_location"));
+        const char *death_location =
+            json_value_get_string(json_value_object_get(dates, "death_location"));
         if (death_location && !persistence_utf8_validate(death_location))
         {
             return ctx_set_error(ctx, "death location contains invalid UTF-8");
@@ -106,10 +109,11 @@ static bool load_person_dates(Person *person, const JsonValue *dates, LoadContex
 
 static bool load_person_name(Person *person, const JsonValue *name_object, LoadContext *ctx)
 {
-    const char *first = json_value_get_string(json_value_object_get(name_object, "first"));
-    const char *last = json_value_get_string(json_value_object_get(name_object, "last"));
+    const char *first  = json_value_get_string(json_value_object_get(name_object, "first"));
+    const char *last   = json_value_get_string(json_value_object_get(name_object, "last"));
     const char *middle = json_value_get_string(json_value_object_get(name_object, "middle"));
-    if (!validate_string_field(first, "first name", ctx) || !validate_string_field(last, "last name", ctx))
+    if (!validate_string_field(first, "first name", ctx) ||
+        !validate_string_field(last, "last name", ctx))
     {
         return false;
     }
@@ -137,7 +141,7 @@ static bool load_person_metadata(Person *person, const JsonValue *metadata, Load
     size_t count = json_value_object_size(metadata);
     for (size_t index = 0; index < count; ++index)
     {
-        const char *key = json_value_object_key(metadata, index);
+        const char *key  = json_value_object_key(metadata, index);
         JsonValue *value = json_value_object_value(metadata, index);
         if (!key || !value || json_value_type(value) != JSON_VALUE_STRING)
         {
@@ -171,17 +175,19 @@ static bool load_person_timeline(Person *person, const JsonValue *timeline_array
             return ctx_set_error(ctx, "timeline entry must be object");
         }
         const char *type_string = json_value_get_string(json_value_object_get(entry_value, "type"));
-        const char *date = json_value_get_string(json_value_object_get(entry_value, "date"));
-        const char *description = json_value_get_string(json_value_object_get(entry_value, "description"));
-        const char *location = json_value_get_string(json_value_object_get(entry_value, "location"));
+        const char *date        = json_value_get_string(json_value_object_get(entry_value, "date"));
+        const char *description =
+            json_value_get_string(json_value_object_get(entry_value, "description"));
+        const char *location =
+            json_value_get_string(json_value_object_get(entry_value, "location"));
         if (!validate_string_field(type_string, "timeline type", ctx) ||
             !validate_string_field(date, "timeline date", ctx) ||
             !validate_string_field(description, "timeline description", ctx))
         {
             return false;
         }
-        if ((location && !persistence_utf8_validate(location)) || !persistence_utf8_validate(date) ||
-            !persistence_utf8_validate(description))
+        if ((location && !persistence_utf8_validate(location)) ||
+            !persistence_utf8_validate(date) || !persistence_utf8_validate(description))
         {
             return ctx_set_error(ctx, "timeline entry contains invalid UTF-8");
         }
@@ -199,7 +205,8 @@ static bool load_person_timeline(Person *person, const JsonValue *timeline_array
         {
             entry.type = TIMELINE_EVENT_DEATH;
         }
-        if (!timeline_entry_set_date(&entry, date) || !timeline_entry_set_description(&entry, description) ||
+        if (!timeline_entry_set_date(&entry, date) ||
+            !timeline_entry_set_description(&entry, description) ||
             !timeline_entry_set_location(&entry, location))
         {
             timeline_entry_reset(&entry);
@@ -211,7 +218,8 @@ static bool load_person_timeline(Person *person, const JsonValue *timeline_array
             size_t media_count = json_value_array_size(media_array);
             for (size_t media_index = 0; media_index < media_count; ++media_index)
             {
-                const char *media_path = json_value_get_string(json_value_array_get(media_array, media_index));
+                const char *media_path =
+                    json_value_get_string(json_value_array_get(media_array, media_index));
                 if (!media_path || !persistence_utf8_validate(media_path) ||
                     !timeline_entry_add_media(&entry, media_path))
                 {
@@ -220,7 +228,8 @@ static bool load_person_timeline(Person *person, const JsonValue *timeline_array
                 }
             }
         }
-        if (!timeline_entry_validate(&entry, NULL, 0U) || !person_add_timeline_entry(person, &entry))
+        if (!timeline_entry_validate(&entry, NULL, 0U) ||
+            !person_add_timeline_entry(person, &entry))
         {
             timeline_entry_reset(&entry);
             return ctx_set_error(ctx, "failed to append timeline entry");
@@ -230,8 +239,8 @@ static bool load_person_timeline(Person *person, const JsonValue *timeline_array
     return true;
 }
 
-static bool populate_person_relationships(const JsonValue *person_object, Person *person, FamilyTree *tree,
-                                          LoadContext *ctx)
+static bool populate_person_relationships(const JsonValue *person_object, Person *person,
+                                          FamilyTree *tree, LoadContext *ctx)
 {
     const JsonValue *children_array = json_value_object_get(person_object, "children");
     if (children_array && json_value_type(children_array) == JSON_VALUE_ARRAY)
@@ -240,7 +249,7 @@ static bool populate_person_relationships(const JsonValue *person_object, Person
         for (size_t index = 0; index < count; ++index)
         {
             const JsonValue *child_value = json_value_array_get(children_array, index);
-            double child_id = 0.0;
+            double child_id              = 0.0;
             if (!child_value || !json_value_get_number(child_value, &child_id))
             {
                 return ctx_set_error(ctx, "child ID must be numeric");
@@ -307,8 +316,10 @@ static bool populate_person_relationships(const JsonValue *person_object, Person
             {
                 return ctx_set_error(ctx, "invalid spouse reference");
             }
-            const char *marriage_date = json_value_get_string(json_value_object_get(spouse_entry, "marriage_date"));
-            const char *marriage_location = json_value_get_string(json_value_object_get(spouse_entry, "marriage_location"));
+            const char *marriage_date =
+                json_value_get_string(json_value_object_get(spouse_entry, "marriage_date"));
+            const char *marriage_location =
+                json_value_get_string(json_value_object_get(spouse_entry, "marriage_location"));
             if ((marriage_date && !persistence_utf8_validate(marriage_date)) ||
                 (marriage_location && !persistence_utf8_validate(marriage_location)))
             {
@@ -323,7 +334,8 @@ static bool populate_person_relationships(const JsonValue *person_object, Person
     return true;
 }
 
-static bool populate_person_asset_lists(Person *person, const JsonValue *person_object, LoadContext *ctx)
+static bool populate_person_asset_lists(Person *person, const JsonValue *person_object,
+                                        LoadContext *ctx)
 {
     const JsonValue *certificates_array = json_value_object_get(person_object, "certificates");
     if (certificates_array && json_value_type(certificates_array) == JSON_VALUE_ARRAY)
@@ -331,7 +343,8 @@ static bool populate_person_asset_lists(Person *person, const JsonValue *person_
         size_t count = json_value_array_size(certificates_array);
         for (size_t index = 0; index < count; ++index)
         {
-            const char *certificate_path = json_value_get_string(json_value_array_get(certificates_array, index));
+            const char *certificate_path =
+                json_value_get_string(json_value_array_get(certificates_array, index));
             if (!certificate_path || !persistence_utf8_validate(certificate_path) ||
                 !person_add_certificate(person, certificate_path))
             {
@@ -406,10 +419,11 @@ static bool populate_person(const JsonValue *person_object, LoadContext *ctx)
     }
 
     const JsonValue *is_alive_value = json_value_object_get(person_object, "is_alive");
-    bool is_alive = true;
+    bool is_alive                   = true;
     if (is_alive_value && json_value_get_bool(is_alive_value, &is_alive))
     {
-        if (!is_alive && !person_set_death(person, person->dates.death_date, person->dates.death_location))
+        if (!is_alive &&
+            !person_set_death(person, person->dates.death_date, person->dates.death_location))
         {
             person_destroy(person);
             return ctx_set_error(ctx, "invalid death information");
@@ -435,7 +449,8 @@ static bool load_tree_metadata(const JsonValue *metadata_object, LoadContext *ct
         return ctx_set_error(ctx, "unsupported schema version");
     }
     const char *name = json_value_get_string(json_value_object_get(metadata_object, "name"));
-    const char *creation_date = json_value_get_string(json_value_object_get(metadata_object, "creation_date"));
+    const char *creation_date =
+        json_value_get_string(json_value_object_get(metadata_object, "creation_date"));
     if (name && !assign_string(&ctx->tree->name, name))
     {
         return ctx_set_error(ctx, "failed to duplicate tree name");
@@ -455,6 +470,7 @@ FamilyTree *persistence_tree_load(const char *path, char *error_buffer, size_t e
         persistence_format_errno(error_buffer, error_buffer_size, "failed to open", path);
         return NULL;
     }
+    fprintf(stderr, "[debug] load: opening %s\n", path);
     if (fseek(stream, 0L, SEEK_END) != 0)
     {
         persistence_format_errno(error_buffer, error_buffer_size, "failed to seek", path);
@@ -486,19 +502,21 @@ FamilyTree *persistence_tree_load(const char *path, char *error_buffer, size_t e
     }
     contents[size] = '\0';
 
-    int error_line = 0;
+    int error_line   = 0;
     int error_column = 0;
-    JsonValue *root = json_parse(contents, error_buffer, error_buffer_size, &error_line, &error_column);
+    JsonValue *root =
+        json_parse(contents, error_buffer, error_buffer_size, &error_line, &error_column);
     free(contents);
     if (!root)
     {
         return NULL;
     }
 
+    fprintf(stderr, "[debug] load: parsing json\n");
     LoadContext ctx;
-    ctx.error_buffer = error_buffer;
+    ctx.error_buffer      = error_buffer;
     ctx.error_buffer_size = error_buffer_size;
-    ctx.tree = family_tree_create(NULL);
+    ctx.tree              = family_tree_create(NULL);
     if (!ctx.tree)
     {
         json_value_destroy(root);
@@ -539,7 +557,7 @@ FamilyTree *persistence_tree_load(const char *path, char *error_buffer, size_t e
     for (size_t index = 0; index < person_count; ++index)
     {
         const JsonValue *person_object = json_value_array_get(persons_array, index);
-        Person *person = ctx.tree->persons[index];
+        Person *person                 = ctx.tree->persons[index];
         if (!populate_person_relationships(person_object, person, ctx.tree, &ctx))
         {
             json_value_destroy(root);
@@ -556,5 +574,6 @@ FamilyTree *persistence_tree_load(const char *path, char *error_buffer, size_t e
         return NULL;
     }
 
+    fprintf(stderr, "[debug] load: done\n");
     return ctx.tree;
 }

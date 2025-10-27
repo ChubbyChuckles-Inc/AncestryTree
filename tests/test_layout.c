@@ -704,6 +704,55 @@ TEST(test_layout_cache_handles_multiple_algorithms)
     family_tree_destroy(tree);
 }
 
+TEST(test_layout_incremental_matches_full_recalculation)
+{
+    LayoutCache cache;
+    layout_cache_init(&cache);
+
+    FamilyTree *tree = layout_create_small_family_tree();
+    ASSERT_NOT_NULL(tree);
+
+    LayoutResult baseline;
+    ASSERT_TRUE(layout_cache_calculate(&cache, tree, LAYOUT_ALGORITHM_HIERARCHICAL, &baseline));
+    layout_result_destroy(&baseline);
+
+    Person *parent = tree->persons[0];
+    ASSERT_NOT_NULL(parent);
+
+    Person *new_child = person_create(9137U);
+    ASSERT_NOT_NULL(new_child);
+    person_set_name(new_child, "Incremental", NULL, "Child");
+    person_set_birth(new_child, "2018-04-12", "Nowhere");
+    ASSERT_TRUE(person_add_child(parent, new_child));
+    ASSERT_TRUE(family_tree_add_person(tree, new_child));
+
+    const Person *changes[] = {new_child, parent};
+    LayoutResult incremental;
+    ASSERT_TRUE(layout_cache_incremental(&cache, tree, LAYOUT_ALGORITHM_HIERARCHICAL, changes,
+                                         sizeof(changes) / sizeof(changes[0]), &incremental));
+
+    LayoutResult full = layout_calculate(tree);
+    ASSERT_EQ(incremental.count, full.count);
+
+    for (size_t index = 0U; index < tree->person_count; ++index)
+    {
+        Person *person = tree->persons[index];
+        ASSERT_NOT_NULL(person);
+        const LayoutNode *incremental_node = find_node_by_id(&incremental, person->id);
+        const LayoutNode *full_node        = find_node_by_id(&full, person->id);
+        ASSERT_NOT_NULL(incremental_node);
+        ASSERT_NOT_NULL(full_node);
+        ASSERT_TRUE(fabsf(incremental_node->position[0] - full_node->position[0]) < 0.0001f);
+        ASSERT_TRUE(fabsf(incremental_node->position[1] - full_node->position[1]) < 0.0001f);
+        ASSERT_TRUE(fabsf(incremental_node->position[2] - full_node->position[2]) < 0.0001f);
+    }
+
+    layout_result_destroy(&full);
+    layout_result_destroy(&incremental);
+    layout_cache_reset(&cache);
+    family_tree_destroy(tree);
+}
+
 void register_layout_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_layout_assigns_positions_for_all_persons);
@@ -719,4 +768,5 @@ void register_layout_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_layout_animate_interpolates_between_layouts);
     REGISTER_TEST(registry, test_layout_cache_invalidation_on_structure_change);
     REGISTER_TEST(registry, test_layout_cache_handles_multiple_algorithms);
+    REGISTER_TEST(registry, test_layout_incremental_matches_full_recalculation);
 }
