@@ -25,8 +25,10 @@ extern "C"
         char resolved_path[512];
     } AppStartupDecision;
 
-    bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options, const char *sample_tree_path,
-                                          AppStartupDecision *decision, char *message_buffer, size_t message_capacity);
+    bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options,
+                                          const char *sample_tree_path, bool sample_allowed,
+                                          AppStartupDecision *decision, char *message_buffer,
+                                          size_t message_capacity);
 
 #ifdef __cplusplus
 }

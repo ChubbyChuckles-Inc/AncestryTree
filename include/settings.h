@@ -43,6 +43,7 @@ typedef struct Settings
     bool high_contrast_mode;
     float ui_font_scale;
     bool screen_reader_enabled;
+    bool has_loaded_sample_tree;
     bool onboarding_completed;
     unsigned int revision;
 } Settings;

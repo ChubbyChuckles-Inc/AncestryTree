@@ -22,7 +22,8 @@ static void app_bootstrap_copy_path(char (*destination)[512], const char *source
 }
 
 bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options, const char *sample_tree_path,
-                                      AppStartupDecision *decision, char *message_buffer, size_t message_capacity)
+                                      bool sample_allowed, AppStartupDecision *decision,
+                                      char *message_buffer, size_t message_capacity)
 {
     if (message_buffer && message_capacity > 0U)
     {
@@ -38,7 +39,7 @@ bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options, const cha
         return false;
     }
 
-    decision->source = APP_STARTUP_SOURCE_NONE;
+    decision->source           = APP_STARTUP_SOURCE_NONE;
     decision->resolved_path[0] = '\0';
 
     if (options->tree_path[0] != '\0')
@@ -47,19 +48,22 @@ bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options, const cha
         app_bootstrap_copy_path(&decision->resolved_path, options->tree_path);
         if (message_buffer && message_capacity > 0U)
         {
-            (void)snprintf(message_buffer, message_capacity, "Loading family tree from '%s'.", options->tree_path);
+            (void)snprintf(message_buffer, message_capacity, "Loading family tree from '%s'.",
+                           options->tree_path);
         }
         return true;
     }
 
     bool sample_available = (sample_tree_path && sample_tree_path[0] != '\0');
-    if (!options->disable_sample_tree && sample_available)
+    bool use_sample       = sample_allowed && !options->disable_sample_tree && sample_available;
+    if (use_sample)
     {
         decision->source = APP_STARTUP_SOURCE_SAMPLE_ASSET;
         app_bootstrap_copy_path(&decision->resolved_path, sample_tree_path);
         if (message_buffer && message_capacity > 0U)
         {
-            (void)snprintf(message_buffer, message_capacity, "Sample family tree detected at '%s'.", sample_tree_path);
+            (void)snprintf(message_buffer, message_capacity, "Sample family tree detected at '%s'.",
+                           sample_tree_path);
         }
         return true;
     }
@@ -67,13 +71,20 @@ bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options, const cha
     decision->source = APP_STARTUP_SOURCE_PLACEHOLDER;
     if (!sample_available && message_buffer && message_capacity > 0U)
     {
-        (void)snprintf(message_buffer, message_capacity,
-                       "No sample tree located; the session will start with a placeholder hologram.");
+        (void)snprintf(
+            message_buffer, message_capacity,
+            "No sample tree located; the session will start with a placeholder hologram.");
     }
     else if (options->disable_sample_tree && message_buffer && message_capacity > 0U)
     {
+        (void)snprintf(
+            message_buffer, message_capacity,
+            "Sample tree disabled by command-line switch; starting with a placeholder hologram.");
+    }
+    else if (!sample_allowed && message_buffer && message_capacity > 0U)
+    {
         (void)snprintf(message_buffer, message_capacity,
-                       "Sample tree disabled by command-line switch; starting with a placeholder hologram.");
+                       "Sample tree already showcased previously; launching placeholder hologram.");
     }
     return true;
 }

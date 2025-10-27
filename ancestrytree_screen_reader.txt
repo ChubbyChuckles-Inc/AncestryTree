@@ -13,3 +13,12 @@ Settings saved.
 Settings reload requested.
 Settings reloaded from disk.
 Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration disabled.
+Screen reader narration enabled.
+Ada Lovelace selected, deceased with 2 timeline events.
+Selection cleared.
+Byron Lovelace selected, deceased.
+William King Noel selected, deceased.
+Camera reset to default orbit.

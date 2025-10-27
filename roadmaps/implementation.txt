@@ -712,7 +712,7 @@ PHASE 10: OPTIMIZATION & POLISH
             [x] Tab through UI elements
             [x] Arrow keys for camera
             [x] Enter to select
-    [ ] Add screen reader support (basic)
+    [x] Add screen reader support (basic)
     [x] Implement high contrast mode
     [x] Add configurable font sizes
 
@@ -720,9 +720,9 @@ PHASE 10: OPTIMIZATION & POLISH
   [x] Add tutorial/onboarding
       [x] First-time user guide
       [x] Interactive tooltips
-  [ ] Add sample family tree
-      [ ] Pre-populated example
-      [ ] Load on first run
+  [x] Add sample family tree
+      [x] Pre-populated example
+      [x] Load on first run
   [ ] Improve error messages
       [ ] Clear, actionable messages
       [ ] Suggestions for fixes

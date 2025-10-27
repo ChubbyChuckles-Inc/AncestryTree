@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Basic screen reader narration channel wired into status, progress, and selection events with a
+  settings toggle, duplicate suppression guard, file logging, and a new test suite covering
+  lifecycle and sink behaviour.
+- First-run sample tree onboarding that remembers when the bundled holographic family has been
+  showcased, persists the history flag in settings, and exercises the bootstrap planner with
+  additional unit coverage.
 - Guided onboarding workflow with a holographic tutorial overlay, step-aware interactive tooltips
   that highlight critical controls, progress instrumentation, skip/restart options, and new unit
   tests validating hint activation, advancement, and skip flows.

@@ -34,9 +34,9 @@ static void settings_set_defaults(Settings *settings)
     settings->high_contrast_mode              = false;
     settings->ui_font_scale                   = 1.0f;
     settings->screen_reader_enabled           = false;
+    settings->has_loaded_sample_tree          = false;
     settings->onboarding_completed            = false;
 }
-
 void settings_init_defaults(Settings *settings)
 {
     if (!settings)
@@ -281,6 +281,14 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
                 settings->screen_reader_enabled = parsed;
             }
         }
+        else if (settings_strcasecmp(key, "has_loaded_sample_tree") == 0)
+        {
+            bool parsed = false;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->has_loaded_sample_tree = parsed;
+            }
+        }
         else if (settings_strcasecmp(key, "onboarding_completed") == 0)
         {
             bool parsed = false;
@@ -344,14 +352,16 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         "high_contrast_mode=%u\n"
         "ui_font_scale=%.3f\n"
         "screen_reader_enabled=%u\n"
-        "onboarding_completed=%u\n",
+        "onboarding_completed=%u\n"
+        "has_loaded_sample_tree=%u\n",
         (unsigned int)settings->graphics_quality, settings->camera_rotation_sensitivity,
         settings->camera_pan_sensitivity, settings->camera_keyboard_pan_sensitivity,
         settings->camera_zoom_sensitivity, settings->auto_save_enabled ? 1U : 0U,
         settings->auto_save_interval_seconds, (unsigned int)settings->default_layout_algorithm,
         (unsigned int)settings->color_scheme, (unsigned int)settings->language,
         settings->high_contrast_mode ? 1U : 0U, settings->ui_font_scale,
-        settings->screen_reader_enabled ? 1U : 0U, settings->onboarding_completed ? 1U : 0U);
+        settings->screen_reader_enabled ? 1U : 0U, settings->onboarding_completed ? 1U : 0U,
+        settings->has_loaded_sample_tree ? 1U : 0U);
 
     bool success = written >= 0;
     if (!success && error_buffer && error_buffer_size > 0U)

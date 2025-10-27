@@ -2069,7 +2069,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     Settings persisted_settings = settings;
     const char *settings_path   = APP_SETTINGS_PATH;
     char settings_error[256];
-    settings_error[0] = '\0';
+    settings_error[0]   = '\0';
+    bool settings_dirty = false;
     if (settings_try_load(&settings, settings_path, settings_error, sizeof(settings_error)))
     {
         persisted_settings = settings;
@@ -2087,8 +2088,6 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
             AT_LOG(logger, AT_LOG_WARN, "Settings file not found; defaults in use.");
         }
     }
-    unsigned int settings_applied_revision = settings_get_revision(&settings);
-
     FamilyTree *tree = NULL;
     AppFileState file_state;
     app_file_state_clear(&file_state);
@@ -2110,13 +2109,14 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     AppLaunchOptions default_options;
     memset(&default_options, 0, sizeof(default_options));
     AppLaunchOptions const *effective_options = options ? options : &default_options;
+    bool allow_sample_start                   = !settings.has_loaded_sample_tree;
 
     AppStartupDecision startup_decision;
     char startup_message[256];
     startup_message[0] = '\0';
     if (!app_bootstrap_decide_tree_source(
-            effective_options, sample_tree_available ? sample_tree_path : NULL, &startup_decision,
-            startup_message, sizeof(startup_message)))
+            effective_options, sample_tree_available ? sample_tree_path : NULL, allow_sample_start,
+            &startup_decision, startup_message, sizeof(startup_message)))
     {
         AT_LOG(logger, AT_LOG_ERROR, "%s",
                (startup_message[0] != '\0') ? startup_message
@@ -2172,6 +2172,12 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         else
         {
             tree_loaded_from_asset = true;
+            if (!settings.has_loaded_sample_tree)
+            {
+                settings.has_loaded_sample_tree = true;
+                settings_mark_dirty(&settings);
+                settings_dirty = true;
+            }
             app_file_state_set(&file_state, startup_decision.resolved_path);
             if (initial_status[0] == '\0')
             {
@@ -2190,6 +2196,24 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     /* Manual QA: exercise `--load`, `--no-sample`, and default launches to ensure the startup
      * planner selects the expected tree source and reports placeholder fallbacks via the status
      * banner. */
+
+    if (settings_dirty)
+    {
+        char save_error[256];
+        save_error[0] = '\0';
+        if (settings_save(&settings, settings_path, save_error, sizeof(save_error)))
+        {
+            persisted_settings = settings;
+            AT_LOG(logger, AT_LOG_INFO, "Settings saved to %s.", settings_path);
+        }
+        else
+        {
+            AT_LOG(logger, AT_LOG_WARN, "Unable to persist settings changes (%s).",
+                   (save_error[0] != '\0') ? save_error : "unknown error");
+        }
+    }
+
+    unsigned int settings_applied_revision = settings_get_revision(&settings);
 
     if (!tree)
     {

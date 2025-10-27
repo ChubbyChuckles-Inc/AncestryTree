@@ -22,6 +22,8 @@ TEST(test_settings_defaults_are_expected)
     ASSERT_EQ(settings.language, SETTINGS_LANGUAGE_ENGLISH);
     ASSERT_FALSE(settings.high_contrast_mode);
     ASSERT_FLOAT_NEAR(settings.ui_font_scale, 1.0f, 0.0001f);
+    ASSERT_FALSE(settings.screen_reader_enabled);
+    ASSERT_FALSE(settings.has_loaded_sample_tree);
 }
 
 TEST(test_settings_mark_dirty_increments_revision)
@@ -47,6 +49,8 @@ TEST(test_settings_save_and_load_round_trip)
     settings.language                        = SETTINGS_LANGUAGE_FUTURE;
     settings.high_contrast_mode              = true;
     settings.ui_font_scale                   = 1.35f;
+    settings.screen_reader_enabled           = true;
+    settings.has_loaded_sample_tree          = true;
     settings_mark_dirty(&settings);
 
     char path[128];
@@ -70,6 +74,8 @@ TEST(test_settings_save_and_load_round_trip)
     ASSERT_EQ(loaded.language, SETTINGS_LANGUAGE_FUTURE);
     ASSERT_TRUE(loaded.high_contrast_mode);
     ASSERT_FLOAT_NEAR(loaded.ui_font_scale, 1.35f, 0.0001f);
+    ASSERT_TRUE(loaded.screen_reader_enabled);
+    ASSERT_TRUE(loaded.has_loaded_sample_tree);
 
     test_delete_file(path);
 }
