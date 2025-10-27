@@ -763,10 +763,10 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
       [ ] Boolean queries
       [ ] Regular expressions
       [ ] Saved searches
-  [ ] Tree statistics
-      [ ] Number of generations
-      [ ] Average lifespan
-      [ ] Geographic distribution
+  [x] Tree statistics
+      [x] Number of generations
+      [x] Average lifespan
+      [x] Geographic distribution
   [ ] Relationship calculator
       [ ] Calculate relationship between any two persons
       [ ] Display relationship path

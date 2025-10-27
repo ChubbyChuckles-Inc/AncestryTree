@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 
+- Tree analytics engine computing generation depth, living/deceased totals, lifespan averages,
+  and top birth/death locations, exposed through the new View -> Tree Analytics holographic
+  panel with animated fades and backed by targeted unit tests for the statistics module.
 - Contextual startup and settings error advisor now surfaces actionable recovery hints when
   tree loads or persistence saves fail, with new unit tests covering the messaging helpers.
 - Basic screen reader narration channel wired into status, progress, and selection events with a

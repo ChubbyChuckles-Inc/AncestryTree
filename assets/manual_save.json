@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "name": "Placeholder Tree",
+    "creation_date": "",
+    "root_ids": [1]
+  },
+  "persons": [
+    {
+      "id": 1,
+      "name": {
+        "first": "Thomas",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1957-06-18",
+        "birth_location": "Zwochau",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [null, null],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    }
+  ]
+}

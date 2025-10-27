@@ -103,3 +103,63 @@ Screen reader narration enabled.
 Onboarding paused. Re-enable it from Settings when ready.
 Redo request queued.
 No command to apply
+Screen reader narration enabled.
+Avery Prototype selected, alive.
+Edit panel opened for selected hologram.
+Edit-person request queued.
+Updated profile for Thomas Rickert.
+Snap the orbit camera back to its default distance and orientation.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\manual_save.json
+Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\manual_save.json
+Thomas Rickert selected, alive.
+Selection cleared.
+Thomas Rickert selected, alive.
+Snap the orbit camera back to its default distance and orientation.
+Edit panel opened for selected hologram.
+Edit panel closed.
+Add-person request queued.
+Created holographic profile for Silvia Rickert (ID 2).
+Silvia Rickert selected, alive.
+Onboarding paused. Re-enable it from Settings when ready.
+Add-person request queued.
+Created holographic profile for Christian Rickert (ID 3).
+Christian Rickert selected, alive.
+Add-person request queued.
+Created holographic profile for Florian Rickert (ID 4).
+Florian Rickert selected, alive.
+Add-person request queued.
+Created holographic profile for Tina Rickert (ID 5).
+Tina Rickert selected, alive.
+Add-person request queued.
+Screen reader narration enabled.
+Avery Prototype selected, alive.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\example_tree.json
+Selection cleared.
+William King Noel selected, deceased.
+Ada Lovelace selected, deceased with 2 timeline events.
+Byron Lovelace selected, deceased.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Avery Prototype selected, alive.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\example_tree_2.json
+Selection cleared.

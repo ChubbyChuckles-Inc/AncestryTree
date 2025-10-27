@@ -8,6 +8,7 @@ void register_memory_tests(TestRegistry *registry);
 void register_log_tests(TestRegistry *registry);
 void register_person_tests(TestRegistry *registry);
 void register_tree_tests(TestRegistry *registry);
+void register_tree_statistics_tests(TestRegistry *registry);
 void register_timeline_tests(TestRegistry *registry);
 void register_date_tests(TestRegistry *registry);
 void register_persistence_tests(TestRegistry *registry);
@@ -49,8 +50,8 @@ void register_status_message_tests(TestRegistry *registry);
 int main(void)
 {
     TestRegistry registry;
-    TestCase cases[192];
-    test_registry_init(&registry, cases, 192);
+    TestCase cases[210];
+    test_registry_init(&registry, cases, 210);
 
 #if AT_MEMORY_ENABLE_TRACKING
     at_memory_reset_tracking();
@@ -62,6 +63,7 @@ int main(void)
     register_log_tests(&registry);
     register_person_tests(&registry);
     register_tree_tests(&registry);
+    register_tree_statistics_tests(&registry);
     register_timeline_tests(&registry);
     register_date_tests(&registry);
     register_persistence_tests(&registry);

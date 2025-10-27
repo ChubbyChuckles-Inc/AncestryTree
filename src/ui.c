@@ -14,6 +14,7 @@
 #include "settings.h"
 #include "timeline.h"
 #include "tree.h"
+#include "tree_statistics.h"
 #include "ui_icons.h"
 #include "ui_navigation.h"
 #include "ui_scaling.h"
@@ -70,6 +71,7 @@ typedef struct UIInternal
     bool show_help_window;
     bool show_settings_window;
     bool show_search_panel;
+    bool show_analytics_panel;
     bool show_add_person_panel;
     bool show_edit_person_panel;
     bool show_exit_prompt;
@@ -85,6 +87,7 @@ typedef struct UIInternal
     UIAnimatedPanel help_panel_anim;
     UIAnimatedPanel settings_panel_anim;
     UIAnimatedPanel search_panel_anim;
+    UIAnimatedPanel analytics_panel_anim;
     UIAnimatedPanel add_person_panel_anim;
     UIAnimatedPanel edit_person_panel_anim;
     UIAnimatedPanel exit_prompt_panel_anim;
@@ -99,6 +102,7 @@ typedef struct UIInternal
     float status_timer;
     char error_dialog_title[64];
     char error_dialog_message[256];
+    TreeStatistics analytics_stats;
     UIScreenReaderState screen_reader;
     char search_query[64];
     bool search_include_alive;
@@ -1302,8 +1306,9 @@ static void ui_internal_refresh_panel_speeds(UIInternal *internal)
     UIAnimatedPanel *panels[] = {
         &internal->about_panel_anim,       &internal->help_panel_anim,
         &internal->settings_panel_anim,    &internal->search_panel_anim,
-        &internal->add_person_panel_anim,  &internal->edit_person_panel_anim,
-        &internal->exit_prompt_panel_anim, &internal->error_dialog_panel_anim};
+        &internal->analytics_panel_anim,   &internal->add_person_panel_anim,
+        &internal->edit_person_panel_anim, &internal->exit_prompt_panel_anim,
+        &internal->error_dialog_panel_anim};
     size_t count = sizeof(panels) / sizeof(panels[0]);
     for (size_t index = 0U; index < count; ++index)
     {
@@ -1327,12 +1332,14 @@ static void ui_internal_reset_panels(UIInternal *internal)
     UIAnimatedPanel *panels[] = {
         &internal->about_panel_anim,       &internal->help_panel_anim,
         &internal->settings_panel_anim,    &internal->search_panel_anim,
-        &internal->add_person_panel_anim,  &internal->edit_person_panel_anim,
-        &internal->exit_prompt_panel_anim, &internal->error_dialog_panel_anim};
-    const bool visibility[] = {internal->show_about_window,     internal->show_help_window,
-                               internal->show_settings_window,  internal->show_search_panel,
-                               internal->show_add_person_panel, internal->show_edit_person_panel,
-                               internal->show_exit_prompt,      internal->show_error_dialog};
+        &internal->analytics_panel_anim,   &internal->add_person_panel_anim,
+        &internal->edit_person_panel_anim, &internal->exit_prompt_panel_anim,
+        &internal->error_dialog_panel_anim};
+    const bool visibility[] = {internal->show_about_window,      internal->show_help_window,
+                               internal->show_settings_window,   internal->show_search_panel,
+                               internal->show_analytics_panel,   internal->show_add_person_panel,
+                               internal->show_edit_person_panel, internal->show_exit_prompt,
+                               internal->show_error_dialog};
     size_t count            = sizeof(panels) / sizeof(panels[0]);
     for (size_t index = 0U; index < count; ++index)
     {
@@ -1962,6 +1969,7 @@ static void ui_internal_tick(UIInternal *internal, float delta_seconds)
         {&internal->help_panel_anim, internal->show_help_window},
         {&internal->settings_panel_anim, internal->show_settings_window},
         {&internal->search_panel_anim, internal->show_search_panel},
+        {&internal->analytics_panel_anim, internal->show_analytics_panel},
         {&internal->add_person_panel_anim, internal->show_add_person_panel},
         {&internal->edit_person_panel_anim, internal->show_edit_person_panel},
         {&internal->exit_prompt_panel_anim, internal->show_exit_prompt},
@@ -2438,6 +2446,164 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
     if (nk_window_is_closed(ctx, "Search##AncestryTree"))
     {
         internal->show_search_panel = false;
+    }
+    ui_theme_pop_panel_alpha(ctx, &token);
+}
+
+static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+{
+    if (!internal || !ui)
+    {
+        return;
+    }
+    bool showing = internal->show_analytics_panel;
+    bool active  = showing || ui_animated_panel_visible(&internal->analytics_panel_anim);
+    if (!active)
+    {
+        return;
+    }
+
+    struct nk_context *ctx = &internal->ctx;
+    float alpha            = ui_animated_panel_alpha(&internal->analytics_panel_anim);
+    if (!(alpha > 0.0f))
+    {
+        return;
+    }
+
+    TreeStatistics *stats = &internal->analytics_stats;
+    bool stats_error      = false;
+    if (showing)
+    {
+        if (!tree || tree->person_count == 0U)
+        {
+            tree_statistics_reset(stats);
+        }
+        else if (!tree_statistics_calculate(stats, tree, 5U))
+        {
+            stats_error = true;
+            tree_statistics_reset(stats);
+        }
+    }
+
+    UIThemePanelStyleToken token;
+    ui_theme_push_panel_alpha(ctx, &internal->theme, alpha, &token);
+    float width = fminf(380.0f, (float)ui->width - 40.0f);
+    if (width < 300.0f)
+    {
+        width = 300.0f;
+    }
+    float height = fminf(440.0f, (float)ui->height - 120.0f);
+    if (height < 280.0f)
+    {
+        height = 280.0f;
+    }
+    struct nk_rect bounds = nk_rect(36.0f, 260.0f, width, height);
+
+    /* Manual QA: Populate the sample tree, open View -> Tree Analytics, verify generation counts,
+     * average lifespan, and location tallies update as persons are edited or toggled
+     * alive/deceased.
+     */
+    if (nk_begin(ctx, "Tree Analytics##AncestryTree", bounds,
+                 NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
+                     NK_WINDOW_CLOSABLE))
+    {
+        nk_layout_row_dynamic(ctx, 22.0f, 1);
+        nk_label(ctx, "Insights derived from the current holographic family tree.", NK_TEXT_LEFT);
+
+        if (!tree || tree->person_count == 0U)
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            nk_label(ctx, "Load or create a tree to view analytics.", NK_TEXT_LEFT);
+        }
+        else if (stats_error)
+        {
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            nk_label(ctx, "Analytics unavailable: insufficient memory for computation.",
+                     NK_TEXT_LEFT);
+        }
+        else
+        {
+            char line[160];
+
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            (void)snprintf(line, sizeof(line), "Generations detected: %zu",
+                           stats->generation_count);
+            nk_label(ctx, line, NK_TEXT_LEFT);
+
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            (void)snprintf(line, sizeof(line), "Living persons: %zu", stats->living_count);
+            nk_label(ctx, line, NK_TEXT_LEFT);
+
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            (void)snprintf(line, sizeof(line), "Deceased persons: %zu", stats->deceased_count);
+            nk_label(ctx, line, NK_TEXT_LEFT);
+
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            if (stats->lifespan_sample_count == 0U)
+            {
+                nk_label(ctx, "Average lifespan: N/A (missing birth or death dates)", NK_TEXT_LEFT);
+            }
+            else
+            {
+                (void)snprintf(line, sizeof(line),
+                               "Average lifespan: %.1f years across %zu samples",
+                               stats->average_lifespan_years, stats->lifespan_sample_count);
+                nk_label(ctx, line, NK_TEXT_LEFT);
+            }
+
+            nk_layout_row_dynamic(ctx, 6.0f, 1);
+            nk_spacer(ctx);
+
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            nk_label(ctx, "Top birth locations", NK_TEXT_LEFT);
+            if (stats->birth_location_count == 0U)
+            {
+                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_label(ctx, "No recorded birth locations.", NK_TEXT_LEFT);
+            }
+            else
+            {
+                for (size_t index = 0U; index < stats->birth_location_count; ++index)
+                {
+                    const TreeLocationCount *entry = &stats->birth_locations[index];
+                    nk_layout_row_dynamic(ctx, 18.0f, 1);
+                    (void)snprintf(line, sizeof(line), "%zu. %s (%zu)", index + 1U,
+                                   entry->location ? entry->location : "(unknown)", entry->count);
+                    nk_label(ctx, line, NK_TEXT_LEFT);
+                }
+            }
+
+            nk_layout_row_dynamic(ctx, 6.0f, 1);
+            nk_spacer(ctx);
+
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            nk_label(ctx, "Top death locations", NK_TEXT_LEFT);
+            if (stats->death_location_count == 0U)
+            {
+                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_label(ctx, "No recorded death locations.", NK_TEXT_LEFT);
+            }
+            else
+            {
+                for (size_t index = 0U; index < stats->death_location_count; ++index)
+                {
+                    const TreeLocationCount *entry = &stats->death_locations[index];
+                    nk_layout_row_dynamic(ctx, 18.0f, 1);
+                    (void)snprintf(line, sizeof(line), "%zu. %s (%zu)", index + 1U,
+                                   entry->location ? entry->location : "(unknown)", entry->count);
+                    nk_label(ctx, line, NK_TEXT_LEFT);
+                }
+            }
+        }
+    }
+    else if (showing)
+    {
+        internal->show_analytics_panel = false;
+    }
+    nk_end(ctx);
+    if (nk_window_is_closed(ctx, "Tree Analytics##AncestryTree"))
+    {
+        internal->show_analytics_panel = false;
     }
     ui_theme_pop_panel_alpha(ctx, &token);
 }
@@ -2980,6 +3146,12 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 internal->show_search_panel = true;
                 internal->search_dirty      = true;
             }
+            const char *analytics_label =
+                internal->show_analytics_panel ? "Tree Analytics... *" : "Tree Analytics...";
+            if (ui_nav_menu_item_label(internal, ctx, analytics_label, NK_TEXT_LEFT))
+            {
+                internal->show_analytics_panel = true;
+            }
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (ui_nav_menu_item_label(internal, ctx, "Reset Camera", NK_TEXT_LEFT))
             {
@@ -3341,6 +3513,7 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->error_dialog_title[0]       = '\0';
     internal->error_dialog_message[0]     = '\0';
     internal->show_search_panel           = false;
+    internal->show_analytics_panel        = false;
     internal->search_query[0]             = '\0';
     internal->search_include_alive        = true;
     internal->search_include_deceased     = true;
@@ -3360,6 +3533,7 @@ bool ui_init(UIContext *ui, int width, int height)
     memset(&internal->edit_person_request, 0, sizeof(UIEditPersonRequest));
     memset(&internal->edit_person_form, 0, sizeof(internal->edit_person_form));
     ui_edit_person_form_reset(internal);
+    tree_statistics_init(&internal->analytics_stats);
 
     if (!nk_init_default(&internal->ctx, &internal->font))
     {
@@ -3413,6 +3587,7 @@ void ui_cleanup(UIContext *ui)
     if (internal)
     {
         screen_reader_shutdown(&internal->screen_reader.channel);
+        tree_statistics_reset(&internal->analytics_stats);
         ui_icons_shutdown(&internal->icons);
         nk_free(&internal->ctx);
         if (internal->font_owned)
@@ -4806,6 +4981,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     ui_draw_about_window(internal, ui);
     ui_draw_help_window(internal, ui);
     ui_draw_search_panel(internal, ui, tree);
+    ui_draw_analytics_panel(internal, ui, tree);
     ui_draw_add_person_panel(internal, ui, tree);
     ui_draw_edit_person_panel(internal, ui, tree);
     ui_draw_settings_window(internal, ui, settings, settings_dirty);
