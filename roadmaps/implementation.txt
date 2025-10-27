@@ -767,9 +767,9 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
       [x] Number of generations
       [x] Average lifespan
       [x] Geographic distribution
-  [ ] Relationship calculator
-      [ ] Calculate relationship between any two persons
-      [ ] Display relationship path
+  [x] Relationship calculator
+      [x] Calculate relationship between any two persons
+      [x] Display relationship path
 
 11.3 Media Management
   [ ] Audio/video support

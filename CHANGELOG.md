@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file. The format 
 - Tree analytics engine computing generation depth, living/deceased totals, lifespan averages,
   and top birth/death locations, exposed through the new View -> Tree Analytics holographic
   panel with animated fades and backed by targeted unit tests for the statistics module.
+- Relationship calculator and explorer powered by a bounded BFS path finder, descriptive
+  relationship summaries for parent, sibling, and multi-generation relatives within the Tree
+  Analytics panel, plus dedicated unit tests covering parent/child, sibling, and (great)
+  grandparent scenarios.
 - Contextual startup and settings error advisor now surfaces actionable recovery hints when
   tree loads or persistence saves fail, with new unit tests covering the messaging helpers.
 - Basic screen reader narration channel wired into status, progress, and selection events with a
