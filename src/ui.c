@@ -3,6 +3,7 @@
 #include "at_date.h"
 #include "at_memory.h"
 #include "camera_controller.h"
+#include "file_dialog.h"
 #include "graphics.h"
 #include "layout.h"
 #include "onboarding.h"
@@ -169,6 +170,56 @@ typedef struct UIInternal
 
 static void ui_internal_set_status(UIInternal *internal, const char *message);
 static void ui_accessibility_set_enabled(UIInternal *internal, bool enabled);
+
+typedef void (*UISetErrorFn)(UIInternal *, const char *);
+
+static const FileDialogFilter UI_IMAGE_FILE_FILTERS[] = {
+    {.label = "Image Files", .pattern = "*.png;*.jpg;*.jpeg;*.bmp;*.gif"},
+    {.label = "All Files", .pattern = "*.*"}};
+
+static const FileDialogFilter UI_CERTIFICATE_FILE_FILTERS[] = {
+    {.label = "Certificates", .pattern = "*.pdf;*.png;*.jpg;*.jpeg"},
+    {.label = "All Files", .pattern = "*.*"}};
+
+static bool ui_browse_for_path(UIInternal *internal, const char *title, const char *default_path,
+                               const FileDialogFilter *filters, size_t filter_count, char *out_path,
+                               size_t capacity, UISetErrorFn set_error, const char *status_message)
+{
+    if (!internal || !out_path || capacity == 0U)
+    {
+        return false;
+    }
+    FileDialogOptions options = {.title        = title,
+                                 .default_path = default_path,
+                                 .filters      = filters,
+                                 .filter_count = filter_count};
+    char selection[512];
+    selection[0] = '\0';
+    char error_buffer[256];
+    if (!file_dialog_open(&options, selection, sizeof(selection), error_buffer,
+                          sizeof(error_buffer)))
+    {
+        if (error_buffer[0] != '\0' && set_error)
+        {
+            set_error(internal, error_buffer);
+        }
+        return false;
+    }
+#if defined(_MSC_VER)
+    (void)strncpy_s(out_path, capacity, selection, _TRUNCATE);
+#else
+    (void)snprintf(out_path, capacity, "%s", selection);
+#endif
+    if (set_error)
+    {
+        set_error(internal, NULL);
+    }
+    if (status_message && status_message[0] != '\0')
+    {
+        ui_internal_set_status(internal, status_message);
+    }
+    return true;
+}
 
 static void ui_event_queue_reset(UIEventQueue *queue)
 {
@@ -5082,10 +5133,21 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
 
         nk_layout_row_dynamic(ctx, 20.0f, 1);
         nk_label(ctx, "Profile Image", NK_TEXT_LEFT);
-        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
-        nk_layout_row_push(ctx, width - 40.0f);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, width - 160.0f);
         (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->profile_image_path,
                                  (int)sizeof(draft->profile_image_path), nk_filter_default);
+        nk_layout_row_push(ctx, 100.0f);
+        if (ui_nav_button_label(internal, ctx, "Browse..."))
+        {
+            const char *default_path =
+                (draft->profile_image_path[0] != '\0') ? draft->profile_image_path : "assets/";
+            (void)ui_browse_for_path(
+                internal, "Select Profile Image", default_path, UI_IMAGE_FILE_FILTERS,
+                sizeof(UI_IMAGE_FILE_FILTERS) / sizeof(UI_IMAGE_FILE_FILTERS[0]),
+                draft->profile_image_path, sizeof(draft->profile_image_path),
+                ui_add_person_set_error, "Profile image path updated.");
+        }
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -5393,11 +5455,24 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             nk_layout_row_end(ctx);
         }
 
-        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
-        nk_layout_row_push(ctx, width - 120.0f);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 3);
+        nk_layout_row_push(ctx, width - 220.0f);
         (void)ui_nav_edit_string(
             internal, ctx, NK_EDIT_FIELD, internal->add_person_form.new_certificate_path,
             (int)sizeof(internal->add_person_form.new_certificate_path), nk_filter_default);
+        nk_layout_row_push(ctx, 100.0f);
+        if (ui_nav_button_label(internal, ctx, "Browse..."))
+        {
+            const char *default_path = (internal->add_person_form.new_certificate_path[0] != '\0')
+                                           ? internal->add_person_form.new_certificate_path
+                                           : "assets/";
+            (void)ui_browse_for_path(
+                internal, "Select Certificate", default_path, UI_CERTIFICATE_FILE_FILTERS,
+                sizeof(UI_CERTIFICATE_FILE_FILTERS) / sizeof(UI_CERTIFICATE_FILE_FILTERS[0]),
+                internal->add_person_form.new_certificate_path,
+                sizeof(internal->add_person_form.new_certificate_path), ui_add_person_set_error,
+                "Certificate path updated.");
+        }
         nk_layout_row_push(ctx, 60.0f);
         if (ui_nav_button_icon_label(internal, ctx, UI_ICON_ADD, "Add"))
         {
@@ -5427,10 +5502,21 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
 
         nk_layout_row_dynamic(ctx, 20.0f, 1);
         nk_label(ctx, "Profile Image", NK_TEXT_LEFT);
-        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
-        nk_layout_row_push(ctx, width - 40.0f);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, width - 160.0f);
         (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->profile_image_path,
                                  (int)sizeof(draft->profile_image_path), nk_filter_default);
+        nk_layout_row_push(ctx, 100.0f);
+        if (ui_nav_button_label(internal, ctx, "Browse..."))
+        {
+            const char *default_path =
+                (draft->profile_image_path[0] != '\0') ? draft->profile_image_path : "assets/";
+            (void)ui_browse_for_path(
+                internal, "Select Profile Image", default_path, UI_IMAGE_FILE_FILTERS,
+                sizeof(UI_IMAGE_FILE_FILTERS) / sizeof(UI_IMAGE_FILE_FILTERS[0]),
+                draft->profile_image_path, sizeof(draft->profile_image_path),
+                ui_add_person_set_error, "Profile image path updated.");
+        }
         nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 30.0f, 2);
@@ -5640,10 +5726,32 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
 
             if (!draft->clear_profile_image)
             {
-                nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
-                nk_layout_row_push(ctx, width - 40.0f);
+                nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+                nk_layout_row_push(ctx, width - 160.0f);
                 (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->profile_image_path,
                                          (int)sizeof(draft->profile_image_path), nk_filter_default);
+                nk_layout_row_push(ctx, 100.0f);
+                if (ui_nav_button_label(internal, ctx, "Browse..."))
+                {
+                    const char *default_path = NULL;
+                    if (draft->profile_image_path[0] != '\0')
+                    {
+                        default_path = draft->profile_image_path;
+                    }
+                    else if (internal->edit_person_form.current_profile_image[0] != '\0')
+                    {
+                        default_path = internal->edit_person_form.current_profile_image;
+                    }
+                    else
+                    {
+                        default_path = "assets/";
+                    }
+                    (void)ui_browse_for_path(
+                        internal, "Select Profile Image", default_path, UI_IMAGE_FILE_FILTERS,
+                        sizeof(UI_IMAGE_FILE_FILTERS) / sizeof(UI_IMAGE_FILE_FILTERS[0]),
+                        draft->profile_image_path, sizeof(draft->profile_image_path),
+                        ui_edit_person_set_error, "Profile image path updated.");
+                }
                 nk_layout_row_end(ctx);
             }
             else
@@ -5943,11 +6051,24 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
             nk_layout_row_end(ctx);
         }
 
-        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
-        nk_layout_row_push(ctx, width - 120.0f);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 3);
+        nk_layout_row_push(ctx, width - 220.0f);
         (void)ui_nav_edit_string(
             internal, ctx, NK_EDIT_FIELD, internal->edit_person_form.new_certificate_path,
             (int)sizeof(internal->edit_person_form.new_certificate_path), nk_filter_default);
+        nk_layout_row_push(ctx, 100.0f);
+        if (ui_nav_button_label(internal, ctx, "Browse..."))
+        {
+            const char *default_path = (internal->edit_person_form.new_certificate_path[0] != '\0')
+                                           ? internal->edit_person_form.new_certificate_path
+                                           : "assets/";
+            (void)ui_browse_for_path(
+                internal, "Select Certificate", default_path, UI_CERTIFICATE_FILE_FILTERS,
+                sizeof(UI_CERTIFICATE_FILE_FILTERS) / sizeof(UI_CERTIFICATE_FILE_FILTERS[0]),
+                internal->edit_person_form.new_certificate_path,
+                sizeof(internal->edit_person_form.new_certificate_path), ui_edit_person_set_error,
+                "Certificate path updated.");
+        }
         nk_layout_row_push(ctx, 60.0f);
         if (ui_nav_button_icon_label(internal, ctx, UI_ICON_ADD, "Add"))
         {

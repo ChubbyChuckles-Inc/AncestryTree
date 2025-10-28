@@ -235,7 +235,7 @@
         }
       ],
       "certificates": [],
-      "profile_image": "",
+      "profile_image": "profiles/profile_1761656151000.png",
       "timeline": [
       ],
       "metadata": {
@@ -396,7 +396,7 @@
         "is_alive": true
       },
       "parents": [12, 13],
-      "children": [],
+      "children": [19],
       "spouses": [
         {
           "id": 18,
@@ -501,13 +501,38 @@
         "is_alive": true
       },
       "parents": [null, null],
-      "children": [],
+      "children": [19],
       "spouses": [
         {
           "id": 14,
           "marriage_date": "",
           "marriage_location": ""
         }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 19,
+      "name": {
+        "first": "Axel",
+        "middle": "",
+        "last": "Gruß"
+      },
+      "dates": {
+        "birth_date": "1972-01-01",
+        "birth_location": "Schkeuditz",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [18, 14],
+      "children": [],
+      "spouses": [
       ],
       "certificates": [],
       "profile_image": "",
