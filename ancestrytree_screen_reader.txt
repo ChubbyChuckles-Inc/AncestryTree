@@ -850,3 +850,35 @@ Onboarding paused. Re-enable it from Settings when ready.
 Christian Rickert selected, alive.
 Grid lines hidden.
 Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Onboarding paused. Re-enable it from Settings when ready.
+New tree request queued.
+New placeholder tree created.
+Avery Prototype selected, alive.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Selection cleared.
+Grid lines hidden.
+Overlay hidden.
+Overlay enabled.
+Portraits hidden from name panels.
+Portraits enabled in name panels.
+Parent connections set to straight segments.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Sigrid Förster selected, alive.

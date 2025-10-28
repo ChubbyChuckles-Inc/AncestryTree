@@ -3879,7 +3879,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
     {
         top_margin = 0.0f;
     }
-    struct nk_rect bar_rect = nk_rect(0.0f, top_margin, (float)ui->width, 30.0f);
+    struct nk_rect bar_rect = nk_rect(0.0f, top_margin, (float)ui->width, 50.0f);
     float screen_height     = (float)ui->height;
     if (!(screen_height > 0.0f))
     {
