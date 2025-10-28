@@ -808,3 +808,9 @@ Save request queued.
 Saving holographic archive...
 Saving holographic archive...: 85% complete.
 Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.

@@ -4459,6 +4459,10 @@ bool ui_init(UIContext *ui, int width, int height)
     ui->available = true;
     /* Manual QA: Run the prototype at 720p, 1080p, and 4K to verify font legibility and confirm
      * warning logs fire when custom font assets are absent. */
+#if 0
+    internal->show_add_person_panel = true;
+    ui_add_person_form_reset(internal);
+#endif
     return true;
 #else
     (void)width;
@@ -5744,9 +5748,11 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             ui_add_person_form_reset(internal);
         }
     }
-    nk_end(ctx);
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
     captured_bounds = nk_window_get_bounds(ctx);
+#endif
+    nk_end(ctx);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
     (void)ui_panel_store_layout(settings, settings ? &settings->panel_add_person : NULL, ui,
                                 captured_bounds, 360.0f, 320.0f);
 #endif
@@ -6373,9 +6379,11 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
             }
         }
     }
-    nk_end(ctx);
 #if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
     captured_bounds = nk_window_get_bounds(ctx);
+#endif
+    nk_end(ctx);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
     (void)ui_panel_store_layout(settings, settings ? &settings->panel_edit_person : NULL, ui,
                                 captured_bounds, 360.0f, 320.0f);
 #endif
