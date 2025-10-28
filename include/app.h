@@ -100,22 +100,6 @@ extern "C"
         size_t spouse_count;
     } AppPersonEditRelationships;
 
-    typedef struct AppPersonEditData
-    {
-        const char *first;
-        const char *middle;
-        const char *last;
-        const char *birth_date;
-        const char *birth_location;
-        const char *death_date;
-        const char *death_location;
-        bool clear_death;
-        AppPersonEditRelationships relationships;
-    } AppPersonEditData;
-
-#define APP_PERSON_CREATE_MAX_CERTIFICATES 8U
-#define APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES 8U
-
     typedef struct AppPersonCreateTimelineEntry
     {
         TimelineEventType type;
@@ -124,11 +108,41 @@ extern "C"
         const char *location;
     } AppPersonCreateTimelineEntry;
 
+#define APP_PERSON_CREATE_MAX_CERTIFICATES 8U
+#define APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES 8U
+
+    typedef struct AppPersonEditData
+    {
+        const char *first;
+        const char *middle;
+        const char *last;
+        const char *maiden_name;
+        const char *blood_type;
+        bool is_adopted;
+        const char *birth_date;
+        const char *birth_location;
+        const char *death_date;
+        const char *death_location;
+        bool clear_death;
+        bool update_profile_image;
+        const char *profile_image_path;
+        bool update_certificates;
+        const char *certificate_paths[APP_PERSON_CREATE_MAX_CERTIFICATES];
+        size_t certificate_count;
+        bool update_timeline;
+        AppPersonCreateTimelineEntry timeline_entries[APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES];
+        size_t timeline_count;
+        AppPersonEditRelationships relationships;
+    } AppPersonEditData;
+
     typedef struct AppPersonCreateData
     {
         const char *first;
         const char *middle;
         const char *last;
+        const char *maiden_name;
+        const char *blood_type;
+        bool is_adopted;
         const char *birth_date;
         const char *birth_location;
         bool is_alive;

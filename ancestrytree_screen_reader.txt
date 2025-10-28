@@ -614,3 +614,79 @@ Loading holographic archive...: 100% complete.
 Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
 Holographic name panels hidden.
 Relationship analysis refreshed.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Holographic name panels hidden.
+Parent connections set to straight segments.
+Holographic name panels enabled.
+Monika Rickert selected, alive.
+Edit panel opened for selected hologram.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Monika Rickert selected, alive.
+Edit panel opened for selected hologram.
+Edit-person request queued.
+Updated profile for Monika Gruß.
+Sigrid Rickert selected, alive.
+Edit panel opened for selected hologram.
+Edit-person request queued.
+Updated profile for Sigrid Förster.
+Selection cleared.
+Silvia Massalsky selected, alive.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Selection cleared.
+Silvia Massalsky selected, alive.
+Edit panel opened for selected hologram.
+Edit-person request queued.
+Updated profile for Silvia Rickert.
+Thomas Rickert selected, alive.
+Selection cleared.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Anni Rickert (ID 16).
+Anni Rickert selected, alive.
+Add-person request queued.
+Created holographic profile for Lou Rickert (ID 17).
+Lou Rickert selected, alive.
+Add-person request queued.
+Created holographic profile for Manfred Gruß (ID 18).
+Manfred Gruß selected, alive.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Axel Gruß (ID 19).
+Axel Gruß selected, alive.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Selection cleared.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Auto orbit enabled.
+Auto orbit disabled.
+Relationship analysis refreshed.
+Overlay hidden.
+Grid lines hidden.

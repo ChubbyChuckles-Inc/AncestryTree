@@ -3,7 +3,7 @@
     "version": "1.0",
     "name": "Placeholder Tree",
     "creation_date": "",
-    "root_ids": [1, 2, 4, 9, 12, 13]
+    "root_ids": [1, 2, 4, 9, 12, 13, 18]
   },
   "persons": [
     {
@@ -131,7 +131,7 @@
       "name": {
         "first": "Silvia",
         "middle": "",
-        "last": "Massalsky"
+        "last": "Rickert"
       },
       "dates": {
         "birth_date": "1964-01-01",
@@ -226,7 +226,7 @@
         "is_alive": true
       },
       "parents": [6, 5],
-      "children": [11],
+      "children": [11, 16, 17],
       "spouses": [
         {
           "id": 9,
@@ -256,7 +256,7 @@
         "is_alive": true
       },
       "parents": [null, null],
-      "children": [11],
+      "children": [11, 16, 17],
       "spouses": [
         {
           "id": 8,
@@ -386,10 +386,40 @@
       "name": {
         "first": "Monika",
         "middle": "",
-        "last": "Rickert"
+        "last": "Gruß"
       },
       "dates": {
         "birth_date": "1949-01-01",
+        "birth_location": "Zwochau",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [12, 13],
+      "children": [],
+      "spouses": [
+        {
+          "id": 18,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 15,
+      "name": {
+        "first": "Sigrid",
+        "middle": "",
+        "last": "Förster"
+      },
+      "dates": {
+        "birth_date": "1953-01-01",
         "birth_location": "Zwochau",
         "death_date": "",
         "death_location": "",
@@ -407,22 +437,77 @@
       }
     },
     {
-      "id": 15,
+      "id": 16,
       "name": {
-        "first": "Sigrid",
+        "first": "Anni",
         "middle": "",
         "last": "Rickert"
       },
       "dates": {
-        "birth_date": "1953-01-01",
+        "birth_date": "2010-01-01",
+        "birth_location": "Leipzig",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [8, 9],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 17,
+      "name": {
+        "first": "Lou",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "2020-01-01",
+        "birth_location": "Leipzig",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [8, 9],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 18,
+      "name": {
+        "first": "Manfred",
+        "middle": "",
+        "last": "Gruß"
+      },
+      "dates": {
+        "birth_date": "1944-01-01",
         "birth_location": "Zwochau",
         "death_date": "",
         "death_location": "",
         "is_alive": true
       },
-      "parents": [12, 13],
+      "parents": [null, null],
       "children": [],
       "spouses": [
+        {
+          "id": 14,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
       ],
       "certificates": [],
       "profile_image": "",

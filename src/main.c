@@ -1236,6 +1236,9 @@ static void app_process_add_person_requests(UIContext *ui, AppState *app_state, 
         data.first          = request.first;
         data.middle         = (request.middle[0] != '\0') ? request.middle : NULL;
         data.last           = request.last;
+        data.maiden_name    = (request.maiden[0] != '\0') ? request.maiden : NULL;
+        data.blood_type     = (request.blood_type[0] != '\0') ? request.blood_type : NULL;
+        data.is_adopted     = request.is_adopted;
         data.birth_date     = request.birth_date;
         data.birth_location = (request.birth_location[0] != '\0') ? request.birth_location : NULL;
         data.is_alive       = request.is_alive;
@@ -1480,10 +1483,13 @@ static void app_process_edit_person_requests(UIContext *ui, AppState *app_state,
 
         AppPersonEditData edit_data;
         memset(&edit_data, 0, sizeof(edit_data));
-        edit_data.first      = request.first;
-        edit_data.middle     = (request.middle[0] != '\0') ? request.middle : NULL;
-        edit_data.last       = request.last;
-        edit_data.birth_date = request.birth_date;
+        edit_data.first       = request.first;
+        edit_data.middle      = (request.middle[0] != '\0') ? request.middle : NULL;
+        edit_data.last        = request.last;
+        edit_data.maiden_name = (request.maiden[0] != '\0') ? request.maiden : NULL;
+        edit_data.blood_type  = (request.blood_type[0] != '\0') ? request.blood_type : NULL;
+        edit_data.is_adopted  = request.is_adopted;
+        edit_data.birth_date  = request.birth_date;
         edit_data.birth_location =
             (request.birth_location[0] != '\0') ? request.birth_location : NULL;
         if (request.has_death)
@@ -1498,6 +1504,125 @@ static void app_process_edit_person_requests(UIContext *ui, AppState *app_state,
             edit_data.clear_death    = true;
             edit_data.death_date     = NULL;
             edit_data.death_location = NULL;
+        }
+
+        char asset_error[256];
+        asset_error[0] = '\0';
+        char profile_buffer[256];
+        const char *profile_path = NULL;
+        bool profile_copied      = false;
+
+        if (request.profile_image_defined)
+        {
+            if (request.clear_profile_image)
+            {
+                edit_data.update_profile_image = true;
+                edit_data.profile_image_path   = NULL;
+            }
+            else if (!app_prepare_asset_reference(request.profile_image_path, "profiles", "profile",
+                                                  profile_buffer, sizeof(profile_buffer),
+                                                  &profile_path, &profile_copied, asset_error,
+                                                  sizeof(asset_error)))
+            {
+                char message[512];
+                if (asset_error[0] != '\0')
+                {
+                    (void)snprintf(message, sizeof(message), "Profile import failed: %s",
+                                   asset_error);
+                }
+                else
+                {
+                    (void)snprintf(message, sizeof(message), "Profile import failed for path '%s'.",
+                                   request.profile_image_path);
+                }
+                app_report_error(ui, logger, message);
+                continue;
+            }
+            else
+            {
+                edit_data.update_profile_image = true;
+                edit_data.profile_image_path   = profile_path;
+            }
+        }
+
+        char certificate_buffers[APP_PERSON_CREATE_MAX_CERTIFICATES][256];
+        bool certificate_copied[APP_PERSON_CREATE_MAX_CERTIFICATES];
+        memset(certificate_copied, 0, sizeof(certificate_copied));
+
+        edit_data.update_certificates = true;
+        edit_data.certificate_count   = request.certificate_count;
+        bool certificate_failed       = false;
+        for (size_t index = 0U; index < edit_data.certificate_count; ++index)
+        {
+            const char *source_path = request.certificate_paths[index];
+            const char *relative    = NULL;
+            asset_error[0]          = '\0';
+            if (!app_prepare_asset_reference(
+                    source_path, "certificates", "certificate", certificate_buffers[index],
+                    sizeof(certificate_buffers[index]), &relative, &certificate_copied[index],
+                    asset_error, sizeof(asset_error)))
+            {
+                char message[512];
+                if (asset_error[0] != '\0')
+                {
+                    (void)snprintf(message, sizeof(message), "Certificate import failed: %s",
+                                   asset_error);
+                }
+                else
+                {
+                    (void)snprintf(message, sizeof(message),
+                                   "Certificate import failed for path '%s'.", source_path);
+                }
+                certificate_failed = true;
+                app_report_error(ui, logger, message);
+                break;
+            }
+            edit_data.certificate_paths[index] = relative;
+        }
+        if (certificate_failed)
+        {
+            if (profile_copied)
+            {
+                app_remove_copied_asset(profile_buffer);
+            }
+            for (size_t cleanup = 0U; cleanup < edit_data.certificate_count; ++cleanup)
+            {
+                if (certificate_copied[cleanup])
+                {
+                    app_remove_copied_asset(certificate_buffers[cleanup]);
+                }
+            }
+            continue;
+        }
+        for (size_t index = edit_data.certificate_count; index < APP_PERSON_CREATE_MAX_CERTIFICATES;
+             ++index)
+        {
+            edit_data.certificate_paths[index] = NULL;
+        }
+
+        edit_data.update_timeline = true;
+        edit_data.timeline_count  = request.timeline_count;
+        for (size_t index = 0U; index < edit_data.timeline_count; ++index)
+        {
+            edit_data.timeline_entries[index].type = request.timeline_entries[index].type;
+            edit_data.timeline_entries[index].date =
+                (request.timeline_entries[index].date[0] != '\0')
+                    ? request.timeline_entries[index].date
+                    : NULL;
+            edit_data.timeline_entries[index].description =
+                request.timeline_entries[index].description;
+            edit_data.timeline_entries[index].location =
+                (request.timeline_entries[index].location[0] != '\0')
+                    ? request.timeline_entries[index].location
+                    : NULL;
+        }
+        for (size_t index = edit_data.timeline_count;
+             index < APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES; ++index)
+        {
+            edit_data.timeline_entries[index].type        = TIMELINE_EVENT_CUSTOM;
+            edit_data.timeline_entries[index].date        = NULL;
+            edit_data.timeline_entries[index].description = NULL;
+            edit_data.timeline_entries[index].location    = NULL;
         }
 
         edit_data.relationships.apply_father  = request.update_father;
@@ -1523,6 +1648,17 @@ static void app_process_edit_person_requests(UIContext *ui, AppState *app_state,
         AppCommand *command = app_command_create_edit_person(request.person_id, &edit_data);
         if (!command)
         {
+            if (profile_copied)
+            {
+                app_remove_copied_asset(profile_buffer);
+            }
+            for (size_t cleanup = 0U; cleanup < edit_data.certificate_count; ++cleanup)
+            {
+                if (certificate_copied[cleanup])
+                {
+                    app_remove_copied_asset(certificate_buffers[cleanup]);
+                }
+            }
             app_report_error(ui, logger, "Failed to build edit command.");
             continue;
         }
@@ -1531,6 +1667,17 @@ static void app_process_edit_person_requests(UIContext *ui, AppState *app_state,
         error_buffer[0] = '\0';
         if (!app_state_push_command(app_state, command, error_buffer, sizeof(error_buffer)))
         {
+            if (profile_copied)
+            {
+                app_remove_copied_asset(profile_buffer);
+            }
+            for (size_t cleanup = 0U; cleanup < edit_data.certificate_count; ++cleanup)
+            {
+                if (certificate_copied[cleanup])
+                {
+                    app_remove_copied_asset(certificate_buffers[cleanup]);
+                }
+            }
             char message[256];
             if (error_buffer[0] != '\0')
             {

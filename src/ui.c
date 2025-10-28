@@ -153,6 +153,12 @@ typedef struct UIInternal
     struct
     {
         UIEditPersonRequest draft;
+        TimelineEventType new_timeline_type;
+        char new_timeline_date[32];
+        char new_timeline_description[128];
+        char new_timeline_location[96];
+        char new_certificate_path[128];
+        char current_profile_image[128];
         char error_message[192];
         bool confirm_delete;
     } edit_person_form;
@@ -766,6 +772,7 @@ static void ui_add_person_form_reset(UIInternal *internal)
     }
     memset(&internal->add_person_form.draft, 0, sizeof(UIAddPersonRequest));
     internal->add_person_form.draft.is_alive              = true;
+    internal->add_person_form.draft.is_adopted            = false;
     internal->add_person_form.new_timeline_type           = TIMELINE_EVENT_CUSTOM;
     internal->add_person_form.new_timeline_date[0]        = '\0';
     internal->add_person_form.new_timeline_description[0] = '\0';
@@ -798,12 +805,21 @@ static void ui_edit_person_form_reset(UIInternal *internal)
         return;
     }
     memset(&internal->edit_person_form.draft, 0, sizeof(UIEditPersonRequest));
-    internal->edit_person_form.draft.update_father  = true;
-    internal->edit_person_form.draft.update_mother  = true;
-    internal->edit_person_form.draft.update_spouses = true;
-    internal->edit_person_form.draft.has_death      = false;
-    internal->edit_person_form.error_message[0]     = '\0';
-    internal->edit_person_form.confirm_delete       = false;
+    internal->edit_person_form.draft.update_father         = true;
+    internal->edit_person_form.draft.update_mother         = true;
+    internal->edit_person_form.draft.update_spouses        = true;
+    internal->edit_person_form.draft.has_death             = false;
+    internal->edit_person_form.draft.profile_image_defined = false;
+    internal->edit_person_form.draft.clear_profile_image   = false;
+    internal->edit_person_form.draft.profile_image_path[0] = '\0';
+    internal->edit_person_form.new_timeline_type           = TIMELINE_EVENT_CUSTOM;
+    internal->edit_person_form.new_timeline_date[0]        = '\0';
+    internal->edit_person_form.new_timeline_description[0] = '\0';
+    internal->edit_person_form.new_timeline_location[0]    = '\0';
+    internal->edit_person_form.new_certificate_path[0]     = '\0';
+    internal->edit_person_form.current_profile_image[0]    = '\0';
+    internal->edit_person_form.error_message[0]            = '\0';
+    internal->edit_person_form.confirm_delete              = false;
 }
 
 static void ui_edit_person_set_error(UIInternal *internal, const char *message)
@@ -834,6 +850,33 @@ static void ui_edit_person_remove_spouse(UIEditPersonRequest *request, size_t in
         request->spouse_ids[shift - 1U] = request->spouse_ids[shift];
     }
     request->spouse_count -= 1U;
+}
+
+static void ui_edit_person_remove_timeline_entry(UIEditPersonRequest *request, size_t index)
+{
+    if (!request || index >= request->timeline_count)
+    {
+        return;
+    }
+    for (size_t shift = index + 1U; shift < request->timeline_count; ++shift)
+    {
+        request->timeline_entries[shift - 1U] = request->timeline_entries[shift];
+    }
+    request->timeline_count -= 1U;
+}
+
+static void ui_edit_person_remove_certificate(UIEditPersonRequest *request, size_t index)
+{
+    if (!request || index >= request->certificate_count)
+    {
+        return;
+    }
+    for (size_t shift = index + 1U; shift < request->certificate_count; ++shift)
+    {
+        memmove(request->certificate_paths[shift - 1U], request->certificate_paths[shift],
+                sizeof(request->certificate_paths[shift]));
+    }
+    request->certificate_count -= 1U;
 }
 
 static const char *ui_timeline_type_label(TimelineEventType type)
@@ -1067,6 +1110,55 @@ static bool ui_edit_person_validate(UIInternal *internal, const FamilyTree *tree
         }
     }
 
+    for (size_t index = 0U; index < draft->timeline_count; ++index)
+    {
+        UIAddPersonTimelineItem *item = &draft->timeline_entries[index];
+        if (item->description[0] == '\0')
+        {
+            (void)snprintf(message, message_capacity, "Timeline entries require a description.");
+            return false;
+        }
+        if (item->date[0] != '\0' && !at_date_is_valid_iso8601(item->date))
+        {
+            (void)snprintf(message, message_capacity, "Timeline entry %zu has an invalid date.",
+                           index + 1U);
+            return false;
+        }
+    }
+    if (draft->timeline_count > UI_ADD_PERSON_MAX_TIMELINE_ENTRIES)
+    {
+        (void)snprintf(message, message_capacity, "Timeline entry limit exceeded.");
+        return false;
+    }
+
+    for (size_t index = 0U; index < draft->certificate_count; ++index)
+    {
+        if (draft->certificate_paths[index][0] == '\0')
+        {
+            (void)snprintf(message, message_capacity, "Certificate paths cannot be empty.");
+            return false;
+        }
+    }
+    if (draft->certificate_count > UI_ADD_PERSON_MAX_CERTIFICATES)
+    {
+        (void)snprintf(message, message_capacity, "Certificate limit exceeded.");
+        return false;
+    }
+
+    if (draft->profile_image_defined)
+    {
+        if (draft->clear_profile_image)
+        {
+            draft->profile_image_path[0] = '\0';
+        }
+        else if (draft->profile_image_path[0] == '\0')
+        {
+            (void)snprintf(message, message_capacity,
+                           "Provide a profile image path or enable clear image.");
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -1100,6 +1192,16 @@ static void ui_edit_person_populate(UIInternal *internal, const Person *person)
         (void)snprintf(draft->last, sizeof(draft->last), "%s", person->name.last);
     }
 
+    if (person->maiden_name)
+    {
+        (void)snprintf(draft->maiden, sizeof(draft->maiden), "%s", person->maiden_name);
+    }
+    if (person->blood_type)
+    {
+        (void)snprintf(draft->blood_type, sizeof(draft->blood_type), "%s", person->blood_type);
+    }
+    draft->is_adopted = person->is_adopted;
+
     if (person->dates.birth_date)
     {
         (void)snprintf(draft->birth_date, sizeof(draft->birth_date), "%s",
@@ -1129,6 +1231,20 @@ static void ui_edit_person_populate(UIInternal *internal, const Person *person)
         draft->death_location[0] = '\0';
     }
 
+    if (person->profile_image_path)
+    {
+        (void)snprintf(internal->edit_person_form.current_profile_image,
+                       sizeof(internal->edit_person_form.current_profile_image), "%s",
+                       person->profile_image_path);
+    }
+    else
+    {
+        internal->edit_person_form.current_profile_image[0] = '\0';
+    }
+    draft->profile_image_defined = false;
+    draft->clear_profile_image   = false;
+    draft->profile_image_path[0] = '\0';
+
     draft->update_father = true;
     draft->father_id     = (person->parents[PERSON_PARENT_FATHER] != NULL)
                                ? person->parents[PERSON_PARENT_FATHER]->id
@@ -1154,6 +1270,67 @@ static void ui_edit_person_populate(UIInternal *internal, const Person *person)
         }
         draft->spouse_ids[draft->spouse_count++] = record->partner->id;
     }
+
+    draft->certificate_count = 0U;
+    if (person->certificate_paths)
+    {
+        size_t certificate_limit = person->certificate_count;
+        if (certificate_limit > UI_ADD_PERSON_MAX_CERTIFICATES)
+        {
+            certificate_limit = UI_ADD_PERSON_MAX_CERTIFICATES;
+        }
+        for (size_t index = 0U; index < certificate_limit; ++index)
+        {
+            const char *path = person->certificate_paths[index];
+            if (!path)
+            {
+                continue;
+            }
+            (void)snprintf(draft->certificate_paths[draft->certificate_count],
+                           sizeof(draft->certificate_paths[draft->certificate_count]), "%s", path);
+            draft->certificate_count += 1U;
+        }
+    }
+
+    draft->timeline_count = 0U;
+    if (person->timeline_entries)
+    {
+        size_t timeline_limit = person->timeline_count;
+        if (timeline_limit > UI_ADD_PERSON_MAX_TIMELINE_ENTRIES)
+        {
+            timeline_limit = UI_ADD_PERSON_MAX_TIMELINE_ENTRIES;
+        }
+        for (size_t index = 0U; index < timeline_limit; ++index)
+        {
+            const TimelineEntry *entry = &person->timeline_entries[index];
+            if (!entry)
+            {
+                continue;
+            }
+            UIAddPersonTimelineItem *slot = &draft->timeline_entries[draft->timeline_count];
+            slot->type                    = entry->type;
+            if (entry->date)
+            {
+                (void)snprintf(slot->date, sizeof(slot->date), "%s", entry->date);
+            }
+            if (entry->description)
+            {
+                (void)snprintf(slot->description, sizeof(slot->description), "%s",
+                               entry->description);
+            }
+            if (entry->location)
+            {
+                (void)snprintf(slot->location, sizeof(slot->location), "%s", entry->location);
+            }
+            draft->timeline_count += 1U;
+        }
+    }
+
+    internal->edit_person_form.new_timeline_type           = TIMELINE_EVENT_CUSTOM;
+    internal->edit_person_form.new_timeline_date[0]        = '\0';
+    internal->edit_person_form.new_timeline_description[0] = '\0';
+    internal->edit_person_form.new_timeline_location[0]    = '\0';
+    internal->edit_person_form.new_certificate_path[0]     = '\0';
 
     ui_edit_person_set_error(internal, NULL);
     internal->show_edit_person_panel = true;
@@ -4818,6 +4995,40 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Maiden", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->maiden,
+                                 (int)sizeof(draft->maiden), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Blood Type", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        const char *blood_label = (draft->blood_type[0] != '\0') ? draft->blood_type : "Unknown";
+        if (ui_nav_combo_begin_label(internal, ctx, blood_label, nk_vec2(160.0f, 240.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (ui_nav_combo_item_label(internal, ctx, "Unknown", NK_TEXT_LEFT))
+            {
+                draft->blood_type[0] = '\0';
+            }
+            static const char *blood_options[] = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"};
+            size_t blood_option_count          = sizeof(blood_options) / sizeof(blood_options[0]);
+            for (size_t index = 0U; index < blood_option_count; ++index)
+            {
+                const char *option = blood_options[index];
+                if (ui_nav_combo_item_label(internal, ctx, option, NK_TEXT_LEFT))
+                {
+                    snprintf(draft->blood_type, sizeof(draft->blood_type), "%s", option);
+                }
+            }
+            nk_combo_end(ctx);
+        }
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birth Date", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
         (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->birth_date,
@@ -4831,6 +5042,11 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->birth_location,
                                  (int)sizeof(draft->birth_location), nk_filter_default);
         nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_bool adopted = draft->is_adopted ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "Adopted", &adopted);
+        draft->is_adopted = (adopted == nk_true);
 
         nk_layout_row_dynamic(ctx, 24.0f, 1);
         nk_bool alive = draft->is_alive ? nk_true : nk_false;
@@ -4860,6 +5076,17 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
             draft->death_date[0]     = '\0';
             draft->death_location[0] = '\0';
         }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Profile Image", NK_TEXT_LEFT);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
+        nk_layout_row_push(ctx, width - 40.0f);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->profile_image_path,
+                                 (int)sizeof(draft->profile_image_path), nk_filter_default);
+        nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 6.0f, 1);
         nk_spacing(ctx, 1);
@@ -5311,6 +5538,45 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
 
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
         nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Maiden", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->maiden,
+                                 (int)sizeof(draft->maiden), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Blood Type", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        const char *blood_label = (draft->blood_type[0] != '\0') ? draft->blood_type : "Unknown";
+        if (ui_nav_combo_begin_label(internal, ctx, blood_label, nk_vec2(160.0f, 240.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (ui_nav_combo_item_label(internal, ctx, "Unknown", NK_TEXT_LEFT))
+            {
+                draft->blood_type[0] = '\0';
+            }
+            static const char *blood_options[] = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"};
+            size_t option_count                = sizeof(blood_options) / sizeof(blood_options[0]);
+            for (size_t index = 0U; index < option_count; ++index)
+            {
+                const char *option = blood_options[index];
+                if (ui_nav_combo_item_label(internal, ctx, option, NK_TEXT_LEFT))
+                {
+                    (void)snprintf(draft->blood_type, sizeof(draft->blood_type), "%s", option);
+                }
+            }
+            nk_combo_end(ctx);
+        }
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_bool adopted = draft->is_adopted ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "Adopted", &adopted);
+        draft->is_adopted = (adopted == nk_true);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
         nk_label(ctx, "Birth Date", NK_TEXT_LEFT);
         nk_layout_row_push(ctx, width - 120.0f);
         (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->birth_date,
@@ -5347,6 +5613,48 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
             (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->death_location,
                                      (int)sizeof(draft->death_location), nk_filter_default);
             nk_layout_row_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Profile Image", NK_TEXT_LEFT);
+        const char *current_profile = (internal->edit_person_form.current_profile_image[0] != '\0')
+                                          ? internal->edit_person_form.current_profile_image
+                                          : "(none)";
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_labelf(ctx, NK_TEXT_LEFT, "Current: %s", current_profile);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        nk_bool update_profile = draft->profile_image_defined ? nk_true : nk_false;
+        (void)ui_nav_checkbox_label(internal, ctx, "Update profile image", &update_profile);
+        draft->profile_image_defined = (update_profile == nk_true);
+
+        if (draft->profile_image_defined)
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            nk_bool clear_profile = draft->clear_profile_image ? nk_true : nk_false;
+            (void)ui_nav_checkbox_label(internal, ctx, "Clear existing image", &clear_profile);
+            draft->clear_profile_image = (clear_profile == nk_true);
+
+            if (!draft->clear_profile_image)
+            {
+                nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 1);
+                nk_layout_row_push(ctx, width - 40.0f);
+                (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, draft->profile_image_path,
+                                         (int)sizeof(draft->profile_image_path), nk_filter_default);
+                nk_layout_row_end(ctx);
+            }
+            else
+            {
+                draft->profile_image_path[0] = '\0';
+            }
+        }
+        else
+        {
+            draft->clear_profile_image   = false;
+            draft->profile_image_path[0] = '\0';
         }
 
         nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -5495,6 +5803,174 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
                 draft->spouse_count += 1U;
             }
         }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Timeline Entries", NK_TEXT_LEFT);
+
+        for (size_t index = 0U; index < draft->timeline_count; ++index)
+        {
+            UIAddPersonTimelineItem *item = &draft->timeline_entries[index];
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            nk_labelf(ctx, NK_TEXT_LEFT, "%s — %s", ui_timeline_type_label(item->type),
+                      item->description);
+            nk_layout_row_begin(ctx, NK_STATIC, 20.0f, 3);
+            nk_layout_row_push(ctx, width - 140.0f);
+            nk_label(ctx, item->date[0] != '\0' ? item->date : "(no date)", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, width - 140.0f);
+            nk_label(ctx, item->location[0] != '\0' ? item->location : "", NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, 60.0f);
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_DELETE, "Remove"))
+            {
+                ui_edit_person_remove_timeline_entry(draft, index);
+                --index;
+            }
+            nk_layout_row_end(ctx);
+        }
+
+        nk_layout_row_dynamic(ctx, 4.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "New Timeline Entry", NK_TEXT_LEFT);
+
+        const char *entry_type_label =
+            ui_timeline_type_label(internal->edit_person_form.new_timeline_type);
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Type", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        if (ui_nav_combo_begin_label(internal, ctx, entry_type_label, nk_vec2(220.0f, 160.0f)))
+        {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (ui_nav_combo_item_label(internal, ctx, "Birth", NK_TEXT_LEFT))
+            {
+                internal->edit_person_form.new_timeline_type = TIMELINE_EVENT_BIRTH;
+            }
+            if (ui_nav_combo_item_label(internal, ctx, "Marriage", NK_TEXT_LEFT))
+            {
+                internal->edit_person_form.new_timeline_type = TIMELINE_EVENT_MARRIAGE;
+            }
+            if (ui_nav_combo_item_label(internal, ctx, "Death", NK_TEXT_LEFT))
+            {
+                internal->edit_person_form.new_timeline_type = TIMELINE_EVENT_DEATH;
+            }
+            if (ui_nav_combo_item_label(internal, ctx, "Custom", NK_TEXT_LEFT))
+            {
+                internal->edit_person_form.new_timeline_type = TIMELINE_EVENT_CUSTOM;
+            }
+            nk_combo_end(ctx);
+        }
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Date", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_FIELD, internal->edit_person_form.new_timeline_date,
+            (int)sizeof(internal->edit_person_form.new_timeline_date), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 60.0f, 1);
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_BOX, internal->edit_person_form.new_timeline_description,
+            (int)sizeof(internal->edit_person_form.new_timeline_description), nk_filter_default);
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, 100.0f);
+        nk_label(ctx, "Location", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, width - 120.0f);
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_FIELD, internal->edit_person_form.new_timeline_location,
+            (int)sizeof(internal->edit_person_form.new_timeline_location), nk_filter_default);
+        nk_layout_row_end(ctx);
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_ADD, "Add Entry"))
+        {
+            if (draft->timeline_count >= UI_ADD_PERSON_MAX_TIMELINE_ENTRIES)
+            {
+                ui_edit_person_set_error(internal, "Maximum timeline entries reached.");
+            }
+            else if (internal->edit_person_form.new_timeline_description[0] == '\0')
+            {
+                ui_edit_person_set_error(internal, "Provide a description for the timeline entry.");
+            }
+            else if (internal->edit_person_form.new_timeline_date[0] != '\0' &&
+                     !at_date_is_valid_iso8601(internal->edit_person_form.new_timeline_date))
+            {
+                ui_edit_person_set_error(internal,
+                                         "Timeline entry date must be YYYY-MM-DD format.");
+            }
+            else
+            {
+                size_t slot                   = draft->timeline_count;
+                UIAddPersonTimelineItem *item = &draft->timeline_entries[slot];
+                item->type                    = internal->edit_person_form.new_timeline_type;
+                (void)snprintf(item->date, sizeof(item->date), "%s",
+                               internal->edit_person_form.new_timeline_date);
+                (void)snprintf(item->description, sizeof(item->description), "%s",
+                               internal->edit_person_form.new_timeline_description);
+                (void)snprintf(item->location, sizeof(item->location), "%s",
+                               internal->edit_person_form.new_timeline_location);
+                draft->timeline_count += 1U;
+                internal->edit_person_form.new_timeline_date[0]        = '\0';
+                internal->edit_person_form.new_timeline_description[0] = '\0';
+                internal->edit_person_form.new_timeline_location[0]    = '\0';
+                ui_edit_person_set_error(internal, NULL);
+            }
+        }
+
+        nk_layout_row_dynamic(ctx, 6.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, "Certificates", NK_TEXT_LEFT);
+        for (size_t index = 0U; index < draft->certificate_count; ++index)
+        {
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, width - 120.0f);
+            nk_label(ctx, draft->certificate_paths[index], NK_TEXT_LEFT);
+            nk_layout_row_push(ctx, 60.0f);
+            if (ui_nav_button_icon_label(internal, ctx, UI_ICON_DELETE, "Remove"))
+            {
+                ui_edit_person_remove_certificate(draft, index);
+                --index;
+            }
+            nk_layout_row_end(ctx);
+        }
+
+        nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+        nk_layout_row_push(ctx, width - 120.0f);
+        (void)ui_nav_edit_string(
+            internal, ctx, NK_EDIT_FIELD, internal->edit_person_form.new_certificate_path,
+            (int)sizeof(internal->edit_person_form.new_certificate_path), nk_filter_default);
+        nk_layout_row_push(ctx, 60.0f);
+        if (ui_nav_button_icon_label(internal, ctx, UI_ICON_ADD, "Add"))
+        {
+            if (internal->edit_person_form.new_certificate_path[0] == '\0')
+            {
+                ui_edit_person_set_error(internal, "Certificate path cannot be empty.");
+            }
+            else if (draft->certificate_count >= UI_ADD_PERSON_MAX_CERTIFICATES)
+            {
+                ui_edit_person_set_error(internal, "Certificate limit reached.");
+            }
+            else
+            {
+                size_t slot = draft->certificate_count;
+                (void)snprintf(draft->certificate_paths[slot],
+                               sizeof(draft->certificate_paths[slot]), "%s",
+                               internal->edit_person_form.new_certificate_path);
+                draft->certificate_count += 1U;
+                internal->edit_person_form.new_certificate_path[0] = '\0';
+                ui_edit_person_set_error(internal, NULL);
+            }
+        }
+        nk_layout_row_end(ctx);
 
         nk_layout_row_dynamic(ctx, 6.0f, 1);
         nk_spacing(ctx, 1);

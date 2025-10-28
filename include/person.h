@@ -47,6 +47,9 @@ typedef struct Person
 {
     uint32_t id;
     PersonName name;
+    char *maiden_name;
+    char *blood_type;
+    bool is_adopted;
     PersonDates dates;
     bool is_alive;
     struct Person *parents[2];
@@ -72,8 +75,14 @@ Person *person_create(uint32_t id);
 void person_destroy(Person *person);
 
 bool person_set_name(Person *person, const char *first, const char *middle, const char *last);
+bool person_set_maiden_name(Person *person, const char *maiden_name);
+bool person_set_blood_type(Person *person, const char *blood_type);
+void person_set_adopted(Person *person, bool is_adopted);
 bool person_set_birth(Person *person, const char *date, const char *location);
 bool person_set_death(Person *person, const char *date, const char *location);
+bool person_set_profile_image(Person *person, const char *path);
+bool person_assign_certificates(Person *person, const char *const *paths, size_t count);
+bool person_assign_timeline(Person *person, const TimelineEntry *entries, size_t count);
 
 bool person_set_parent(Person *child, Person *parent, PersonParentSlot slot);
 bool person_add_child(Person *parent, Person *child);

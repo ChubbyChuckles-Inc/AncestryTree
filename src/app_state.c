@@ -726,17 +726,26 @@ bool app_state_create_person(AppState *state, const AppPersonCreateData *data,
         person->is_alive = true;
     }
 
-    if (data->profile_image_path && data->profile_image_path[0] != '\0')
+    if (!person_set_maiden_name(person, data->maiden_name))
     {
-        char *profile_copy = at_string_dup(data->profile_image_path);
-        if (!profile_copy)
-        {
-            person_destroy(person);
-            app_state_write_error(error_buffer, error_buffer_size,
-                                  "Failed to assign profile image path");
-            return false;
-        }
-        person->profile_image_path = profile_copy;
+        person_destroy(person);
+        app_state_write_error(error_buffer, error_buffer_size, "Failed to assign maiden name");
+        return false;
+    }
+    if (!person_set_blood_type(person, data->blood_type))
+    {
+        person_destroy(person);
+        app_state_write_error(error_buffer, error_buffer_size, "Failed to assign blood type");
+        return false;
+    }
+    person_set_adopted(person, data->is_adopted);
+
+    if (!person_set_profile_image(person, data->profile_image_path))
+    {
+        person_destroy(person);
+        app_state_write_error(error_buffer, error_buffer_size,
+                              "Failed to assign profile image path");
+        return false;
     }
 
     for (size_t index = 0U; index < data->certificate_count; ++index)
@@ -1022,6 +1031,113 @@ bool app_state_edit_person(AppState *state, uint32_t person_id, const AppPersonE
             {
                 (void)snprintf(error_buffer, error_buffer_size, "Unable to clear death info for %u",
                                person_id);
+                if (!person_set_maiden_name(person, edit_data->maiden_name))
+                {
+                    if (error_buffer && error_buffer_size > 0U)
+                    {
+                        (void)snprintf(error_buffer, error_buffer_size,
+                                       "Unable to update maiden name for %u", person_id);
+                    }
+                    return false;
+                }
+                if (!person_set_blood_type(person, edit_data->blood_type))
+                {
+                    if (error_buffer && error_buffer_size > 0U)
+                    {
+                        (void)snprintf(error_buffer, error_buffer_size,
+                                       "Unable to update blood type for %u", person_id);
+                    }
+                    return false;
+                }
+                person_set_adopted(person, edit_data->is_adopted);
+
+                if (edit_data->update_profile_image)
+                {
+                    if (!person_set_profile_image(person, edit_data->profile_image_path))
+                    {
+                        if (error_buffer && error_buffer_size > 0U)
+                        {
+                            (void)snprintf(error_buffer, error_buffer_size,
+                                           "Unable to update profile image for %u", person_id);
+                        }
+                        return false;
+                    }
+                }
+
+                if (edit_data->update_certificates)
+                {
+                    const char *const *paths = NULL;
+                    if (edit_data->certificate_count > 0U)
+                    {
+                        paths = edit_data->certificate_paths;
+                    }
+                    if (!person_assign_certificates(person, paths, edit_data->certificate_count))
+                    {
+                        if (error_buffer && error_buffer_size > 0U)
+                        {
+                            (void)snprintf(error_buffer, error_buffer_size,
+                                           "Unable to update certificates for %u", person_id);
+                        }
+                        return false;
+                    }
+                }
+
+                if (edit_data->update_timeline)
+                {
+                    size_t timeline_count = edit_data->timeline_count;
+                    if (timeline_count > APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES)
+                    {
+                        timeline_count = APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES;
+                    }
+                    TimelineEntry temp_entries[APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES];
+                    bool timeline_ok = true;
+                    for (size_t index = 0U; index < timeline_count; ++index)
+                    {
+                        const AppPersonCreateTimelineEntry *entry_data =
+                            &edit_data->timeline_entries[index];
+                        timeline_entry_init(&temp_entries[index], entry_data->type);
+                        if (entry_data->date && entry_data->date[0] != '\0')
+                        {
+                            timeline_ok =
+                                timeline_entry_set_date(&temp_entries[index], entry_data->date);
+                        }
+                        if (timeline_ok && entry_data->description &&
+                            entry_data->description[0] != '\0')
+                        {
+                            timeline_ok = timeline_entry_set_description(&temp_entries[index],
+                                                                         entry_data->description);
+                        }
+                        if (timeline_ok && entry_data->location && entry_data->location[0] != '\0')
+                        {
+                            timeline_ok = timeline_entry_set_location(&temp_entries[index],
+                                                                      entry_data->location);
+                        }
+                        if (!timeline_ok)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (timeline_ok)
+                    {
+                        timeline_ok = person_assign_timeline(person, temp_entries, timeline_count);
+                    }
+
+                    for (size_t index = 0U; index < timeline_count; ++index)
+                    {
+                        timeline_entry_reset(&temp_entries[index]);
+                    }
+
+                    if (!timeline_ok)
+                    {
+                        if (error_buffer && error_buffer_size > 0U)
+                        {
+                            (void)snprintf(error_buffer, error_buffer_size,
+                                           "Unable to update timeline entries for %u", person_id);
+                        }
+                        return false;
+                    }
+                }
             }
             return false;
         }
@@ -1382,10 +1498,21 @@ typedef struct AppCommandPersonFields
     char *first;
     char *middle;
     char *last;
+    char *maiden_name;
+    char *blood_type;
     char *birth_date;
     char *birth_location;
     char *death_date;
     char *death_location;
+    bool is_adopted;
+    bool profile_image_present;
+    char *profile_image_path;
+    bool certificates_present;
+    char **certificate_paths;
+    size_t certificate_count;
+    bool timeline_present;
+    TimelineEntry *timeline_entries;
+    size_t timeline_count;
     bool father_present;
     uint32_t father_id;
     bool mother_present;
@@ -1404,10 +1531,29 @@ static void app_command_person_fields_reset(AppCommandPersonFields *fields)
     AT_FREE(fields->first);
     AT_FREE(fields->middle);
     AT_FREE(fields->last);
+    AT_FREE(fields->maiden_name);
+    AT_FREE(fields->blood_type);
     AT_FREE(fields->birth_date);
     AT_FREE(fields->birth_location);
     AT_FREE(fields->death_date);
     AT_FREE(fields->death_location);
+    if (fields->certificate_paths)
+    {
+        for (size_t index = 0U; index < fields->certificate_count; ++index)
+        {
+            AT_FREE(fields->certificate_paths[index]);
+        }
+        AT_FREE(fields->certificate_paths);
+    }
+    if (fields->timeline_entries)
+    {
+        for (size_t index = 0U; index < fields->timeline_count; ++index)
+        {
+            timeline_entry_reset(&fields->timeline_entries[index]);
+        }
+        AT_FREE(fields->timeline_entries);
+    }
+    AT_FREE(fields->profile_image_path);
     AT_FREE(fields->spouse_ids);
     memset(fields, 0, sizeof(AppCommandPersonFields));
 }
@@ -1419,15 +1565,66 @@ static bool app_command_person_fields_capture(AppCommandPersonFields *fields, co
         return false;
     }
     app_command_person_fields_reset(fields);
-    fields->first      = at_string_dup(person->name.first);
-    fields->middle     = person->name.middle ? at_string_dup(person->name.middle) : NULL;
-    fields->last       = at_string_dup(person->name.last);
-    fields->birth_date = at_string_dup(person->dates.birth_date);
+    fields->first       = at_string_dup(person->name.first);
+    fields->middle      = person->name.middle ? at_string_dup(person->name.middle) : NULL;
+    fields->last        = at_string_dup(person->name.last);
+    fields->maiden_name = person->maiden_name ? at_string_dup(person->maiden_name) : NULL;
+    fields->blood_type  = person->blood_type ? at_string_dup(person->blood_type) : NULL;
+    fields->birth_date  = at_string_dup(person->dates.birth_date);
     fields->birth_location =
         person->dates.birth_location ? at_string_dup(person->dates.birth_location) : NULL;
     fields->death_date = person->dates.death_date ? at_string_dup(person->dates.death_date) : NULL;
     fields->death_location =
         person->dates.death_location ? at_string_dup(person->dates.death_location) : NULL;
+    fields->is_adopted            = person->is_adopted;
+    fields->profile_image_present = true;
+    fields->profile_image_path =
+        person->profile_image_path ? at_string_dup(person->profile_image_path) : NULL;
+    fields->certificates_present = true;
+    fields->certificate_count    = person->certificate_count;
+    if (fields->certificate_count > 0U)
+    {
+        fields->certificate_paths = (char **)AT_MALLOC(sizeof(char *) * fields->certificate_count);
+        if (!fields->certificate_paths)
+        {
+            app_command_person_fields_reset(fields);
+            return false;
+        }
+        for (size_t index = 0U; index < fields->certificate_count; ++index)
+        {
+            fields->certificate_paths[index] = person->certificate_paths[index]
+                                                   ? at_string_dup(person->certificate_paths[index])
+                                                   : NULL;
+            if (person->certificate_paths[index] && !fields->certificate_paths[index])
+            {
+                app_command_person_fields_reset(fields);
+                return false;
+            }
+        }
+    }
+    fields->timeline_present = true;
+    fields->timeline_count   = person->timeline_count;
+    if (fields->timeline_count > 0U)
+    {
+        fields->timeline_entries =
+            (TimelineEntry *)AT_MALLOC(sizeof(TimelineEntry) * fields->timeline_count);
+        if (!fields->timeline_entries)
+        {
+            app_command_person_fields_reset(fields);
+            return false;
+        }
+        for (size_t index = 0U; index < fields->timeline_count; ++index)
+        {
+            timeline_entry_init(&fields->timeline_entries[index],
+                                person->timeline_entries[index].type);
+            if (!timeline_entry_clone(&person->timeline_entries[index],
+                                      &fields->timeline_entries[index]))
+            {
+                app_command_person_fields_reset(fields);
+                return false;
+            }
+        }
+    }
     fields->father_present = true;
     fields->father_id =
         person->parents[PERSON_PARENT_FATHER] ? person->parents[PERSON_PARENT_FATHER]->id : 0U;
@@ -1470,6 +1667,12 @@ static bool app_command_person_fields_from_edit_data(AppCommandPersonFields *fie
     fields->middle =
         edit_data->middle && edit_data->middle[0] != '\0' ? at_string_dup(edit_data->middle) : NULL;
     fields->last           = edit_data->last ? at_string_dup(edit_data->last) : NULL;
+    fields->maiden_name    = edit_data->maiden_name && edit_data->maiden_name[0] != '\0'
+                                 ? at_string_dup(edit_data->maiden_name)
+                                 : NULL;
+    fields->blood_type     = edit_data->blood_type && edit_data->blood_type[0] != '\0'
+                                 ? at_string_dup(edit_data->blood_type)
+                                 : NULL;
     fields->birth_date     = edit_data->birth_date ? at_string_dup(edit_data->birth_date) : NULL;
     fields->birth_location = edit_data->birth_location && edit_data->birth_location[0] != '\0'
                                  ? at_string_dup(edit_data->birth_location)
@@ -1488,6 +1691,87 @@ static bool app_command_person_fields_from_edit_data(AppCommandPersonFields *fie
                                      ? at_string_dup(edit_data->death_location)
                                      : NULL;
     }
+    fields->is_adopted            = edit_data->is_adopted;
+    fields->profile_image_present = edit_data->update_profile_image;
+    if (fields->profile_image_present)
+    {
+        fields->profile_image_path =
+            edit_data->profile_image_path && edit_data->profile_image_path[0] != '\0'
+                ? at_string_dup(edit_data->profile_image_path)
+                : NULL;
+        if (edit_data->profile_image_path && edit_data->profile_image_path[0] != '\0' &&
+            !fields->profile_image_path)
+        {
+            app_command_person_fields_reset(fields);
+            return false;
+        }
+    }
+
+    fields->certificates_present = edit_data->update_certificates;
+    fields->certificate_count    = fields->certificates_present ? edit_data->certificate_count : 0U;
+    if (fields->certificates_present && fields->certificate_count > 0U)
+    {
+        fields->certificate_paths = (char **)AT_MALLOC(sizeof(char *) * fields->certificate_count);
+        if (!fields->certificate_paths)
+        {
+            app_command_person_fields_reset(fields);
+            return false;
+        }
+        for (size_t index = 0U; index < fields->certificate_count; ++index)
+        {
+            const char *source               = edit_data->certificate_paths[index];
+            fields->certificate_paths[index] = source ? at_string_dup(source) : NULL;
+            if (source && !fields->certificate_paths[index])
+            {
+                app_command_person_fields_reset(fields);
+                return false;
+            }
+        }
+    }
+
+    fields->timeline_present = edit_data->update_timeline;
+    size_t timeline_count    = edit_data->timeline_count;
+    if (timeline_count > APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES)
+    {
+        timeline_count = APP_PERSON_CREATE_MAX_TIMELINE_ENTRIES;
+    }
+    fields->timeline_count = fields->timeline_present ? timeline_count : 0U;
+    if (fields->timeline_present && fields->timeline_count > 0U)
+    {
+        fields->timeline_entries =
+            (TimelineEntry *)AT_MALLOC(sizeof(TimelineEntry) * fields->timeline_count);
+        if (!fields->timeline_entries)
+        {
+            app_command_person_fields_reset(fields);
+            return false;
+        }
+        for (size_t index = 0U; index < fields->timeline_count; ++index)
+        {
+            const AppPersonCreateTimelineEntry *entry_data = &edit_data->timeline_entries[index];
+            timeline_entry_init(&fields->timeline_entries[index], entry_data->type);
+            bool ok = true;
+            if (entry_data->date && entry_data->date[0] != '\0')
+            {
+                ok = timeline_entry_set_date(&fields->timeline_entries[index], entry_data->date);
+            }
+            if (ok && entry_data->description && entry_data->description[0] != '\0')
+            {
+                ok = timeline_entry_set_description(&fields->timeline_entries[index],
+                                                    entry_data->description);
+            }
+            if (ok && entry_data->location && entry_data->location[0] != '\0')
+            {
+                ok = timeline_entry_set_location(&fields->timeline_entries[index],
+                                                 entry_data->location);
+            }
+            if (!ok)
+            {
+                app_command_person_fields_reset(fields);
+                return false;
+            }
+        }
+    }
+
     const AppPersonEditRelationships *relationships = &edit_data->relationships;
     if (relationships->apply_father)
     {
@@ -1691,6 +1975,14 @@ static bool app_command_person_fields_apply(FamilyTree *tree, Person *person,
     {
         return false;
     }
+    if (!person_set_maiden_name(person, fields->maiden_name))
+    {
+        return false;
+    }
+    if (!person_set_blood_type(person, fields->blood_type))
+    {
+        return false;
+    }
     if (fields->death_date)
     {
         if (!person_set_death(person, fields->death_date, fields->death_location))
@@ -1701,6 +1993,33 @@ static bool app_command_person_fields_apply(FamilyTree *tree, Person *person,
     else if (!person_set_death(person, NULL, NULL))
     {
         return false;
+    }
+    person_set_adopted(person, fields->is_adopted);
+    if (fields->profile_image_present)
+    {
+        if (!person_set_profile_image(person, fields->profile_image_path))
+        {
+            return false;
+        }
+    }
+    if (fields->certificates_present)
+    {
+        const char *const *paths = (fields->certificate_count > 0U)
+                                       ? (const char *const *)fields->certificate_paths
+                                       : NULL;
+        if (!person_assign_certificates(person, paths, fields->certificate_count))
+        {
+            return false;
+        }
+    }
+    if (fields->timeline_present)
+    {
+        const TimelineEntry *entries =
+            (fields->timeline_count > 0U) ? fields->timeline_entries : NULL;
+        if (!person_assign_timeline(person, entries, fields->timeline_count))
+        {
+            return false;
+        }
     }
     if (!app_command_person_apply_parent(tree, person, PERSON_PARENT_FATHER, fields->father_present,
                                          fields->father_id))

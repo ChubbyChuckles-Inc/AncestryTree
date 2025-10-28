@@ -20,13 +20,13 @@ static bool ensure_children_capacity(Person *person)
     {
         return true;
     }
-    size_t new_capacity = (person->children_capacity == 0U) ? 4U : person->children_capacity * 2U;
+    size_t new_capacity   = (person->children_capacity == 0U) ? 4U : person->children_capacity * 2U;
     Person **new_children = at_secure_realloc(person->children, new_capacity, sizeof(Person *));
     if (!new_children)
     {
         return false;
     }
-    person->children = new_children;
+    person->children          = new_children;
     person->children_capacity = new_capacity;
     return true;
 }
@@ -42,18 +42,19 @@ static bool ensure_spouse_capacity(Person *person)
         return true;
     }
     size_t new_capacity = (person->spouses_capacity == 0U) ? 2U : person->spouses_capacity * 2U;
-    PersonSpouseRecord *records = at_secure_realloc(person->spouses, new_capacity, sizeof(PersonSpouseRecord));
+    PersonSpouseRecord *records =
+        at_secure_realloc(person->spouses, new_capacity, sizeof(PersonSpouseRecord));
     if (!records)
     {
         return false;
     }
     for (size_t index = person->spouses_capacity; index < new_capacity; ++index)
     {
-        records[index].partner = NULL;
-        records[index].marriage_date = NULL;
+        records[index].partner           = NULL;
+        records[index].marriage_date     = NULL;
         records[index].marriage_location = NULL;
     }
-    person->spouses = records;
+    person->spouses          = records;
     person->spouses_capacity = new_capacity;
     return true;
 }
@@ -68,13 +69,14 @@ static bool ensure_certificate_capacity(Person *person)
     {
         return true;
     }
-    size_t new_capacity = (person->certificate_capacity == 0U) ? 2U : person->certificate_capacity * 2U;
+    size_t new_capacity =
+        (person->certificate_capacity == 0U) ? 2U : person->certificate_capacity * 2U;
     char **new_paths = at_secure_realloc(person->certificate_paths, new_capacity, sizeof(char *));
     if (!new_paths)
     {
         return false;
     }
-    person->certificate_paths = new_paths;
+    person->certificate_paths    = new_paths;
     person->certificate_capacity = new_capacity;
     return true;
 }
@@ -90,12 +92,13 @@ static bool ensure_timeline_capacity(Person *person)
         return true;
     }
     size_t new_capacity = (person->timeline_capacity == 0U) ? 2U : person->timeline_capacity * 2U;
-    TimelineEntry *entries = at_secure_realloc(person->timeline_entries, new_capacity, sizeof(TimelineEntry));
+    TimelineEntry *entries =
+        at_secure_realloc(person->timeline_entries, new_capacity, sizeof(TimelineEntry));
     if (!entries)
     {
         return false;
     }
-    person->timeline_entries = entries;
+    person->timeline_entries  = entries;
     person->timeline_capacity = new_capacity;
     return true;
 }
@@ -117,7 +120,7 @@ static bool ensure_metadata_capacity(Person *person)
     {
         return false;
     }
-    person->metadata = entries;
+    person->metadata          = entries;
     person->metadata_capacity = new_capacity;
     return true;
 }
@@ -131,9 +134,9 @@ static void person_clear_name(Person *person)
     AT_FREE(person->name.first);
     AT_FREE(person->name.middle);
     AT_FREE(person->name.last);
-    person->name.first = NULL;
+    person->name.first  = NULL;
     person->name.middle = NULL;
-    person->name.last = NULL;
+    person->name.last   = NULL;
 }
 
 static void person_clear_dates(Person *person)
@@ -146,9 +149,9 @@ static void person_clear_dates(Person *person)
     AT_FREE(person->dates.birth_location);
     AT_FREE(person->dates.death_date);
     AT_FREE(person->dates.death_location);
-    person->dates.birth_date = NULL;
+    person->dates.birth_date     = NULL;
     person->dates.birth_location = NULL;
-    person->dates.death_date = NULL;
+    person->dates.death_date     = NULL;
     person->dates.death_location = NULL;
 }
 
@@ -163,8 +166,8 @@ static void person_clear_certificates(Person *person)
         AT_FREE(person->certificate_paths[index]);
     }
     AT_FREE(person->certificate_paths);
-    person->certificate_paths = NULL;
-    person->certificate_count = 0U;
+    person->certificate_paths    = NULL;
+    person->certificate_count    = 0U;
     person->certificate_capacity = 0U;
 }
 
@@ -179,8 +182,8 @@ static void person_clear_timeline(Person *person)
         timeline_entry_reset(&person->timeline_entries[index]);
     }
     AT_FREE(person->timeline_entries);
-    person->timeline_entries = NULL;
-    person->timeline_count = 0U;
+    person->timeline_entries  = NULL;
+    person->timeline_count    = 0U;
     person->timeline_capacity = 0U;
 }
 
@@ -196,8 +199,8 @@ static void person_clear_metadata(Person *person)
         AT_FREE(person->metadata[index].value);
     }
     AT_FREE(person->metadata);
-    person->metadata = NULL;
-    person->metadata_count = 0U;
+    person->metadata          = NULL;
+    person->metadata_count    = 0U;
     person->metadata_capacity = 0U;
 }
 
@@ -213,8 +216,8 @@ static void person_clear_spouses(Person *person)
         AT_FREE(person->spouses[index].marriage_location);
     }
     AT_FREE(person->spouses);
-    person->spouses = NULL;
-    person->spouses_count = 0U;
+    person->spouses          = NULL;
+    person->spouses_count    = 0U;
     person->spouses_capacity = 0U;
 }
 
@@ -225,8 +228,9 @@ Person *person_create(uint32_t id)
     {
         return NULL;
     }
-    person->id = id;
-    person->is_alive = true;
+    person->id         = id;
+    person->is_alive   = true;
+    person->is_adopted = false;
     person->parents[0] = NULL;
     person->parents[1] = NULL;
     /* Manual validation: instantiate via unit tests and verify parent/child symmetry. */
@@ -241,6 +245,8 @@ void person_destroy(Person *person)
     }
     person_clear_name(person);
     person_clear_dates(person);
+    AT_FREE(person->maiden_name);
+    AT_FREE(person->blood_type);
     AT_FREE(person->profile_image_path);
     AT_FREE(person->children);
     person_clear_spouses(person);
@@ -282,9 +288,9 @@ bool person_set_name(Person *person, const char *first, const char *middle, cons
     {
         return false;
     }
-    char *first_copy = at_string_dup(first);
+    char *first_copy  = at_string_dup(first);
     char *middle_copy = NULL;
-    char *last_copy = at_string_dup(last);
+    char *last_copy   = at_string_dup(last);
     if (middle && middle[0] != '\0')
     {
         middle_copy = at_string_dup(middle);
@@ -303,10 +309,49 @@ bool person_set_name(Person *person, const char *first, const char *middle, cons
         return false;
     }
     person_clear_name(person);
-    person->name.first = first_copy;
+    person->name.first  = first_copy;
     person->name.middle = middle_copy;
-    person->name.last = last_copy;
+    person->name.last   = last_copy;
     return true;
+}
+
+bool person_set_maiden_name(Person *person, const char *maiden_name)
+{
+    if (!person)
+    {
+        return false;
+    }
+    if (!maiden_name || maiden_name[0] == '\0')
+    {
+        AT_FREE(person->maiden_name);
+        person->maiden_name = NULL;
+        return true;
+    }
+    return person_assign_string(&person->maiden_name, maiden_name);
+}
+
+bool person_set_blood_type(Person *person, const char *blood_type)
+{
+    if (!person)
+    {
+        return false;
+    }
+    if (!blood_type || blood_type[0] == '\0')
+    {
+        AT_FREE(person->blood_type);
+        person->blood_type = NULL;
+        return true;
+    }
+    return person_assign_string(&person->blood_type, blood_type);
+}
+
+void person_set_adopted(Person *person, bool is_adopted)
+{
+    if (!person)
+    {
+        return;
+    }
+    person->is_adopted = is_adopted;
 }
 
 bool person_set_birth(Person *person, const char *date, const char *location)
@@ -336,7 +381,7 @@ bool person_set_birth(Person *person, const char *date, const char *location)
     }
     AT_FREE(person->dates.birth_date);
     AT_FREE(person->dates.birth_location);
-    person->dates.birth_date = date_copy;
+    person->dates.birth_date     = date_copy;
     person->dates.birth_location = location_copy;
     return true;
 }
@@ -352,7 +397,7 @@ bool person_set_death(Person *person, const char *date, const char *location)
         person->is_alive = true;
         AT_FREE(person->dates.death_date);
         AT_FREE(person->dates.death_location);
-        person->dates.death_date = NULL;
+        person->dates.death_date     = NULL;
         person->dates.death_location = NULL;
         return true;
     }
@@ -377,9 +422,77 @@ bool person_set_death(Person *person, const char *date, const char *location)
     }
     AT_FREE(person->dates.death_date);
     AT_FREE(person->dates.death_location);
-    person->dates.death_date = date_copy;
+    person->dates.death_date     = date_copy;
     person->dates.death_location = location_copy;
-    person->is_alive = false;
+    person->is_alive             = false;
+    return true;
+}
+
+bool person_set_profile_image(Person *person, const char *path)
+{
+    if (!person)
+    {
+        return false;
+    }
+    if (!path || path[0] == '\0')
+    {
+        AT_FREE(person->profile_image_path);
+        person->profile_image_path = NULL;
+        return true;
+    }
+    return person_assign_string(&person->profile_image_path, path);
+}
+
+bool person_assign_certificates(Person *person, const char *const *paths, size_t count)
+{
+    if (!person)
+    {
+        return false;
+    }
+    person_clear_certificates(person);
+    if (count == 0U)
+    {
+        return true;
+    }
+    if (!paths)
+    {
+        return false;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        const char *path = paths[index];
+        if (!path || path[0] == '\0' || !person_add_certificate(person, path))
+        {
+            person_clear_certificates(person);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool person_assign_timeline(Person *person, const TimelineEntry *entries, size_t count)
+{
+    if (!person)
+    {
+        return false;
+    }
+    person_clear_timeline(person);
+    if (count == 0U)
+    {
+        return true;
+    }
+    if (!entries)
+    {
+        return false;
+    }
+    for (size_t index = 0U; index < count; ++index)
+    {
+        if (!person_add_timeline_entry(person, &entries[index]))
+        {
+            person_clear_timeline(person);
+            return false;
+        }
+    }
     return true;
 }
 
@@ -462,7 +575,7 @@ bool person_remove_child(Person *parent, Person *child)
         return false;
     }
     size_t index = 0U;
-    bool found = false;
+    bool found   = false;
     for (; index < parent->children_count; ++index)
     {
         if (parent->children[index] == child)
@@ -510,8 +623,8 @@ static bool person_find_spouse_index(const Person *person, const Person *spouse,
     return false;
 }
 
-static bool person_relationship_cycle_detect(const Person *root, const Person *current, const Person **path,
-                                             size_t depth)
+static bool person_relationship_cycle_detect(const Person *root, const Person *current,
+                                             const Person **path, size_t depth)
 {
     if (!current)
     {
@@ -563,9 +676,9 @@ static bool person_add_spouse_internal(Person *person, Person *spouse, bool reci
         return false;
     }
     PersonSpouseRecord *record = &person->spouses[person->spouses_count];
-    record->partner = spouse;
-    record->marriage_date = NULL;
-    record->marriage_location = NULL;
+    record->partner            = spouse;
+    record->marriage_date      = NULL;
+    record->marriage_location  = NULL;
     person->spouses_count++;
     if (reciprocal)
     {
@@ -626,8 +739,8 @@ bool person_remove_spouse(Person *person, Person *spouse)
     return person_remove_spouse_internal(person, spouse, true);
 }
 
-static bool person_set_marriage_internal(Person *person, Person *spouse, const char *date, const char *location,
-                                         bool reciprocal)
+static bool person_set_marriage_internal(Person *person, Person *spouse, const char *date,
+                                         const char *location, bool reciprocal)
 {
     if (!person || !spouse)
     {
@@ -645,7 +758,7 @@ static bool person_set_marriage_internal(Person *person, Person *spouse, const c
         return false;
     }
 
-    char *date_copy = NULL;
+    char *date_copy     = NULL;
     char *location_copy = NULL;
 
     if (date && date[0] != '\0')
@@ -678,7 +791,7 @@ static bool person_set_marriage_internal(Person *person, Person *spouse, const c
 
     AT_FREE(person->spouses[index].marriage_date);
     AT_FREE(person->spouses[index].marriage_location);
-    person->spouses[index].marriage_date = date_copy;
+    person->spouses[index].marriage_date     = date_copy;
     person->spouses[index].marriage_location = location_copy;
     return true;
 }
@@ -750,7 +863,7 @@ bool person_metadata_set(Person *person, const char *key, const char *value)
     {
         return false;
     }
-    char *key_copy = at_string_dup(key);
+    char *key_copy   = at_string_dup(key);
     char *value_copy = value ? at_string_dup(value) : NULL;
     if (!key_copy || (value && !value_copy))
     {
@@ -758,16 +871,13 @@ bool person_metadata_set(Person *person, const char *key, const char *value)
         AT_FREE(value_copy);
         return false;
     }
-    person->metadata[person->metadata_count].key = key_copy;
+    person->metadata[person->metadata_count].key   = key_copy;
     person->metadata[person->metadata_count].value = value_copy;
     person->metadata_count++;
     return true;
 }
 
-static bool string_is_null_or_empty(const char *value)
-{
-    return value == NULL || value[0] == '\0';
-}
+static bool string_is_null_or_empty(const char *value) { return value == NULL || value[0] == '\0'; }
 
 bool person_validate(const Person *person, char *error_buffer, size_t error_buffer_size)
 {
@@ -783,7 +893,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Person %p has invalid id", (const void *)person);
+            (void)snprintf(error_buffer, error_buffer_size, "Person %p has invalid id",
+                           (const void *)person);
         }
         return false;
     }
@@ -791,7 +902,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Person %u lacks required name components", person->id);
+            (void)snprintf(error_buffer, error_buffer_size,
+                           "Person %u lacks required name components", person->id);
         }
         return false;
     }
@@ -799,7 +911,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Person %u missing birth date", person->id);
+            (void)snprintf(error_buffer, error_buffer_size, "Person %u missing birth date",
+                           person->id);
         }
         return false;
     }
@@ -807,7 +920,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Person %u marked deceased without death date", person->id);
+            (void)snprintf(error_buffer, error_buffer_size,
+                           "Person %u marked deceased without death date", person->id);
         }
         return false;
     }
@@ -815,7 +929,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Person %u has death date but is alive", person->id);
+            (void)snprintf(error_buffer, error_buffer_size, "Person %u has death date but is alive",
+                           person->id);
         }
         return false;
     }
@@ -825,7 +940,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
         {
             if (error_buffer && error_buffer_size > 0U)
             {
-                (void)snprintf(error_buffer, error_buffer_size, "Person %u has empty certificate path", person->id);
+                (void)snprintf(error_buffer, error_buffer_size,
+                               "Person %u has empty certificate path", person->id);
             }
             return false;
         }
@@ -835,8 +951,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
     {
         if (error_buffer && error_buffer_size > 0U)
         {
-            (void)snprintf(error_buffer, error_buffer_size, "Person %u participates in a relationship cycle",
-                           person->id);
+            (void)snprintf(error_buffer, error_buffer_size,
+                           "Person %u participates in a relationship cycle", person->id);
         }
         return false;
     }
@@ -847,7 +963,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
         {
             if (error_buffer && error_buffer_size > 0U)
             {
-                (void)snprintf(error_buffer, error_buffer_size, "Person %u spouse entry lacks partner", person->id);
+                (void)snprintf(error_buffer, error_buffer_size,
+                               "Person %u spouse entry lacks partner", person->id);
             }
             return false;
         }
@@ -855,7 +972,8 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
         {
             if (error_buffer && error_buffer_size > 0U)
             {
-                (void)snprintf(error_buffer, error_buffer_size, "Person %u cannot be their own spouse", person->id);
+                (void)snprintf(error_buffer, error_buffer_size,
+                               "Person %u cannot be their own spouse", person->id);
             }
             return false;
         }
@@ -864,14 +982,16 @@ bool person_validate(const Person *person, char *error_buffer, size_t error_buff
         {
             if (error_buffer && error_buffer_size > 0U)
             {
-                (void)snprintf(error_buffer, error_buffer_size, "Person %u has invalid marriage date", person->id);
+                (void)snprintf(error_buffer, error_buffer_size,
+                               "Person %u has invalid marriage date", person->id);
             }
             return false;
         }
     }
     for (size_t index = 0; index < person->timeline_count; ++index)
     {
-        if (!timeline_entry_validate(&person->timeline_entries[index], error_buffer, error_buffer_size))
+        if (!timeline_entry_validate(&person->timeline_entries[index], error_buffer,
+                                     error_buffer_size))
         {
             return false;
         }
@@ -888,7 +1008,7 @@ bool person_format_display_name(const Person *person, char *buffer, size_t capac
     buffer[0] = '\0';
 
     const char *segments[3] = {person->name.first, person->name.middle, person->name.last};
-    size_t written = 0U;
+    size_t written          = 0U;
     for (size_t index = 0U; index < 3U; ++index)
     {
         const char *segment = segments[index];
