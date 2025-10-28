@@ -107,6 +107,8 @@ static void render_set_default_config(RenderConfig *config)
     config->show_name_panels                = true;
     config->show_profile_images             = true;
     config->name_panel_font_size            = 26.0f;
+    config->name_panel_width_scale          = 1.0f;
+    config->name_panel_height_scale         = 1.0f;
     config->enable_frustum_culling          = true;
     config->enable_lod                      = true;
     config->lod_near_distance               = 14.0f;
@@ -238,6 +240,14 @@ bool render_config_validate(const RenderConfig *config)
         return false;
     }
     if (!(config->name_panel_font_size >= 1.0f))
+    {
+        return false;
+    }
+    if (!(config->name_panel_width_scale > 0.0f))
+    {
+        return false;
+    }
+    if (!(config->name_panel_height_scale > 0.0f))
     {
         return false;
     }
@@ -2145,7 +2155,18 @@ static void render_draw_label(RenderState *state, const LayoutResult *layout,
     {
         scale_factor = 0.48f;
     }
-    Vector2 size = {info.width_pixels * scale_factor, info.height_pixels * scale_factor};
+    float width_scale = state->config.name_panel_width_scale;
+    if (!(width_scale > 0.0f))
+    {
+        width_scale = 1.0f;
+    }
+    float height_scale = state->config.name_panel_height_scale;
+    if (!(height_scale > 0.0f))
+    {
+        height_scale = 1.0f;
+    }
+    Vector2 size = {info.width_pixels * scale_factor * width_scale,
+                    info.height_pixels * scale_factor * height_scale};
     Color tint   = WHITE;
     tint.a       = (unsigned char)(is_selected ? 255 : (is_hovered ? 244 : 232));
 
@@ -2197,6 +2218,8 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.show_name_panels              = config->show_name_panels;
         state->config.show_profile_images           = config->show_profile_images;
         state->config.name_panel_font_size          = config->name_panel_font_size;
+        state->config.name_panel_width_scale        = config->name_panel_width_scale;
+        state->config.name_panel_height_scale       = config->name_panel_height_scale;
         state->config.enable_frustum_culling        = config->enable_frustum_culling;
         state->config.enable_lod                    = config->enable_lod;
         state->config.lod_near_distance             = config->lod_near_distance;

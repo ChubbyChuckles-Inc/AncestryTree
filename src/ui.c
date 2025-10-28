@@ -2755,15 +2755,14 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                     nk_layout_row_dynamic(ctx, 18.0f, 1);
                     nk_label(ctx, "Source person", NK_TEXT_LEFT);
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
-                    if (ui_nav_combo_begin_label(internal, ctx, source_label,
-                                                 nk_vec2(280.0f, 320.0f)))
+                    if (nk_combo_begin_label(ctx, source_label, nk_vec2(280.0f, 320.0f)))
                     {
                         for (size_t index = 0U; index < people_count; ++index)
                         {
                             Person *candidate = tree->persons[index];
                             char item_label[128];
                             ui_compose_person_label(candidate, item_label, sizeof(item_label));
-                            if (ui_nav_combo_item_label(internal, ctx, item_label, NK_TEXT_LEFT))
+                            if (nk_combo_item_label(ctx, item_label, NK_TEXT_LEFT))
                             {
                                 internal->relationship_source_index = (int)index;
                                 internal->relationship_source_id = candidate ? candidate->id : 0U;
@@ -2776,15 +2775,14 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                     nk_layout_row_dynamic(ctx, 18.0f, 1);
                     nk_label(ctx, "Target person", NK_TEXT_LEFT);
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
-                    if (ui_nav_combo_begin_label(internal, ctx, target_label,
-                                                 nk_vec2(280.0f, 320.0f)))
+                    if (nk_combo_begin_label(ctx, target_label, nk_vec2(280.0f, 320.0f)))
                     {
                         for (size_t index = 0U; index < people_count; ++index)
                         {
                             Person *candidate = tree->persons[index];
                             char item_label[128];
                             ui_compose_person_label(candidate, item_label, sizeof(item_label));
-                            if (ui_nav_combo_item_label(internal, ctx, item_label, NK_TEXT_LEFT))
+                            if (nk_combo_item_label(ctx, item_label, NK_TEXT_LEFT))
                             {
                                 internal->relationship_target_index = (int)index;
                                 internal->relationship_target_id = candidate ? candidate->id : 0U;
@@ -2980,6 +2978,32 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         if (fabsf(name_panel_font - settings->name_panel_font_size) > 0.05f)
         {
             settings->name_panel_font_size = name_panel_font;
+            settings_mark_dirty(settings);
+        }
+
+        float name_panel_width = settings->name_panel_width_scale;
+        ui_nav_property_float(internal, ctx, "Name panel width scale", 0.01f, &name_panel_width,
+                              1000.0f, 0.2f, 0.05f, 0.2f, NULL);
+        if (!(name_panel_width > 0.0f))
+        {
+            name_panel_width = 0.01f;
+        }
+        if (fabsf(name_panel_width - settings->name_panel_width_scale) > 0.0005f)
+        {
+            settings->name_panel_width_scale = name_panel_width;
+            settings_mark_dirty(settings);
+        }
+
+        float name_panel_height = settings->name_panel_height_scale;
+        ui_nav_property_float(internal, ctx, "Name panel height scale", 0.01f, &name_panel_height,
+                              1000.0f, 0.2f, 0.05f, 0.2f, NULL);
+        if (!(name_panel_height > 0.0f))
+        {
+            name_panel_height = 0.01f;
+        }
+        if (fabsf(name_panel_height - settings->name_panel_height_scale) > 0.0005f)
+        {
+            settings->name_panel_height_scale = name_panel_height;
             settings_mark_dirty(settings);
         }
 
@@ -3632,6 +3656,42 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                         settings_mark_dirty(settings);
                     }
                     ui_internal_set_status(internal, "Name panel font size updated.");
+                }
+
+                float width_scale = render_config->name_panel_width_scale;
+                ui_nav_property_float(internal, ctx, "Name panel width scale", 0.01f, &width_scale,
+                                      1000.0f, 0.2f, 0.05f, 0.2f, NULL);
+                if (!(width_scale > 0.0f))
+                {
+                    width_scale = 0.01f;
+                }
+                if (fabsf(width_scale - render_config->name_panel_width_scale) > 0.0005f)
+                {
+                    render_config->name_panel_width_scale = width_scale;
+                    if (settings)
+                    {
+                        settings->name_panel_width_scale = width_scale;
+                        settings_mark_dirty(settings);
+                    }
+                    ui_internal_set_status(internal, "Name panel width scale updated.");
+                }
+
+                float height_scale = render_config->name_panel_height_scale;
+                ui_nav_property_float(internal, ctx, "Name panel height scale", 0.01f,
+                                      &height_scale, 1000.0f, 0.2f, 0.05f, 0.2f, NULL);
+                if (!(height_scale > 0.0f))
+                {
+                    height_scale = 0.01f;
+                }
+                if (fabsf(height_scale - render_config->name_panel_height_scale) > 0.0005f)
+                {
+                    render_config->name_panel_height_scale = height_scale;
+                    if (settings)
+                    {
+                        settings->name_panel_height_scale = height_scale;
+                        settings_mark_dirty(settings);
+                    }
+                    ui_internal_set_status(internal, "Name panel height scale updated.");
                 }
             }
             if (ui_nav_menu_item_label(internal, ctx,

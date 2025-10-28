@@ -40,6 +40,8 @@ typedef struct Settings
     SettingsLayoutAlgorithm default_layout_algorithm;
     SettingsColorScheme color_scheme;
     float name_panel_font_size;
+    float name_panel_width_scale;
+    float name_panel_height_scale;
     SettingsLanguage language;
     bool high_contrast_mode;
     float ui_font_scale;

@@ -31,6 +31,8 @@ static void settings_set_defaults(Settings *settings)
     settings->default_layout_algorithm        = SETTINGS_LAYOUT_ALGORITHM_HIERARCHICAL;
     settings->color_scheme                    = SETTINGS_COLOR_SCHEME_CYAN_GRAPH;
     settings->name_panel_font_size            = 26.0f;
+    settings->name_panel_width_scale          = 1.0f;
+    settings->name_panel_height_scale         = 1.0f;
     settings->language                        = SETTINGS_LANGUAGE_ENGLISH;
     settings->high_contrast_mode              = false;
     settings->ui_font_scale                   = 1.0f;
@@ -257,6 +259,22 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
                 settings->name_panel_font_size = parsed;
             }
         }
+        else if (settings_strcasecmp(key, "name_panel_width_scale") == 0)
+        {
+            float parsed = 0.0f;
+            if (settings_parse_float(value, &parsed) && parsed > 0.0f)
+            {
+                settings->name_panel_width_scale = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "name_panel_height_scale") == 0)
+        {
+            float parsed = 0.0f;
+            if (settings_parse_float(value, &parsed) && parsed > 0.0f)
+            {
+                settings->name_panel_height_scale = parsed;
+            }
+        }
         else if (settings_strcasecmp(key, "language") == 0)
         {
             unsigned int parsed = 0U;
@@ -366,6 +384,8 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         "default_layout_algorithm=%u\n"
         "color_scheme=%u\n"
         "name_panel_font_size=%.2f\n"
+        "name_panel_width_scale=%.3f\n"
+        "name_panel_height_scale=%.3f\n"
         "language=%u\n"
         "high_contrast_mode=%u\n"
         "ui_font_scale=%.3f\n"
@@ -377,6 +397,7 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         settings->camera_zoom_sensitivity, settings->auto_save_enabled ? 1U : 0U,
         settings->auto_save_interval_seconds, (unsigned int)settings->default_layout_algorithm,
         (unsigned int)settings->color_scheme, settings->name_panel_font_size,
+        settings->name_panel_width_scale, settings->name_panel_height_scale,
         (unsigned int)settings->language, settings->high_contrast_mode ? 1U : 0U,
         settings->ui_font_scale, settings->screen_reader_enabled ? 1U : 0U,
         settings->onboarding_completed ? 1U : 0U, settings->has_loaded_sample_tree ? 1U : 0U);

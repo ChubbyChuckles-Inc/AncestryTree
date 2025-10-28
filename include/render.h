@@ -54,6 +54,8 @@ typedef struct RenderConfig
     bool show_name_panels;
     bool show_profile_images;
     float name_panel_font_size;
+    float name_panel_width_scale;
+    float name_panel_height_scale;
     bool enable_frustum_culling;
     bool enable_lod;
     float lod_near_distance;

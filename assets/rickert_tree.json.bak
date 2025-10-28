@@ -3,7 +3,7 @@
     "version": "1.0",
     "name": "Placeholder Tree",
     "creation_date": "",
-    "root_ids": [1, 2, 4, 6, 9]
+    "root_ids": [1, 2, 4, 9, 12, 13]
   },
   "persons": [
     {
@@ -81,7 +81,7 @@
         "is_alive": true
       },
       "parents": [1, 2],
-      "children": [],
+      "children": [10],
       "spouses": [
         {
           "id": 4,
@@ -111,7 +111,7 @@
         "is_alive": true
       },
       "parents": [null, null],
-      "children": [],
+      "children": [10],
       "spouses": [
         {
           "id": 3,
@@ -170,7 +170,7 @@
         "death_location": "",
         "is_alive": true
       },
-      "parents": [null, null],
+      "parents": [12, 13],
       "children": [7, 8],
       "spouses": [
         {
@@ -226,7 +226,7 @@
         "is_alive": true
       },
       "parents": [6, 5],
-      "children": [],
+      "children": [11],
       "spouses": [
         {
           "id": 9,
@@ -256,10 +256,120 @@
         "is_alive": true
       },
       "parents": [null, null],
-      "children": [],
+      "children": [11],
       "spouses": [
         {
           "id": 8,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 10,
+      "name": {
+        "first": "Phil",
+        "middle": "",
+        "last": "Masalsky"
+      },
+      "dates": {
+        "birth_date": "1996-01-01",
+        "birth_location": "Reinsdorf",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [3, 4],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 11,
+      "name": {
+        "first": "Thea",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "2006-01-01",
+        "birth_location": "Leipzig",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [8, 9],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "profiles/profile_1761615267000.png",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 12,
+      "name": {
+        "first": "Herbert",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1922-01-01",
+        "birth_location": "Zwochau",
+        "death_date": "1990-01-01",
+        "death_location": "Zwochau",
+        "is_alive": false
+      },
+      "parents": [null, null],
+      "children": [6],
+      "spouses": [
+        {
+          "id": 13,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 13,
+      "name": {
+        "first": "Irmgard",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1925-01-01",
+        "birth_location": "Grabschütz",
+        "death_date": "2002-01-01",
+        "death_location": "Zwochau",
+        "is_alive": false
+      },
+      "parents": [null, null],
+      "children": [6],
+      "spouses": [
+        {
+          "id": 12,
           "marriage_date": "",
           "marriage_location": ""
         }

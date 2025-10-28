@@ -441,3 +441,135 @@ Snap the orbit camera back to its default distance and orientation.
 Frame the earliest generation so you can branch outward from the family origins.
 Snap the orbit camera back to its default distance and orientation.
 Silvia Massalsky selected, alive.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Holographic name panels hidden.
+Jutta Massalsky selected, deceased.
+Martin Massalsky selected, deceased.
+Silvia Massalsky selected, alive.
+Relationship analysis refreshed.
+Thomas Rickert selected, alive.
+Tina Rickert selected, alive.
+Jutta Massalsky selected, deceased.
+Martin Massalsky selected, deceased.
+Selection cleared.
+Christian Rickert selected, alive.
+Phil Masalsky selected, alive.
+Harald Massalsky selected, alive.
+Ramona Massalky selected, alive.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Thomas Rickert selected, alive.
+Edit panel opened for selected hologram.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Thomas Rickert selected, alive.
+Relationship analysis refreshed.
+Selection cleared.
+Thomas Rickert selected, alive.
+Tina Rickert selected, alive.
+Grid lines hidden.
+Overlay hidden.
+Add-person request queued.
+Created holographic profile for Thea Rickert (ID 11).
+Thea Rickert selected, alive.
+Florian Rickert selected, alive.
+Thea Rickert selected, alive.
+Selection cleared.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Thomas Rickert selected, alive.
+Parent connections set to straight segments.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Herbert Rickert (ID 12).
+Herbert Rickert selected, deceased.
+Thomas Rickert selected, alive.
+Edit panel opened for selected hologram.
+Edit-person request queued.
+Updated profile for Thomas Rickert.
+Herbert Rickert selected, deceased.
+Edit panel opened for selected hologram.
+Edit panel closed.
+Add-person request queued.
+Created holographic profile for Irmgard Rickert (ID 13).
+Irmgard Rickert selected, deceased.
+Thomas Rickert selected, alive.
+Edit panel opened for selected hologram.
+Edit-person request queued.
+Updated profile for Thomas Rickert.
+Camera centered on root generation.
+Camera reset to default orbit.
+Camera centered on root generation.
+Selection cleared.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Monika Rickert (ID 14).
+Monika Rickert selected, alive.
+Add-person request queued.
+Created holographic profile for Sigrid Rickert (ID 15).
+Sigrid Rickert selected, alive.
+Selection cleared.
+Camera centered on root generation.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json

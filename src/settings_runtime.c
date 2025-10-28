@@ -227,6 +227,14 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
         {
             config->name_panel_font_size = 26.0f;
         }
+        if (!(config->name_panel_width_scale > 0.0f))
+        {
+            config->name_panel_width_scale = 1.0f;
+        }
+        if (!(config->name_panel_height_scale > 0.0f))
+        {
+            config->name_panel_height_scale = 1.0f;
+        }
         return true;
     }
 
@@ -269,6 +277,21 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
         font_size = 72.0f;
     }
     config->name_panel_font_size = font_size;
+
+    float width_scale = settings->name_panel_width_scale;
+    if (!(width_scale > 0.0f))
+    {
+        width_scale = 1.0f;
+    }
+
+    float height_scale = settings->name_panel_height_scale;
+    if (!(height_scale > 0.0f))
+    {
+        height_scale = 1.0f;
+    }
+
+    config->name_panel_width_scale  = width_scale;
+    config->name_panel_height_scale = height_scale;
 
     return true;
 }
