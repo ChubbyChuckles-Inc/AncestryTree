@@ -1,8 +1,10 @@
 #include "render_labels.h"
 
 #include "at_memory.h"
+#include "path_utils.h"
 #include "person.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -194,6 +196,140 @@ static void render_labels_draw_gradient(Image *image, int width, int height, Col
     }
 }
 
+static void render_labels_normalize_slashes(char *path)
+{
+    if (!path)
+    {
+        return;
+    }
+    for (size_t index = 0U; path[index] != '\0'; ++index)
+    {
+        if (path[index] == '\\')
+        {
+            path[index] = '/';
+        }
+    }
+}
+
+static bool render_labels_path_has_prefix_ci(const char *value, const char *prefix)
+{
+    if (!value || !prefix)
+    {
+        return false;
+    }
+    for (size_t index = 0U; prefix[index] != '\0'; ++index)
+    {
+        char lhs = value[index];
+        char rhs = prefix[index];
+        if (lhs == '\0')
+        {
+            return false;
+        }
+        lhs = (char)tolower((unsigned char)lhs);
+        rhs = (char)tolower((unsigned char)rhs);
+        if (lhs != rhs)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool render_labels_try_resolve_candidate(const char *candidate, char *resolved,
+                                                size_t capacity)
+{
+    if (!candidate || candidate[0] == '\0' || !resolved || capacity == 0U)
+    {
+        return false;
+    }
+
+    char normalized[512];
+    size_t length = 0U;
+    while (candidate[length] != '\0' && length + 1U < sizeof(normalized))
+    {
+        char c = candidate[length];
+        if (c == '\\')
+        {
+            c = '/';
+        }
+        normalized[length++] = c;
+    }
+    if (candidate[length] != '\0')
+    {
+        return false;
+    }
+    normalized[length] = '\0';
+
+    if (FileExists(normalized))
+    {
+        if (length + 1U > capacity)
+        {
+            return false;
+        }
+        memcpy(resolved, normalized, length + 1U);
+        return true;
+    }
+
+    const unsigned int level_candidates[] = {0U, 1U, 2U, 3U};
+    const char *application_dir           = GetApplicationDirectory();
+    for (size_t level = 0U; level < sizeof(level_candidates) / sizeof(level_candidates[0]); ++level)
+    {
+        char joined[512];
+        if (!path_join_relative(application_dir, level_candidates[level], normalized, joined,
+                                sizeof(joined)))
+        {
+            continue;
+        }
+        if (FileExists(joined))
+        {
+            size_t joined_length = strlen(joined);
+            if (joined_length + 1U > capacity)
+            {
+                return false;
+            }
+            memcpy(resolved, joined, joined_length + 1U);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool render_labels_resolve_profile_image_path(const char *input_path, char *resolved,
+                                                     size_t capacity)
+{
+    if (!input_path || input_path[0] == '\0' || !resolved || capacity == 0U)
+    {
+        return false;
+    }
+
+    char assets_candidate[512];
+    const char *candidates[3];
+    size_t candidate_count = 0U;
+
+    candidates[candidate_count++] = input_path;
+
+    if (!render_labels_path_has_prefix_ci(input_path, "assets/"))
+    {
+        if (snprintf(assets_candidate, sizeof(assets_candidate), "assets/%s", input_path) <
+            (int)sizeof(assets_candidate))
+        {
+            render_labels_normalize_slashes(assets_candidate);
+            candidates[candidate_count++] = assets_candidate;
+        }
+    }
+
+    for (size_t index = 0U; index < candidate_count; ++index)
+    {
+        if (render_labels_try_resolve_candidate(candidates[index], resolved, capacity))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEntry *entry,
                                         const Person *person, bool include_profile,
                                         float requested_font_size)
@@ -216,9 +352,11 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
     if (include_profile && person && person->profile_image_path &&
         person->profile_image_path[0] != '\0')
     {
-        if (FileExists(person->profile_image_path))
+        char resolved_path[512];
+        if (render_labels_resolve_profile_image_path(person->profile_image_path, resolved_path,
+                                                     sizeof(resolved_path)))
         {
-            profile_image = LoadImage(person->profile_image_path);
+            profile_image = LoadImage(resolved_path);
             if (profile_image.data != NULL)
             {
                 portrait_pixels = (int)(font_size * 2.0f);
