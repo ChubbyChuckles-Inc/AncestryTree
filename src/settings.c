@@ -200,6 +200,13 @@ static void settings_set_defaults(Settings *settings)
     settings_panel_layout_reset(&settings->panel_add_person);
     settings_panel_layout_reset(&settings->panel_edit_person);
     settings_panel_layout_reset(&settings->panel_settings);
+    settings->panel_hud_visible        = true;
+    settings->panel_about_visible      = false;
+    settings->panel_help_visible       = false;
+    settings->panel_search_visible     = false;
+    settings->panel_analytics_visible  = false;
+    settings->panel_add_person_visible = false;
+    settings->panel_settings_visible   = false;
 }
 void settings_init_defaults(Settings *settings)
 {
@@ -542,6 +549,62 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
         {
             (void)settings_parse_panel_layout(value, &settings->panel_settings);
         }
+        else if (settings_strcasecmp(key, "panel_hud_visible") == 0)
+        {
+            bool parsed = settings->panel_hud_visible;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->panel_hud_visible = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "panel_about_visible") == 0)
+        {
+            bool parsed = settings->panel_about_visible;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->panel_about_visible = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "panel_help_visible") == 0)
+        {
+            bool parsed = settings->panel_help_visible;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->panel_help_visible = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "panel_search_visible") == 0)
+        {
+            bool parsed = settings->panel_search_visible;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->panel_search_visible = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "panel_analytics_visible") == 0)
+        {
+            bool parsed = settings->panel_analytics_visible;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->panel_analytics_visible = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "panel_add_person_visible") == 0)
+        {
+            bool parsed = settings->panel_add_person_visible;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->panel_add_person_visible = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "panel_settings_visible") == 0)
+        {
+            bool parsed = settings->panel_settings_visible;
+            if (settings_parse_bool(value, &parsed))
+            {
+                settings->panel_settings_visible = parsed;
+            }
+        }
     }
 
     fclose(stream);
@@ -612,7 +675,14 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         "panel_analytics=%u,%.2f,%.2f,%.2f,%.2f\n"
         "panel_add_person=%u,%.2f,%.2f,%.2f,%.2f\n"
         "panel_edit_person=%u,%.2f,%.2f,%.2f,%.2f\n"
-        "panel_settings=%u,%.2f,%.2f,%.2f,%.2f\n",
+        "panel_settings=%u,%.2f,%.2f,%.2f,%.2f\n"
+        "panel_hud_visible=%u\n"
+        "panel_about_visible=%u\n"
+        "panel_help_visible=%u\n"
+        "panel_search_visible=%u\n"
+        "panel_analytics_visible=%u\n"
+        "panel_add_person_visible=%u\n"
+        "panel_settings_visible=%u\n",
         (unsigned int)settings->graphics_quality, settings->camera_rotation_sensitivity,
         settings->camera_pan_sensitivity, settings->camera_keyboard_pan_sensitivity,
         settings->camera_zoom_sensitivity, settings->auto_save_enabled ? 1U : 0U,
@@ -648,7 +718,10 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         (double)settings->panel_edit_person.width, (double)settings->panel_edit_person.height,
         settings->panel_settings.valid ? 1U : 0U, (double)settings->panel_settings.x,
         (double)settings->panel_settings.y, (double)settings->panel_settings.width,
-        (double)settings->panel_settings.height);
+        (double)settings->panel_settings.height, settings->panel_hud_visible ? 1U : 0U,
+        settings->panel_about_visible ? 1U : 0U, settings->panel_help_visible ? 1U : 0U,
+        settings->panel_search_visible ? 1U : 0U, settings->panel_analytics_visible ? 1U : 0U,
+        settings->panel_add_person_visible ? 1U : 0U, settings->panel_settings_visible ? 1U : 0U);
 
     bool success = written >= 0;
     if (!success && error_buffer && error_buffer_size > 0U)

@@ -834,3 +834,19 @@ Documentation pending public release.
 Relationship analysis refreshed.
 Screen reader narration enabled.
 Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Frame the earliest generation so you can branch outward from the family origins.
+Snap the orbit camera back to its default distance and orientation.
+Focus request queued for Christian Rickert.
+Focused on Christian Rickert.
+Christian Rickert selected, alive.
+Focus request queued for Herbert Rickert.
+Focused on Herbert Rickert.
+Herbert Rickert selected, deceased.
+Snap the orbit camera back to its default distance and orientation.
+Irmgard Rickert selected, deceased.
+Onboarding paused. Re-enable it from Settings when ready.
+Christian Rickert selected, alive.
+Grid lines hidden.
+Screen reader narration enabled.

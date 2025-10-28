@@ -86,6 +86,13 @@ typedef struct Settings
     SettingsPanelLayout panel_add_person;
     SettingsPanelLayout panel_edit_person;
     SettingsPanelLayout panel_settings;
+    bool panel_hud_visible;
+    bool panel_about_visible;
+    bool panel_help_visible;
+    bool panel_search_visible;
+    bool panel_analytics_visible;
+    bool panel_add_person_visible;
+    bool panel_settings_visible;
     unsigned int revision;
 } Settings;
 
