@@ -1,13 +1,13 @@
 #ifndef EVENT_H
 #define EVENT_H
 
+#include "at_log.h"
+#include "camera_controller.h"
 #include "graphics.h"
 #include "interaction.h"
 #include "layout.h"
 #include "render.h"
 #include "ui.h"
-#include "camera_controller.h"
-#include "at_log.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -19,7 +19,7 @@ extern "C"
 
     typedef enum EventProcessPhase
     {
-        EVENT_PROCESS_PHASE_PRE_FRAME = 0,
+        EVENT_PROCESS_PHASE_PRE_FRAME  = 0,
         EVENT_PROCESS_PHASE_POST_FRAME = 1
     } EventProcessPhase;
 
@@ -43,6 +43,7 @@ extern "C"
         void *shortcut_user_data;
         EventQueueHandler queue_handler;
         void *queue_user_data;
+        bool pointer_over_chrome;
     } EventProcessContext;
 
     void event_process(EventProcessContext *context, EventProcessPhase phase, float delta_seconds);

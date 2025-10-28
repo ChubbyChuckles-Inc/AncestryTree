@@ -34,13 +34,13 @@ void graphics_state_init(GraphicsState *state)
 GraphicsConfig graphics_config_default(void)
 {
     GraphicsConfig config;
-    config.width = 1280;
-    config.height = 720;
-    config.title = "AncestryTree";
-    config.icon_path = NULL;
-    config.enable_msaa = true;
+    config.width            = 1280;
+    config.height           = 720;
+    config.title            = "AncestryTree";
+    config.icon_path        = NULL;
+    config.enable_msaa      = true;
     config.start_fullscreen = false;
-    config.target_fps = 60U;
+    config.target_fps       = 60U;
     return config;
 }
 
@@ -58,11 +58,13 @@ bool graphics_window_init(GraphicsState *state, const GraphicsConfig *config, ch
 {
     if (!state)
     {
-        return graphics_set_error(error_buffer, error_buffer_size, "graphics state pointer is NULL");
+        return graphics_set_error(error_buffer, error_buffer_size,
+                                  "graphics state pointer is NULL");
     }
     if (!config)
     {
-        return graphics_set_error(error_buffer, error_buffer_size, "graphics config pointer is NULL");
+        return graphics_set_error(error_buffer, error_buffer_size,
+                                  "graphics config pointer is NULL");
     }
     if (state->initialized)
     {
@@ -73,7 +75,7 @@ bool graphics_window_init(GraphicsState *state, const GraphicsConfig *config, ch
     return graphics_set_error(error_buffer, error_buffer_size,
                               "raylib support not built; set RAYLIB_HOME and rebuild");
 #else
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_UNDECORATED);
     if (config->enable_msaa)
     {
         SetConfigFlags(FLAG_MSAA_4X_HINT);
@@ -83,7 +85,8 @@ bool graphics_window_init(GraphicsState *state, const GraphicsConfig *config, ch
     {
         CloseWindow();
         graphics_state_init(state);
-        return graphics_set_error(error_buffer, error_buffer_size, "failed to initialize raylib window");
+        return graphics_set_error(error_buffer, error_buffer_size,
+                                  "failed to initialize raylib window");
     }
 
     if (config->icon_path && config->icon_path[0] != '\0')
@@ -100,14 +103,15 @@ bool graphics_window_init(GraphicsState *state, const GraphicsConfig *config, ch
     {
         SetTargetFPS((int)config->target_fps);
     }
+    SetWindowMinSize(800, 480);
     if (config->start_fullscreen)
     {
         ToggleFullscreen();
         state->fullscreen = true;
     }
     state->initialized = true;
-    state->width = GetScreenWidth();
-    state->height = GetScreenHeight();
+    state->width       = GetScreenWidth();
+    state->height      = GetScreenHeight();
     return true;
 #endif
 }
@@ -136,7 +140,7 @@ bool graphics_window_handle_resize(GraphicsState *state)
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     if (IsWindowResized())
     {
-        state->width = GetScreenWidth();
+        state->width  = GetScreenWidth();
         state->height = GetScreenHeight();
         return true;
     }
@@ -144,23 +148,26 @@ bool graphics_window_handle_resize(GraphicsState *state)
     return false;
 }
 
-bool graphics_window_toggle_fullscreen(GraphicsState *state, char *error_buffer, size_t error_buffer_size)
+bool graphics_window_toggle_fullscreen(GraphicsState *state, char *error_buffer,
+                                       size_t error_buffer_size)
 {
     if (!state)
     {
-        return graphics_set_error(error_buffer, error_buffer_size, "graphics state pointer is NULL");
+        return graphics_set_error(error_buffer, error_buffer_size,
+                                  "graphics state pointer is NULL");
     }
     if (!state->initialized)
     {
         return graphics_set_error(error_buffer, error_buffer_size, "window not initialized");
     }
 #if !defined(ANCESTRYTREE_HAVE_RAYLIB)
-    return graphics_set_error(error_buffer, error_buffer_size, "raylib support not built; fullscreen unavailable");
+    return graphics_set_error(error_buffer, error_buffer_size,
+                              "raylib support not built; fullscreen unavailable");
 #else
     ToggleFullscreen();
     state->fullscreen = !state->fullscreen;
-    state->width = GetScreenWidth();
-    state->height = GetScreenHeight();
+    state->width      = GetScreenWidth();
+    state->height     = GetScreenHeight();
     return true;
 #endif
 }

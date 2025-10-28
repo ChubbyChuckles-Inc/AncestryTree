@@ -3851,14 +3851,19 @@ static void ui_draw_error_dialog(UIInternal *internal, UIContext *ui)
 
 static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTree *tree,
                              const LayoutResult *layout, CameraController *camera,
-                             RenderConfig *render_config, Settings *settings, bool settings_dirty)
+                             RenderConfig *render_config, Settings *settings, bool settings_dirty,
+                             float top_margin)
 {
     if (!internal || !ui)
     {
         return;
     }
-    struct nk_context *ctx  = &internal->ctx;
-    struct nk_rect bar_rect = nk_rect(0.0f, 0.0f, (float)ui->width, 30.0f);
+    struct nk_context *ctx = &internal->ctx;
+    if (!(top_margin >= 0.0f))
+    {
+        top_margin = 0.0f;
+    }
+    struct nk_rect bar_rect = nk_rect(0.0f, top_margin, (float)ui->width, 30.0f);
     float screen_height     = (float)ui->height;
     if (!(screen_height > 0.0f))
     {
@@ -6401,7 +6406,7 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
                      CameraController *camera, float fps, const Person *selected_person,
                      const Person *hovered_person, RenderConfig *render_config, Settings *settings,
-                     bool settings_dirty)
+                     bool settings_dirty, float top_margin)
 {
     if (!ui || !ui->available)
     {
@@ -6422,7 +6427,8 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
         ui_search_clear_results(internal);
         internal->search_selected_index = -1;
     }
-    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings, settings_dirty);
+    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings, settings_dirty,
+                     top_margin);
     ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
     ui_draw_about_window(internal, ui, settings);
     ui_draw_help_window(internal, ui, settings);
@@ -6451,6 +6457,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     (void)render_config;
     (void)settings;
     (void)settings_dirty;
+    (void)top_margin;
 #endif
 }
 

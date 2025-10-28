@@ -827,3 +827,10 @@ Onboarding paused. Re-enable it from Settings when ready.
 Screen reader narration enabled.
 Snap the orbit camera back to its default distance and orientation.
 Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Frame the earliest generation so you can branch outward from the family origins.
+Onboarding paused. Re-enable it from Settings when ready.
+Documentation pending public release.
+Relationship analysis refreshed.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.

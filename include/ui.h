@@ -132,7 +132,7 @@ bool ui_begin_frame(UIContext *ui, float delta_seconds, float wheel_delta);
 void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *layout,
                      CameraController *camera, float fps, const struct Person *selected_person,
                      const struct Person *hovered_person, struct RenderConfig *render_config,
-                     Settings *settings, bool settings_dirty);
+                     Settings *settings, bool settings_dirty, float top_margin);
 void ui_end_frame(UIContext *ui);
 bool ui_is_available(const UIContext *ui);
 bool ui_auto_orbit_enabled(const UIContext *ui);

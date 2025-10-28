@@ -21,6 +21,7 @@
 #include "shortcuts.h"
 #include "status_messages.h"
 #include "tree.h"
+#include "tree_statistics.h"
 #include "ui.h"
 
 #include <ctype.h>
@@ -38,6 +39,7 @@
 #define APP_SETTINGS_PATH "assets/settings.cfg"
 #define APP_AUTO_SAVE_PATH "assets/auto_save.json"
 #define APP_LOG_PATH "ancestrytree.log"
+#define APP_ICON_RELATIVE_PATH "assets/app_icon.png"
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 
@@ -265,6 +267,673 @@ static bool app_path_relativize_if_under_assets(const char *path, char *output, 
     }
 
     return false;
+}
+
+typedef enum AppTitlebarButton
+{
+    APP_TITLEBAR_BUTTON_NONE = 0,
+    APP_TITLEBAR_BUTTON_MINIMIZE,
+    APP_TITLEBAR_BUTTON_MAXIMIZE,
+    APP_TITLEBAR_BUTTON_CLOSE
+} AppTitlebarButton;
+
+#define APP_TITLEBAR_RESIZE_LEFT 0x1
+#define APP_TITLEBAR_RESIZE_RIGHT 0x2
+#define APP_TITLEBAR_RESIZE_TOP 0x4
+#define APP_TITLEBAR_RESIZE_BOTTOM 0x8
+
+typedef struct AppTitlebarLayout
+{
+    Rectangle titlebar_bounds;
+    Rectangle minimize_button;
+    Rectangle maximize_button;
+    Rectangle close_button;
+} AppTitlebarLayout;
+
+typedef struct AppTitlebarState
+{
+    Texture2D icon_texture;
+    bool icon_ready;
+    float height;
+    float button_size;
+    float button_spacing;
+    float stats_refresh_interval;
+    float stats_refresh_timer;
+    TreeStatistics stats;
+    bool stats_dirty;
+    const FamilyTree *stats_tree_last;
+    size_t stats_person_count_last;
+    bool dragging;
+    Vector2 drag_start_mouse;
+    Vector2 drag_start_window;
+    bool resizing;
+    Vector2 resize_start_mouse;
+    Vector2 resize_start_window;
+    Vector2 resize_start_size;
+    int resize_edges;
+    AppTitlebarButton hot_button;
+    AppTitlebarButton active_button;
+    bool close_requested;
+    char stats_summary[256];
+} AppTitlebarState;
+
+static void app_titlebar_state_init(AppTitlebarState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    memset(state, 0, sizeof(*state));
+    state->height                 = 56.0f;
+    state->button_size            = 32.0f;
+    state->button_spacing         = 8.0f;
+    state->stats_refresh_interval = 0.75f;
+    state->stats_refresh_timer    = state->stats_refresh_interval;
+    state->stats_dirty            = true;
+    state->stats_summary[0]       = '\0';
+    tree_statistics_init(&state->stats);
+}
+
+static void app_titlebar_state_shutdown(AppTitlebarState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    if (state->icon_ready)
+    {
+        UnloadTexture(state->icon_texture);
+        state->icon_ready = false;
+    }
+    tree_statistics_reset(&state->stats);
+}
+
+static void app_titlebar_state_load_icon(AppTitlebarState *state, const char *icon_path)
+{
+    if (!state)
+    {
+        return;
+    }
+    if (state->icon_ready)
+    {
+        UnloadTexture(state->icon_texture);
+        state->icon_ready = false;
+    }
+    if (!icon_path || icon_path[0] == '\0')
+    {
+        return;
+    }
+    Texture2D texture = LoadTexture(icon_path);
+    if (texture.id != 0U)
+    {
+        state->icon_texture = texture;
+        state->icon_ready   = true;
+    }
+}
+
+static float app_titlebar_state_get_height(const AppTitlebarState *state)
+{
+    return state ? state->height : 56.0f;
+}
+
+static float app_titlebar_state_get_menu_offset(const AppTitlebarState *state)
+{
+    return app_titlebar_state_get_height(state) + 6.0f;
+}
+
+static AppTitlebarLayout app_titlebar_calculate_layout(const AppTitlebarState *state,
+                                                       float window_width)
+{
+    AppTitlebarLayout layout;
+    float titlebar_height = app_titlebar_state_get_height(state);
+    if (!(window_width > 0.0f))
+    {
+        window_width = 1280.0f;
+    }
+    float button_size      = state ? state->button_size : 32.0f;
+    float button_spacing   = state ? state->button_spacing : 8.0f;
+    float padding          = 12.0f;
+    layout.titlebar_bounds = (Rectangle){0.0f, 0.0f, window_width, titlebar_height};
+    float button_y =
+        layout.titlebar_bounds.y + (layout.titlebar_bounds.height - button_size) * 0.5f;
+    float x             = window_width - padding - button_size;
+    layout.close_button = (Rectangle){x, button_y, button_size, button_size};
+    x -= (button_spacing + button_size);
+    layout.maximize_button = (Rectangle){x, button_y, button_size, button_size};
+    x -= (button_spacing + button_size);
+    layout.minimize_button = (Rectangle){x, button_y, button_size, button_size};
+    return layout;
+}
+
+static void app_titlebar_refresh_stats(AppTitlebarState *state, const FamilyTree *tree)
+{
+    if (!state)
+    {
+        return;
+    }
+    state->stats_tree_last         = tree;
+    state->stats_person_count_last = tree ? tree->person_count : 0U;
+    tree_statistics_reset(&state->stats);
+    if (!tree || tree->person_count == 0U)
+    {
+        (void)snprintf(state->stats_summary, sizeof(state->stats_summary), "No tree loaded");
+        return;
+    }
+    if (!tree_statistics_calculate(&state->stats, tree, 0U))
+    {
+        (void)snprintf(state->stats_summary, sizeof(state->stats_summary),
+                       "Statistics unavailable");
+        tree_statistics_reset(&state->stats);
+        return;
+    }
+    char lifespan[64];
+    if (state->stats.lifespan_sample_count == 0U)
+    {
+        (void)snprintf(lifespan, sizeof(lifespan), "Avg lifespan: N/A");
+    }
+    else
+    {
+        (void)snprintf(lifespan, sizeof(lifespan), "Avg lifespan: %.1f yrs",
+                       state->stats.average_lifespan_years);
+    }
+    (void)snprintf(state->stats_summary, sizeof(state->stats_summary),
+                   "Persons: %zu  |  Living: %zu  |  Deceased: %zu  |  Generations: %zu  |  %s",
+                   state->stats.person_count, state->stats.living_count,
+                   state->stats.deceased_count, state->stats.generation_count, lifespan);
+    tree_statistics_reset(&state->stats);
+}
+
+static void app_titlebar_draw_clipped_text(Font font, const char *text, float font_size,
+                                           float spacing, Rectangle bounds, Color color)
+{
+    if (!text || text[0] == '\0' || bounds.width <= 0.0f)
+    {
+        return;
+    }
+    Vector2 extent = MeasureTextEx(font, text, font_size, spacing);
+    if (extent.x <= bounds.width)
+    {
+        DrawTextEx(font, text, (Vector2){bounds.x, bounds.y}, font_size, spacing, color);
+        return;
+    }
+    char buffer[256];
+    size_t length = strlen(text);
+    if (length >= sizeof(buffer))
+    {
+        length = sizeof(buffer) - 1U;
+    }
+    size_t visible = length;
+    while (visible > 0U)
+    {
+        int written = snprintf(buffer, sizeof(buffer), "%.*s...", (int)(visible - 1U), text);
+        if (written > 0 && (size_t)written < sizeof(buffer))
+        {
+            extent = MeasureTextEx(font, buffer, font_size, spacing);
+            if (extent.x <= bounds.width)
+            {
+                DrawTextEx(font, buffer, (Vector2){bounds.x, bounds.y}, font_size, spacing, color);
+                return;
+            }
+        }
+        if (visible == 1U)
+        {
+            break;
+        }
+        visible--;
+    }
+    DrawTextEx(font, "...", (Vector2){bounds.x, bounds.y}, font_size, spacing, color);
+}
+
+static void app_titlebar_draw_button(const Rectangle bounds, AppTitlebarButton button,
+                                     AppTitlebarButton hot_button, AppTitlebarButton active_button)
+{
+    Color base  = (Color){34, 52, 82, 210};
+    Color hover = (Color){52, 92, 142, 232};
+    Color down  = (Color){26, 66, 110, 255};
+    if (button == APP_TITLEBAR_BUTTON_CLOSE)
+    {
+        base  = (Color){138, 34, 48, 220};
+        hover = (Color){188, 54, 68, 240};
+        down  = (Color){216, 66, 82, 255};
+    }
+    Color fill = base;
+    if (button == hot_button)
+    {
+        fill = hover;
+        if (button == active_button)
+        {
+            fill = down;
+        }
+    }
+    DrawRectangleRounded(bounds, 0.28f, 6, fill);
+    Color symbol = (Color){230, 236, 246, 255};
+    float left   = bounds.x + 8.0f;
+    float right  = bounds.x + bounds.width - 8.0f;
+    float top    = bounds.y + 8.0f;
+    float bottom = bounds.y + bounds.height - 8.0f;
+    float mid_y  = bounds.y + bounds.height * 0.5f;
+    switch (button)
+    {
+    case APP_TITLEBAR_BUTTON_MINIMIZE:
+        DrawLineEx((Vector2){left, mid_y}, (Vector2){right, mid_y}, 2.4f, symbol);
+        break;
+    case APP_TITLEBAR_BUTTON_MAXIMIZE:
+        if (IsWindowMaximized())
+        {
+            Rectangle outer = {left + 2.0f, top, right - left - 2.0f, bottom - top - 4.0f};
+            Rectangle inner = outer;
+            inner.x += 4.0f;
+            inner.y += 4.0f;
+            inner.width -= 4.0f;
+            inner.height -= 4.0f;
+            DrawRectangleLinesEx(inner, 2.0f, symbol);
+            DrawLineEx((Vector2){outer.x, outer.y}, (Vector2){outer.x + outer.width, outer.y}, 2.0f,
+                       symbol);
+            DrawLineEx((Vector2){outer.x, outer.y}, (Vector2){outer.x, outer.y + outer.height},
+                       2.0f, symbol);
+        }
+        else
+        {
+            Rectangle box = {left, top, right - left, bottom - top};
+            DrawRectangleLinesEx(box, 2.0f, symbol);
+        }
+        break;
+    case APP_TITLEBAR_BUTTON_CLOSE:
+        DrawLineEx((Vector2){left, top}, (Vector2){right, bottom}, 2.6f, symbol);
+        DrawLineEx((Vector2){left, bottom}, (Vector2){right, top}, 2.6f, symbol);
+        break;
+    default:
+        break;
+    }
+}
+
+static bool app_titlebar_begin_frame(AppTitlebarState *state, const FamilyTree *tree,
+                                     double delta_seconds)
+{
+    if (!state)
+    {
+        return false;
+    }
+    float window_width       = (float)GetScreenWidth();
+    float window_height      = (float)GetScreenHeight();
+    AppTitlebarLayout layout = app_titlebar_calculate_layout(state, window_width);
+
+    if (delta_seconds < 0.0)
+    {
+        delta_seconds = 0.0;
+    }
+    state->stats_refresh_timer += (float)delta_seconds;
+    size_t person_count = tree ? tree->person_count : 0U;
+    if (state->stats_tree_last != tree || state->stats_person_count_last != person_count)
+    {
+        state->stats_dirty = true;
+    }
+    if (state->stats_dirty || (tree && state->stats_refresh_timer >= state->stats_refresh_interval))
+    {
+        app_titlebar_refresh_stats(state, tree);
+        state->stats_refresh_timer = 0.0f;
+        state->stats_dirty         = false;
+    }
+
+    Vector2 mouse         = GetMousePosition();
+    bool left_pressed     = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool left_down        = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    bool left_released    = IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    bool window_maximized = IsWindowMaximized();
+
+    state->hot_button = APP_TITLEBAR_BUTTON_NONE;
+    if (CheckCollisionPointRec(mouse, layout.close_button))
+    {
+        state->hot_button = APP_TITLEBAR_BUTTON_CLOSE;
+    }
+    else if (CheckCollisionPointRec(mouse, layout.maximize_button))
+    {
+        state->hot_button = APP_TITLEBAR_BUTTON_MAXIMIZE;
+    }
+    else if (CheckCollisionPointRec(mouse, layout.minimize_button))
+    {
+        state->hot_button = APP_TITLEBAR_BUTTON_MINIMIZE;
+    }
+
+    Rectangle drag_region = layout.titlebar_bounds;
+    float reserved_width  = layout.minimize_button.x - drag_region.x;
+    if (reserved_width > 12.0f)
+    {
+        drag_region.width = reserved_width - 12.0f;
+    }
+    bool pointer_in_title     = CheckCollisionPointRec(mouse, drag_region);
+    bool pointer_over_buttons = (state->hot_button != APP_TITLEBAR_BUTTON_NONE);
+
+    const float resize_border = 6.0f;
+    const float top_band      = 4.0f;
+    int resize_edges          = 0;
+    if (!window_maximized)
+    {
+        if (mouse.x <= resize_border)
+        {
+            resize_edges |= APP_TITLEBAR_RESIZE_LEFT;
+        }
+        else if (mouse.x >= window_width - resize_border)
+        {
+            resize_edges |= APP_TITLEBAR_RESIZE_RIGHT;
+        }
+        if (mouse.y >= window_height - resize_border)
+        {
+            resize_edges |= APP_TITLEBAR_RESIZE_BOTTOM;
+        }
+        else if (mouse.y <= top_band)
+        {
+            resize_edges |= APP_TITLEBAR_RESIZE_TOP;
+        }
+    }
+
+    int desired_cursor = MOUSE_CURSOR_DEFAULT;
+    if (state->hot_button != APP_TITLEBAR_BUTTON_NONE)
+    {
+        desired_cursor = MOUSE_CURSOR_POINTING_HAND;
+    }
+    else if (state->resizing || resize_edges != 0)
+    {
+        int edges   = state->resizing ? state->resize_edges : resize_edges;
+        bool left   = (edges & APP_TITLEBAR_RESIZE_LEFT) != 0;
+        bool right  = (edges & APP_TITLEBAR_RESIZE_RIGHT) != 0;
+        bool top    = (edges & APP_TITLEBAR_RESIZE_TOP) != 0;
+        bool bottom = (edges & APP_TITLEBAR_RESIZE_BOTTOM) != 0;
+        if ((left && top) || (right && bottom))
+        {
+            desired_cursor = MOUSE_CURSOR_RESIZE_NWSE;
+        }
+        else if ((right && top) || (left && bottom))
+        {
+            desired_cursor = MOUSE_CURSOR_RESIZE_NESW;
+        }
+        else if (left || right)
+        {
+            desired_cursor = MOUSE_CURSOR_RESIZE_EW;
+        }
+        else if (top || bottom)
+        {
+            desired_cursor = MOUSE_CURSOR_RESIZE_NS;
+        }
+    }
+    SetMouseCursor(desired_cursor);
+
+    if (left_pressed)
+    {
+        if (pointer_over_buttons)
+        {
+            state->active_button = state->hot_button;
+        }
+        else if (resize_edges != 0)
+        {
+            state->resizing            = true;
+            state->resize_edges        = resize_edges;
+            state->resize_start_mouse  = mouse;
+            state->resize_start_window = GetWindowPosition();
+            state->resize_start_size = (Vector2){(float)GetScreenWidth(), (float)GetScreenHeight()};
+        }
+        else if (pointer_in_title)
+        {
+            if (window_maximized)
+            {
+                RestoreWindow();
+                window_maximized = false;
+                state->resize_start_size =
+                    (Vector2){(float)GetScreenWidth(), (float)GetScreenHeight()};
+                state->drag_start_window = GetWindowPosition();
+                state->drag_start_mouse  = GetMousePosition();
+            }
+            else
+            {
+                state->drag_start_window = GetWindowPosition();
+                state->drag_start_mouse  = mouse;
+            }
+            state->dragging = true;
+        }
+    }
+
+    if (state->dragging)
+    {
+        if (left_down)
+        {
+            Vector2 current_mouse = GetMousePosition();
+            Vector2 delta         = {current_mouse.x - state->drag_start_mouse.x,
+                                     current_mouse.y - state->drag_start_mouse.y};
+            int new_x             = (int)(state->drag_start_window.x + delta.x);
+            int new_y             = (int)(state->drag_start_window.y + delta.y);
+            SetWindowPosition(new_x, new_y);
+        }
+        else
+        {
+            state->dragging = false;
+        }
+    }
+
+    if (state->resizing)
+    {
+        if (left_down)
+        {
+            Vector2 current_mouse = GetMousePosition();
+            Vector2 delta         = {current_mouse.x - state->resize_start_mouse.x,
+                                     current_mouse.y - state->resize_start_mouse.y};
+            float new_width       = state->resize_start_size.x;
+            float new_height      = state->resize_start_size.y;
+            float new_x           = state->resize_start_window.x;
+            float new_y           = state->resize_start_window.y;
+            if (state->resize_edges & APP_TITLEBAR_RESIZE_RIGHT)
+            {
+                new_width = state->resize_start_size.x + delta.x;
+            }
+            if (state->resize_edges & APP_TITLEBAR_RESIZE_LEFT)
+            {
+                new_width = state->resize_start_size.x - delta.x;
+                new_x     = state->resize_start_window.x + delta.x;
+            }
+            if (state->resize_edges & APP_TITLEBAR_RESIZE_BOTTOM)
+            {
+                new_height = state->resize_start_size.y + delta.y;
+            }
+            if (state->resize_edges & APP_TITLEBAR_RESIZE_TOP)
+            {
+                new_height = state->resize_start_size.y - delta.y;
+                new_y      = state->resize_start_window.y + delta.y;
+            }
+            const float min_width  = 800.0f;
+            const float min_height = 480.0f;
+            float width_before     = new_width;
+            float height_before    = new_height;
+            if (new_width < min_width)
+            {
+                new_width = min_width;
+                if (state->resize_edges & APP_TITLEBAR_RESIZE_LEFT)
+                {
+                    new_x -= (min_width - width_before);
+                }
+            }
+            if (new_height < min_height)
+            {
+                new_height = min_height;
+                if (state->resize_edges & APP_TITLEBAR_RESIZE_TOP)
+                {
+                    new_y -= (min_height - height_before);
+                }
+            }
+            SetWindowSize((int)new_width, (int)new_height);
+            SetWindowPosition((int)new_x, (int)new_y);
+        }
+        else
+        {
+            state->resizing     = false;
+            state->resize_edges = 0;
+        }
+    }
+
+    if (left_released)
+    {
+        if (state->active_button != APP_TITLEBAR_BUTTON_NONE)
+        {
+            if (state->hot_button == state->active_button)
+            {
+                switch (state->active_button)
+                {
+                case APP_TITLEBAR_BUTTON_MINIMIZE:
+                    MinimizeWindow();
+                    state->dragging = false;
+                    state->resizing = false;
+                    break;
+                case APP_TITLEBAR_BUTTON_MAXIMIZE:
+                    if (IsWindowMaximized())
+                    {
+                        RestoreWindow();
+                    }
+                    else
+                    {
+                        MaximizeWindow();
+                    }
+                    state->dragging = false;
+                    state->resizing = false;
+                    break;
+                case APP_TITLEBAR_BUTTON_CLOSE:
+                    state->close_requested = true;
+                    break;
+                default:
+                    break;
+                }
+            }
+            state->active_button = APP_TITLEBAR_BUTTON_NONE;
+        }
+    }
+
+    bool pointer_captured = pointer_in_title || pointer_over_buttons || state->dragging ||
+                            state->resizing || state->active_button != APP_TITLEBAR_BUTTON_NONE;
+    return pointer_captured;
+}
+
+static void app_titlebar_draw(const AppTitlebarState *state, const FamilyTree *tree,
+                              const AppFileState *file_state, const AppState *app_state, float fps)
+{
+    if (!state)
+    {
+        return;
+    }
+    float window_width       = (float)GetScreenWidth();
+    AppTitlebarLayout layout = app_titlebar_calculate_layout(state, window_width);
+
+    Color gradient_left  = (Color){10, 18, 34, 255};
+    Color gradient_right = (Color){20, 32, 58, 255};
+    DrawRectangleGradientH((int)layout.titlebar_bounds.x, (int)layout.titlebar_bounds.y,
+                           (int)layout.titlebar_bounds.width, (int)layout.titlebar_bounds.height,
+                           gradient_left, gradient_right);
+    DrawRectangle((int)layout.titlebar_bounds.x,
+                  (int)(layout.titlebar_bounds.y + layout.titlebar_bounds.height - 2.0f),
+                  (int)layout.titlebar_bounds.width, 2, (Color){54, 176, 255, 160});
+
+    float icon_right = layout.titlebar_bounds.x + 12.0f;
+    if (state->icon_ready && state->icon_texture.id != 0U)
+    {
+        float available = state->height - 16.0f;
+        if (!(available > 0.0f))
+        {
+            available = 32.0f;
+        }
+        float scale = available / (float)state->icon_texture.height;
+        if (!(scale > 0.0f))
+        {
+            scale = 1.0f;
+        }
+        float icon_width  = (float)state->icon_texture.width * scale;
+        float icon_height = (float)state->icon_texture.height * scale;
+        float icon_x      = layout.titlebar_bounds.x + 16.0f;
+        float icon_y =
+            layout.titlebar_bounds.y + (layout.titlebar_bounds.height - icon_height) * 0.5f;
+        DrawTextureEx(state->icon_texture, (Vector2){icon_x, icon_y}, 0.0f, scale, WHITE);
+        icon_right = icon_x + icon_width + 14.0f;
+    }
+
+    char tree_label_buffer[256];
+    const char *tree_label = "No tree loaded";
+    if (tree && tree->name && tree->name[0] != '\0')
+    {
+        tree_label = tree->name;
+    }
+    else if (file_state && file_state->current_path[0] != '\0')
+    {
+        if (!app_path_relativize_if_under_assets(file_state->current_path, tree_label_buffer,
+                                                 sizeof(tree_label_buffer)))
+        {
+            const char *filename = strrchr(file_state->current_path, '\\');
+            if (!filename)
+            {
+                filename = strrchr(file_state->current_path, '/');
+            }
+            filename = filename ? filename + 1 : file_state->current_path;
+#if defined(_MSC_VER)
+            (void)strncpy_s(tree_label_buffer, sizeof(tree_label_buffer), filename, _TRUNCATE);
+#else
+            (void)snprintf(tree_label_buffer, sizeof(tree_label_buffer), "%s", filename);
+#endif
+        }
+        tree_label = tree_label_buffer;
+    }
+
+    bool tree_dirty = app_state ? app_state_is_tree_dirty(app_state) : false;
+    char title_line[256];
+    if (tree_label && tree_label[0] != '\0' && strcmp(tree_label, "No tree loaded") != 0)
+    {
+        if (tree_dirty)
+        {
+            (void)snprintf(title_line, sizeof(title_line), "AncestryTree • %s *", tree_label);
+        }
+        else
+        {
+            (void)snprintf(title_line, sizeof(title_line), "AncestryTree • %s", tree_label);
+        }
+    }
+    else
+    {
+        if (tree_dirty)
+        {
+            (void)snprintf(title_line, sizeof(title_line), "AncestryTree • Unsaved session");
+        }
+        else
+        {
+            (void)snprintf(title_line, sizeof(title_line), "AncestryTree");
+        }
+    }
+
+    char analytics_line[320];
+    (void)snprintf(analytics_line, sizeof(analytics_line), "%s  |  FPS: %.0f",
+                   state->stats_summary[0] != '\0' ? state->stats_summary : "Gathering metrics",
+                   fps >= 0.0f ? fps : 0.0f);
+
+    Font font        = GetFontDefault();
+    float title_size = 24.0f;
+    float stats_size = 16.0f;
+    float max_width  = layout.maximize_button.x - icon_right - 18.0f;
+    if (max_width < 200.0f)
+    {
+        max_width = layout.titlebar_bounds.width - icon_right - 24.0f;
+    }
+    Rectangle title_bounds = {icon_right, layout.titlebar_bounds.y + 8.0f, max_width,
+                              title_size + 4.0f};
+    Rectangle stats_bounds = {icon_right, title_bounds.y + title_size + 6.0f, max_width,
+                              stats_size + 4.0f};
+    app_titlebar_draw_clipped_text(font, title_line, title_size, 0.0f, title_bounds,
+                                   (Color){214, 234, 255, 255});
+    app_titlebar_draw_clipped_text(font, analytics_line, stats_size, 0.0f, stats_bounds,
+                                   (Color){154, 206, 255, 230});
+
+    app_titlebar_draw_button(layout.minimize_button, APP_TITLEBAR_BUTTON_MINIMIZE,
+                             state->hot_button, state->active_button);
+    app_titlebar_draw_button(layout.maximize_button, APP_TITLEBAR_BUTTON_MAXIMIZE,
+                             state->hot_button, state->active_button);
+    app_titlebar_draw_button(layout.close_button, APP_TITLEBAR_BUTTON_CLOSE, state->hot_button,
+                             state->active_button);
+}
+
+static bool app_titlebar_should_close(const AppTitlebarState *state)
+{
+    return state ? state->close_requested : false;
 }
 
 static void app_append_message(char *buffer, size_t capacity, const char *message)
@@ -2340,6 +3009,8 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
     GraphicsState graphics_state;
     graphics_state_init(&graphics_state);
+    AppTitlebarState titlebar_state;
+    app_titlebar_state_init(&titlebar_state);
 
     Settings settings;
     settings_init_defaults(&settings);
@@ -2368,6 +3039,14 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
     GraphicsConfig config = graphics_config_default();
     config.title          = "AncestryTree";
+    char icon_path_buffer[512];
+    icon_path_buffer[0]     = '\0';
+    const char *icon_source = APP_ICON_RELATIVE_PATH;
+    if (app_try_find_asset(APP_ICON_RELATIVE_PATH, icon_path_buffer, sizeof(icon_path_buffer)))
+    {
+        icon_source = icon_path_buffer;
+    }
+    config.icon_path = icon_source;
     if (settings.window_placement.valid)
     {
         config.width  = settings.window_placement.width;
@@ -2377,6 +3056,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     if (!graphics_window_init(&graphics_state, &config, error_buffer, sizeof(error_buffer)))
     {
         AT_LOG(logger, AT_LOG_ERROR, "Failed to initialize window: %s", error_buffer);
+        app_titlebar_state_shutdown(&titlebar_state);
         return 1;
     }
 
@@ -2385,6 +3065,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     {
         SetWindowPosition(settings.window_placement.x, settings.window_placement.y);
     }
+    app_titlebar_state_load_icon(&titlebar_state, icon_source);
 #endif
 
     CameraControllerConfig camera_config;
@@ -2434,6 +3115,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         AT_LOG(logger, AT_LOG_ERROR, "%s",
                (startup_message[0] != '\0') ? startup_message
                                             : "Unable to determine startup plan.");
+        app_titlebar_state_shutdown(&titlebar_state);
         graphics_window_shutdown(&graphics_state);
         return 1;
     }
@@ -2607,6 +3289,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         if (!tree)
         {
             AT_LOG(logger, AT_LOG_ERROR, "Unable to create fallback tree.");
+            app_titlebar_state_shutdown(&titlebar_state);
             graphics_window_shutdown(&graphics_state);
             return 1;
         }
@@ -2657,6 +3340,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         {
             render_cleanup(&render_state);
         }
+        app_titlebar_state_shutdown(&titlebar_state);
         graphics_window_shutdown(&graphics_state);
         return 1;
     }
@@ -2777,10 +3461,12 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     event_context.shortcut_user_data    = &shortcut_payload;
     event_context.queue_handler         = event_queue_handler;
     event_context.queue_user_data       = &queue_payload;
+    event_context.pointer_over_chrome   = false;
 
     bool expansion_was_active = false;
 
-    while (!WindowShouldClose())
+    bool exit_requested = false;
+    while (!WindowShouldClose() && !exit_requested)
     {
         float delta_seconds    = GetFrameTime();
         float wheel_delta      = GetMouseWheelMove();
@@ -2797,8 +3483,17 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
             }
         }
 
+        bool chrome_captures_pointer =
+            app_titlebar_begin_frame(&titlebar_state, tree, delta_seconds);
+        event_context.pointer_over_chrome = chrome_captures_pointer;
+
         float camera_wheel_delta = detail_view_consumes_wheel ? 0.0f : wheel_delta;
         float ui_wheel_delta     = detail_view_consumes_wheel ? 0.0f : wheel_delta;
+        if (chrome_captures_pointer)
+        {
+            camera_wheel_delta = 0.0f;
+            ui_wheel_delta     = 0.0f;
+        }
 
         event_context.render_ready = render_ready;
         event_context.ui           = ui_ready ? &ui : NULL;
@@ -2874,13 +3569,15 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 #endif
         }
 
+        float frame_fps = (float)GetFPS();
+        app_titlebar_draw(&titlebar_state, tree, &file_state, &app_state, frame_fps);
         bool settings_dirty = memcmp(&settings, &persisted_settings, sizeof(Settings)) != 0;
 
         if (ui_frame_started)
         {
-            ui_draw_overlay(&ui, tree, &layout, &camera_controller, (float)GetFPS(),
-                            selected_person, hovered_person, &render_state.config, &settings,
-                            settings_dirty);
+            ui_draw_overlay(&ui, tree, &layout, &camera_controller, frame_fps, selected_person,
+                            hovered_person, &render_state.config, &settings, settings_dirty,
+                            app_titlebar_state_get_menu_offset(&titlebar_state));
             ui_end_frame(&ui);
         }
 
@@ -2902,6 +3599,11 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
                 AT_LOG(logger, AT_LOG_WARN, "Auto-save tick failed: %s", auto_save_error);
                 auto_save_error[0] = '\0';
             }
+        }
+
+        if (app_titlebar_should_close(&titlebar_state))
+        {
+            exit_requested = true;
         }
     }
 
@@ -2953,6 +3655,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     app_state_shutdown(&app_state);
     layout_result_destroy(&layout);
     family_tree_destroy(tree);
+    app_titlebar_state_shutdown(&titlebar_state);
     graphics_window_shutdown(&graphics_state);
     return 0;
 }

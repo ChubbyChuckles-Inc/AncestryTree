@@ -30,19 +30,23 @@ void event_process(EventProcessContext *context, EventProcessPhase phase, float 
         {
             if (context->ui)
             {
-                ui_resize(context->ui, context->graphics_state->width, context->graphics_state->height);
+                ui_resize(context->ui, context->graphics_state->width,
+                          context->graphics_state->height);
             }
             if (context->render_ready && context->render_state)
             {
-                bool resize_ok = render_resize(context->render_state, context->graphics_state->width,
-                                               context->graphics_state->height, context->render_error_buffer,
-                                               context->render_error_capacity);
+                bool resize_ok =
+                    render_resize(context->render_state, context->graphics_state->width,
+                                  context->graphics_state->height, context->render_error_buffer,
+                                  context->render_error_capacity);
                 if (!resize_ok)
                 {
-                    bool already_warned = context->render_target_warned && *context->render_target_warned;
+                    bool already_warned =
+                        context->render_target_warned && *context->render_target_warned;
                     if (!already_warned && context->logger)
                     {
-                        const char *message = (context->render_error_buffer && context->render_error_buffer[0] != '\0')
+                        const char *message = (context->render_error_buffer &&
+                                               context->render_error_buffer[0] != '\0')
                                                   ? context->render_error_buffer
                                                   : "render target resize failed";
                         AT_LOG(context->logger, AT_LOG_WARN, "%s", message);
@@ -56,7 +60,8 @@ void event_process(EventProcessContext *context, EventProcessPhase phase, float 
                 {
                     if (context->logger)
                     {
-                        AT_LOG(context->logger, AT_LOG_INFO, "Render target restored after resize.");
+                        AT_LOG(context->logger, AT_LOG_INFO,
+                               "Render target restored after resize.");
                     }
                     *context->render_target_warned = false;
                 }
@@ -70,13 +75,18 @@ void event_process(EventProcessContext *context, EventProcessPhase phase, float 
         if (context->interaction_state && context->layout && context->camera)
         {
             Vector2 mouse = GetMousePosition();
-            interaction_update_hover(context->interaction_state, context->layout, context->camera, mouse.x, mouse.y);
+            interaction_update_hover(context->interaction_state, context->layout, context->camera,
+                                     mouse.x, mouse.y);
             bool pointer_over_ui = (context->ui != NULL) && ui_pointer_over_ui(context->ui);
+            if (context->pointer_over_chrome)
+            {
+                pointer_over_ui = true;
+            }
             if (!pointer_over_ui && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 bool keep_selection = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-                interaction_select_at_cursor(context->interaction_state, context->layout, context->camera, mouse.x,
-                                             mouse.y, !keep_selection);
+                interaction_select_at_cursor(context->interaction_state, context->layout,
+                                             context->camera, mouse.x, mouse.y, !keep_selection);
             }
         }
 #endif
