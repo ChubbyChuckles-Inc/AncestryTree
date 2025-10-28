@@ -312,6 +312,96 @@ static void app_settings_set_last_tree(Settings *settings, const char *path)
     settings_mark_dirty(settings);
 }
 
+static void app_settings_store_window_geometry(Settings *settings)
+{
+    if (!settings)
+    {
+        return;
+    }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (!IsWindowReady() || IsWindowFullscreen() || IsWindowMinimized())
+    {
+        return;
+    }
+    int width  = GetScreenWidth();
+    int height = GetScreenHeight();
+    if (width <= 0 || height <= 0)
+    {
+        return;
+    }
+    Vector2 position = GetWindowPosition();
+    int x            = (int)position.x;
+    int y            = (int)position.y;
+    bool changed     = !settings->window_placement.valid || settings->window_placement.x != x ||
+                   settings->window_placement.y != y || settings->window_placement.width != width ||
+                   settings->window_placement.height != height;
+    if (!changed)
+    {
+        return;
+    }
+    settings->window_placement.valid  = true;
+    settings->window_placement.x      = x;
+    settings->window_placement.y      = y;
+    settings->window_placement.width  = width;
+    settings->window_placement.height = height;
+    settings_mark_dirty(settings);
+#else
+    (void)settings;
+#endif
+}
+
+static void app_settings_store_camera_state(Settings *settings, const CameraController *camera)
+{
+    if (!settings || !camera)
+    {
+        return;
+    }
+    float target[3];
+    float yaw    = 0.0f;
+    float pitch  = 0.0f;
+    float radius = 0.0f;
+    if (!camera_controller_get_state(camera, target, &yaw, &pitch, &radius) || !(radius > 0.0f))
+    {
+        return;
+    }
+    const float epsilon = 0.005f;
+    bool changed        = !settings->camera_state.valid;
+    if (!changed)
+    {
+        for (int index = 0; index < 3 && !changed; ++index)
+        {
+            if (fabsf(settings->camera_state.target[index] - target[index]) > epsilon)
+            {
+                changed = true;
+            }
+        }
+        if (!changed && fabsf(settings->camera_state.yaw - yaw) > epsilon)
+        {
+            changed = true;
+        }
+        if (!changed && fabsf(settings->camera_state.pitch - pitch) > epsilon)
+        {
+            changed = true;
+        }
+        if (!changed && fabsf(settings->camera_state.radius - radius) > epsilon)
+        {
+            changed = true;
+        }
+    }
+    if (!changed)
+    {
+        return;
+    }
+    settings->camera_state.valid     = true;
+    settings->camera_state.target[0] = target[0];
+    settings->camera_state.target[1] = target[1];
+    settings->camera_state.target[2] = target[2];
+    settings->camera_state.yaw       = yaw;
+    settings->camera_state.pitch     = pitch;
+    settings->camera_state.radius    = radius;
+    settings_mark_dirty(settings);
+}
+
 static bool app_prepare_asset_reference(const char *input_path, const char *subdirectory,
                                         const char *prefix, char *output, size_t capacity,
                                         const char **out_relative, bool *out_copied,
@@ -2251,20 +2341,6 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     GraphicsState graphics_state;
     graphics_state_init(&graphics_state);
 
-    GraphicsConfig config = graphics_config_default();
-    config.title          = "AncestryTree";
-    char error_buffer[256];
-    if (!graphics_window_init(&graphics_state, &config, error_buffer, sizeof(error_buffer)))
-    {
-        AT_LOG(logger, AT_LOG_ERROR, "Failed to initialize window: %s", error_buffer);
-        return 1;
-    }
-
-    CameraControllerConfig camera_config;
-    camera_controller_config_default(&camera_config);
-    CameraController camera_controller;
-    camera_controller_init(&camera_controller, &camera_config);
-
     Settings settings;
     settings_init_defaults(&settings);
     Settings persisted_settings = settings;
@@ -2287,6 +2363,42 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         else
         {
             AT_LOG(logger, AT_LOG_WARN, "Settings file not found; defaults in use.");
+        }
+    }
+
+    GraphicsConfig config = graphics_config_default();
+    config.title          = "AncestryTree";
+    if (settings.window_placement.valid)
+    {
+        config.width  = settings.window_placement.width;
+        config.height = settings.window_placement.height;
+    }
+    char error_buffer[256];
+    if (!graphics_window_init(&graphics_state, &config, error_buffer, sizeof(error_buffer)))
+    {
+        AT_LOG(logger, AT_LOG_ERROR, "Failed to initialize window: %s", error_buffer);
+        return 1;
+    }
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+    if (settings.window_placement.valid)
+    {
+        SetWindowPosition(settings.window_placement.x, settings.window_placement.y);
+    }
+#endif
+
+    CameraControllerConfig camera_config;
+    camera_controller_config_default(&camera_config);
+    CameraController camera_controller;
+    camera_controller_init(&camera_controller, &camera_config);
+    bool camera_state_restored = false;
+    if (settings.camera_state.valid && settings.camera_state.radius > 0.0f)
+    {
+        if (camera_controller_set_state(&camera_controller, settings.camera_state.target,
+                                        settings.camera_state.yaw, settings.camera_state.pitch,
+                                        settings.camera_state.radius))
+        {
+            camera_state_restored = true;
         }
     }
     FamilyTree *tree = NULL;
@@ -2508,7 +2620,10 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
     LayoutAlgorithm initial_algorithm = app_select_layout_algorithm(NULL, &settings);
     LayoutResult layout               = layout_calculate_with_algorithm(tree, initial_algorithm);
-    app_focus_camera_on_layout(&camera_controller, &layout);
+    if (!camera_state_restored)
+    {
+        app_focus_camera_on_layout(&camera_controller, &layout);
+    }
 
     RenderState render_state;
     render_state_init(&render_state);
@@ -2799,6 +2914,9 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         }
         persistence_auto_save_shutdown(&auto_save);
     }
+
+    app_settings_store_window_geometry(&settings);
+    app_settings_store_camera_state(&settings, &camera_controller);
 
     if (settings_path && memcmp(&settings, &persisted_settings, sizeof(Settings)) != 0)
     {

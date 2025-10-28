@@ -814,3 +814,16 @@ Screen reader narration enabled.
 Screen reader narration enabled.
 Screen reader narration enabled.
 Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Parent connections set to straight segments.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Onboarding paused. Re-enable it from Settings when ready.

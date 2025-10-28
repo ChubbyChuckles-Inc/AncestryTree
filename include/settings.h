@@ -37,6 +37,24 @@ typedef struct SettingsPanelLayout
     float height;
 } SettingsPanelLayout;
 
+typedef struct SettingsWindowPlacement
+{
+    bool valid;
+    int x;
+    int y;
+    int width;
+    int height;
+} SettingsWindowPlacement;
+
+typedef struct SettingsCameraState
+{
+    bool valid;
+    float target[3];
+    float yaw;
+    float pitch;
+    float radius;
+} SettingsCameraState;
+
 typedef struct Settings
 {
     SettingsGraphicsQuality graphics_quality;
@@ -58,6 +76,9 @@ typedef struct Settings
     bool has_loaded_sample_tree;
     bool onboarding_completed;
     char last_tree_path[512];
+    SettingsWindowPlacement window_placement;
+    SettingsCameraState camera_state;
+    SettingsPanelLayout panel_hud;
     SettingsPanelLayout panel_about;
     SettingsPanelLayout panel_help;
     SettingsPanelLayout panel_search;

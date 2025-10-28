@@ -28,6 +28,106 @@ static void settings_panel_layout_reset(SettingsPanelLayout *layout)
     layout->height = 0.0f;
 }
 
+static void settings_window_placement_reset(SettingsWindowPlacement *placement)
+{
+    if (!placement)
+    {
+        return;
+    }
+    placement->valid  = false;
+    placement->x      = 0;
+    placement->y      = 0;
+    placement->width  = 0;
+    placement->height = 0;
+}
+
+static bool settings_parse_window_bounds(const char *value, SettingsWindowPlacement *placement)
+{
+    if (!value || !placement)
+    {
+        return false;
+    }
+    unsigned int valid = 0U;
+    int x              = 0;
+    int y              = 0;
+    int w              = 0;
+    int h              = 0;
+    int parsed         = sscanf(value, "%u,%d,%d,%d,%d", &valid, &x, &y, &w, &h);
+    if (parsed != 5)
+    {
+        return false;
+    }
+    if (w <= 0 || h <= 0)
+    {
+        settings_window_placement_reset(placement);
+        return true;
+    }
+    placement->valid  = valid != 0U;
+    placement->x      = x;
+    placement->y      = y;
+    placement->width  = w;
+    placement->height = h;
+    if (!placement->valid)
+    {
+        settings_window_placement_reset(placement);
+    }
+    return true;
+}
+
+static void settings_camera_state_reset(SettingsCameraState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    state->valid     = false;
+    state->target[0] = 0.0f;
+    state->target[1] = 0.0f;
+    state->target[2] = 0.0f;
+    state->yaw       = 0.0f;
+    state->pitch     = 0.0f;
+    state->radius    = 0.0f;
+}
+
+static bool settings_parse_camera_state(const char *value, SettingsCameraState *state)
+{
+    if (!value || !state)
+    {
+        return false;
+    }
+    unsigned int valid = 0U;
+    double target_x    = 0.0;
+    double target_y    = 0.0;
+    double target_z    = 0.0;
+    double yaw         = 0.0;
+    double pitch       = 0.0;
+    double radius      = 0.0;
+    int parsed         = sscanf(value, "%u,%lf,%lf,%lf,%lf,%lf,%lf", &valid, &target_x, &target_y,
+                                &target_z, &yaw, &pitch, &radius);
+    if (parsed != 7)
+    {
+        return false;
+    }
+    if (!isfinite(target_x) || !isfinite(target_y) || !isfinite(target_z) || !isfinite(yaw) ||
+        !isfinite(pitch) || !isfinite(radius) || radius <= 0.0)
+    {
+        settings_camera_state_reset(state);
+        return true;
+    }
+    state->valid     = valid != 0U;
+    state->target[0] = (float)target_x;
+    state->target[1] = (float)target_y;
+    state->target[2] = (float)target_z;
+    state->yaw       = (float)yaw;
+    state->pitch     = (float)pitch;
+    state->radius    = (float)radius;
+    if (!state->valid)
+    {
+        settings_camera_state_reset(state);
+    }
+    return true;
+}
+
 static bool settings_parse_panel_layout(const char *value, SettingsPanelLayout *layout)
 {
     if (!value || !layout)
@@ -90,6 +190,9 @@ static void settings_set_defaults(Settings *settings)
 #else
     settings->last_tree_path[0] = '\0';
 #endif
+    settings_window_placement_reset(&settings->window_placement);
+    settings_camera_state_reset(&settings->camera_state);
+    settings_panel_layout_reset(&settings->panel_hud);
     settings_panel_layout_reset(&settings->panel_about);
     settings_panel_layout_reset(&settings->panel_help);
     settings_panel_layout_reset(&settings->panel_search);
@@ -399,6 +502,18 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
             (void)snprintf(settings->last_tree_path, sizeof(settings->last_tree_path), "%s", value);
 #endif
         }
+        else if (settings_strcasecmp(key, "window_bounds") == 0)
+        {
+            (void)settings_parse_window_bounds(value, &settings->window_placement);
+        }
+        else if (settings_strcasecmp(key, "camera_state") == 0)
+        {
+            (void)settings_parse_camera_state(value, &settings->camera_state);
+        }
+        else if (settings_strcasecmp(key, "panel_hud") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_hud);
+        }
         else if (settings_strcasecmp(key, "panel_about") == 0)
         {
             (void)settings_parse_panel_layout(value, &settings->panel_about);
@@ -488,6 +603,9 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         "onboarding_completed=%u\n"
         "has_loaded_sample_tree=%u\n"
         "last_tree_path=%s\n"
+        "window_bounds=%u,%d,%d,%d,%d\n"
+        "camera_state=%u,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f\n"
+        "panel_hud=%u,%.2f,%.2f,%.2f,%.2f\n"
         "panel_about=%u,%.2f,%.2f,%.2f,%.2f\n"
         "panel_help=%u,%.2f,%.2f,%.2f,%.2f\n"
         "panel_search=%u,%.2f,%.2f,%.2f,%.2f\n"
@@ -504,24 +622,33 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         (unsigned int)settings->language, settings->high_contrast_mode ? 1U : 0U,
         settings->ui_font_scale, settings->screen_reader_enabled ? 1U : 0U,
         settings->onboarding_completed ? 1U : 0U, settings->has_loaded_sample_tree ? 1U : 0U,
-        settings->last_tree_path, settings->panel_about.valid ? 1U : 0U,
-        (double)settings->panel_about.x, (double)settings->panel_about.y,
-        (double)settings->panel_about.width, (double)settings->panel_about.height,
-        settings->panel_help.valid ? 1U : 0U, (double)settings->panel_help.x,
-        (double)settings->panel_help.y, (double)settings->panel_help.width,
-        (double)settings->panel_help.height, settings->panel_search.valid ? 1U : 0U,
-        (double)settings->panel_search.x, (double)settings->panel_search.y,
-        (double)settings->panel_search.width, (double)settings->panel_search.height,
-        settings->panel_analytics.valid ? 1U : 0U, (double)settings->panel_analytics.x,
-        (double)settings->panel_analytics.y, (double)settings->panel_analytics.width,
-        (double)settings->panel_analytics.height, settings->panel_add_person.valid ? 1U : 0U,
-        (double)settings->panel_add_person.x, (double)settings->panel_add_person.y,
-        (double)settings->panel_add_person.width, (double)settings->panel_add_person.height,
-        settings->panel_edit_person.valid ? 1U : 0U, (double)settings->panel_edit_person.x,
-        (double)settings->panel_edit_person.y, (double)settings->panel_edit_person.width,
-        (double)settings->panel_edit_person.height, settings->panel_settings.valid ? 1U : 0U,
-        (double)settings->panel_settings.x, (double)settings->panel_settings.y,
-        (double)settings->panel_settings.width, (double)settings->panel_settings.height);
+        settings->last_tree_path, settings->window_placement.valid ? 1U : 0U,
+        settings->window_placement.x, settings->window_placement.y,
+        settings->window_placement.width, settings->window_placement.height,
+        settings->camera_state.valid ? 1U : 0U, (double)settings->camera_state.target[0],
+        (double)settings->camera_state.target[1], (double)settings->camera_state.target[2],
+        (double)settings->camera_state.yaw, (double)settings->camera_state.pitch,
+        (double)settings->camera_state.radius, settings->panel_hud.valid ? 1U : 0U,
+        (double)settings->panel_hud.x, (double)settings->panel_hud.y,
+        (double)settings->panel_hud.width, (double)settings->panel_hud.height,
+        settings->panel_about.valid ? 1U : 0U, (double)settings->panel_about.x,
+        (double)settings->panel_about.y, (double)settings->panel_about.width,
+        (double)settings->panel_about.height, settings->panel_help.valid ? 1U : 0U,
+        (double)settings->panel_help.x, (double)settings->panel_help.y,
+        (double)settings->panel_help.width, (double)settings->panel_help.height,
+        settings->panel_search.valid ? 1U : 0U, (double)settings->panel_search.x,
+        (double)settings->panel_search.y, (double)settings->panel_search.width,
+        (double)settings->panel_search.height, settings->panel_analytics.valid ? 1U : 0U,
+        (double)settings->panel_analytics.x, (double)settings->panel_analytics.y,
+        (double)settings->panel_analytics.width, (double)settings->panel_analytics.height,
+        settings->panel_add_person.valid ? 1U : 0U, (double)settings->panel_add_person.x,
+        (double)settings->panel_add_person.y, (double)settings->panel_add_person.width,
+        (double)settings->panel_add_person.height, settings->panel_edit_person.valid ? 1U : 0U,
+        (double)settings->panel_edit_person.x, (double)settings->panel_edit_person.y,
+        (double)settings->panel_edit_person.width, (double)settings->panel_edit_person.height,
+        settings->panel_settings.valid ? 1U : 0U, (double)settings->panel_settings.x,
+        (double)settings->panel_settings.y, (double)settings->panel_settings.width,
+        (double)settings->panel_settings.height);
 
     bool success = written >= 0;
     if (!success && error_buffer && error_buffer_size > 0U)

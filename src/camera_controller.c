@@ -51,9 +51,9 @@ static void normalise3(const float input[3], float output[3])
         return;
     }
     float inv_length = 1.0f / sqrtf(length_sq);
-    output[0] = input[0] * inv_length;
-    output[1] = input[1] * inv_length;
-    output[2] = input[2] * inv_length;
+    output[0]        = input[0] * inv_length;
+    output[1]        = input[1] * inv_length;
+    output[2]        = input[2] * inv_length;
 }
 
 static void cross3(const float a[3], const float b[3], float out[3])
@@ -66,11 +66,11 @@ static void cross3(const float a[3], const float b[3], float out[3])
 static void commit_view(CameraController *controller)
 {
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    controller->camera.position =
-        (Vector3){controller->view_position[0], controller->view_position[1], controller->view_position[2]};
-    controller->camera.target =
-        (Vector3){controller->view_target[0], controller->view_target[1], controller->view_target[2]};
-    controller->camera.up = (Vector3){controller->up[0], controller->up[1], controller->up[2]};
+    controller->camera.position = (Vector3){
+        controller->view_position[0], controller->view_position[1], controller->view_position[2]};
+    controller->camera.target = (Vector3){controller->view_target[0], controller->view_target[1],
+                                          controller->view_target[2]};
+    controller->camera.up     = (Vector3){controller->up[0], controller->up[1], controller->up[2]};
 #else
     (void)controller;
 #endif
@@ -110,31 +110,34 @@ static void apply_smoothing(CameraController *controller, float delta_seconds)
     {
         return;
     }
-    if (!controller->view_valid || controller->config.smoothing_half_life_seconds <= 0.0f || delta_seconds <= 0.0f)
+    if (!controller->view_valid || controller->config.smoothing_half_life_seconds <= 0.0f ||
+        delta_seconds <= 0.0f)
     {
         sync_view(controller);
         return;
     }
 
-    float blend = smoothing_blend(&controller->config, delta_seconds);
+    float blend        = smoothing_blend(&controller->config, delta_seconds);
     const float retain = 1.0f - blend;
     for (int index = 0; index < 3; ++index)
     {
-        controller->view_position[index] = controller->view_position[index] * retain + controller->position[index] * blend;
-        controller->view_target[index] = controller->view_target[index] * retain + controller->target[index] * blend;
+        controller->view_position[index] =
+            controller->view_position[index] * retain + controller->position[index] * blend;
+        controller->view_target[index] =
+            controller->view_target[index] * retain + controller->target[index] * blend;
     }
     commit_view(controller);
 }
 
 static void recalc_position(CameraController *controller)
 {
-    const float yaw = controller->yaw;
-    const float pitch = controller->pitch;
-    const float radius = controller->radius;
+    const float yaw       = controller->yaw;
+    const float pitch     = controller->pitch;
+    const float radius    = controller->radius;
     const float cos_pitch = cosf(pitch);
     const float sin_pitch = sinf(pitch);
-    const float cos_yaw = cosf(yaw);
-    const float sin_yaw = sinf(yaw);
+    const float cos_yaw   = cosf(yaw);
+    const float sin_yaw   = sinf(yaw);
 
     float forward[3];
     forward[0] = cos_pitch * sin_yaw;
@@ -146,18 +149,19 @@ static void recalc_position(CameraController *controller)
     controller->position[2] = controller->target[2] - forward[2] * radius;
 }
 
-static void apply_pan(CameraController *controller, float right_amount, float up_amount, float delta_seconds)
+static void apply_pan(CameraController *controller, float right_amount, float up_amount,
+                      float delta_seconds)
 {
     if (right_amount == 0.0f && up_amount == 0.0f)
     {
         return;
     }
-    float yaw = controller->yaw;
-    float pitch = controller->pitch;
+    float yaw             = controller->yaw;
+    float pitch           = controller->pitch;
     const float cos_pitch = cosf(pitch);
     const float sin_pitch = sinf(pitch);
-    const float cos_yaw = cosf(yaw);
-    const float sin_yaw = sinf(yaw);
+    const float cos_yaw   = cosf(yaw);
+    const float sin_yaw   = sinf(yaw);
 
     float forward[3];
     forward[0] = cos_pitch * sin_yaw;
@@ -186,20 +190,20 @@ void camera_controller_config_default(CameraControllerConfig *config)
     {
         return;
     }
-    config->target[0] = 0.0f;
-    config->target[1] = 1.5f;
-    config->target[2] = 0.0f;
-    config->up[0] = 0.0f;
-    config->up[1] = 1.0f;
-    config->up[2] = 0.0f;
-    config->default_radius = 12.0f;
-    config->min_radius = 4.0f;
-    config->max_radius = 32.0f;
-    config->default_yaw = (float)(M_PI * 0.25);
-    config->default_pitch = (float)(M_PI * 0.15);
-    config->rotation_speed = 1.5f;
-    config->zoom_speed = 15.0f;
-    config->pan_speed = 10.0f;
+    config->target[0]                   = 0.0f;
+    config->target[1]                   = 1.5f;
+    config->target[2]                   = 0.0f;
+    config->up[0]                       = 0.0f;
+    config->up[1]                       = 1.0f;
+    config->up[2]                       = 0.0f;
+    config->default_radius              = 12.0f;
+    config->min_radius                  = 4.0f;
+    config->max_radius                  = 32.0f;
+    config->default_yaw                 = (float)(M_PI * 0.25);
+    config->default_pitch               = (float)(M_PI * 0.15);
+    config->rotation_speed              = 1.5f;
+    config->zoom_speed                  = 15.0f;
+    config->pan_speed                   = 10.0f;
     config->smoothing_half_life_seconds = 0.18f;
 }
 
@@ -209,11 +213,11 @@ void camera_controller_input_clear(CameraControllerInput *input)
     {
         return;
     }
-    input->yaw_delta = 0.0f;
+    input->yaw_delta   = 0.0f;
     input->pitch_delta = 0.0f;
-    input->zoom_delta = 0.0f;
-    input->pan_right = 0.0f;
-    input->pan_up = 0.0f;
+    input->zoom_delta  = 0.0f;
+    input->pan_right   = 0.0f;
+    input->pan_up      = 0.0f;
 }
 
 static void apply_config(CameraController *controller, const CameraControllerConfig *config)
@@ -222,11 +226,11 @@ static void apply_config(CameraController *controller, const CameraControllerCon
     copy3(controller->target, config->target);
     copy3(controller->up, config->up);
     controller->radius = clampf(config->default_radius, config->min_radius, config->max_radius);
-    controller->yaw = config->default_yaw;
+    controller->yaw    = config->default_yaw;
     const float pitch_limit = (float)(M_PI * 0.5) - 0.05f;
-    controller->pitch = clampf(config->default_pitch, -pitch_limit, pitch_limit);
+    controller->pitch       = clampf(config->default_pitch, -pitch_limit, pitch_limit);
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    controller->camera.fovy = 45.0f;
+    controller->camera.fovy       = 45.0f;
     controller->camera.projection = CAMERA_PERSPECTIVE;
 #endif
     recalc_position(controller);
@@ -266,12 +270,47 @@ void camera_controller_focus(CameraController *controller, const float target[3]
     }
     if (radius > 0.0f)
     {
-        controller->radius = clampf(radius, controller->config.min_radius, controller->config.max_radius);
+        controller->radius =
+            clampf(radius, controller->config.min_radius, controller->config.max_radius);
     }
     recalc_position(controller);
 }
 
-void camera_controller_update(CameraController *controller, const CameraControllerInput *input, float delta_seconds)
+bool camera_controller_set_state(CameraController *controller, const float target[3], float yaw,
+                                 float pitch, float radius)
+{
+    if (!controller || !controller->initialized || !target || !(radius > 0.0f))
+    {
+        return false;
+    }
+    copy3(controller->target, target);
+    controller->radius =
+        clampf(radius, controller->config.min_radius, controller->config.max_radius);
+    controller->yaw         = yaw;
+    const float pitch_limit = (float)(M_PI * 0.5) - 0.05f;
+    controller->pitch       = clampf(pitch, -pitch_limit, pitch_limit);
+    recalc_position(controller);
+    sync_view(controller);
+    return true;
+}
+
+bool camera_controller_get_state(const CameraController *controller, float out_target[3],
+                                 float *out_yaw, float *out_pitch, float *out_radius)
+{
+    if (!controller || !controller->initialized || !out_target || !out_yaw || !out_pitch ||
+        !out_radius)
+    {
+        return false;
+    }
+    copy3(out_target, controller->target);
+    *out_yaw    = controller->yaw;
+    *out_pitch  = controller->pitch;
+    *out_radius = controller->radius;
+    return true;
+}
+
+void camera_controller_update(CameraController *controller, const CameraControllerInput *input,
+                              float delta_seconds)
 {
     if (!controller || !controller->initialized || !input)
     {
@@ -282,11 +321,12 @@ void camera_controller_update(CameraController *controller, const CameraControll
     controller->pitch += input->pitch_delta * rotation_scale;
 
     const float pitch_limit = (float)(M_PI * 0.5) - 0.05f;
-    controller->pitch = clampf(controller->pitch, -pitch_limit, pitch_limit);
+    controller->pitch       = clampf(controller->pitch, -pitch_limit, pitch_limit);
 
     const float zoom_scale = controller->config.zoom_speed * delta_seconds;
     controller->radius -= input->zoom_delta * zoom_scale;
-    controller->radius = clampf(controller->radius, controller->config.min_radius, controller->config.max_radius);
+    controller->radius =
+        clampf(controller->radius, controller->config.min_radius, controller->config.max_radius);
 
     apply_pan(controller, input->pan_right, input->pan_up, delta_seconds);
     recalc_position(controller);
@@ -297,7 +337,8 @@ void camera_controller_update(CameraController *controller, const CameraControll
  * Manual validation checklist:
  * 1. Orbit the camera rapidly and confirm motion eases into place without stutter.
  * 2. Trigger "Focus Roots" UI action and observe a smooth glide toward the new anchor point.
- * 3. Toggle smoothing (set half-life to zero in config) to verify immediate snapping remains available.
+ * 3. Toggle smoothing (set half-life to zero in config) to verify immediate snapping remains
+ * available.
  */
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)

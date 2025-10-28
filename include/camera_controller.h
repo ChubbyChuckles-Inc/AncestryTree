@@ -59,7 +59,12 @@ extern "C"
     bool camera_controller_init(CameraController *controller, const CameraControllerConfig *config);
     void camera_controller_reset(CameraController *controller);
     void camera_controller_focus(CameraController *controller, const float target[3], float radius);
-    void camera_controller_update(CameraController *controller, const CameraControllerInput *input, float delta_seconds);
+    bool camera_controller_set_state(CameraController *controller, const float target[3], float yaw,
+                                     float pitch, float radius);
+    bool camera_controller_get_state(const CameraController *controller, float out_target[3],
+                                     float *out_yaw, float *out_pitch, float *out_radius);
+    void camera_controller_update(CameraController *controller, const CameraControllerInput *input,
+                                  float delta_seconds);
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     const struct Camera3D *camera_controller_get_camera(const CameraController *controller);
