@@ -336,7 +336,7 @@
         "is_alive": false
       },
       "parents": [null, null],
-      "children": [6, 14],
+      "children": [6, 14, 15],
       "spouses": [
         {
           "id": 13,
@@ -366,7 +366,7 @@
         "is_alive": false
       },
       "parents": [null, null],
-      "children": [6, 14],
+      "children": [6, 14, 15],
       "spouses": [
         {
           "id": 12,
@@ -390,6 +390,31 @@
       },
       "dates": {
         "birth_date": "1949-01-01",
+        "birth_location": "Zwochau",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [12, 13],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 15,
+      "name": {
+        "first": "Sigrid",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1953-01-01",
         "birth_location": "Zwochau",
         "death_date": "",
         "death_location": "",

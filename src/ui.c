@@ -52,6 +52,8 @@ typedef struct UIInternal UIInternal;
 
 static void ui_compose_person_name(const Person *person, char *buffer, size_t capacity);
 static int ui_relationship_find_person_index(const FamilyTree *tree, uint32_t person_id);
+static int ui_relationship_find_first_person_slot(const FamilyTree *tree);
+static int ui_relationship_find_next_person_slot(const FamilyTree *tree, int current_index);
 static void ui_compose_person_label(const Person *person, char *buffer, size_t capacity);
 static void ui_relationship_reset(UIInternal *internal);
 static void ui_relationship_invalidate(UIInternal *internal);
@@ -2623,7 +2625,15 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
 
             nk_layout_row_dynamic(ctx, 20.0f, 1);
             nk_label(ctx, "Relationship explorer", NK_TEXT_LEFT);
-            if (tree->person_count < 2U)
+            size_t valid_person_count = 0U;
+            for (size_t index = 0U; index < tree->person_count; ++index)
+            {
+                if (tree->persons[index])
+                {
+                    valid_person_count++;
+                }
+            }
+            if (valid_person_count < 2U)
             {
                 nk_layout_row_dynamic(ctx, 18.0f, 1);
                 nk_label(ctx, "Add at least two persons to explore relationship paths.",
@@ -2641,108 +2651,159 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                     internal->relationship_last_tree = tree;
                 }
 
-                const size_t people_count = tree->person_count;
-                if (people_count > 0U)
+                const size_t slot_count = tree->person_count;
+                if (slot_count > 0U)
                 {
-                    if (internal->relationship_source_index < 0)
+                    if (internal->relationship_source_index < 0 ||
+                        (size_t)internal->relationship_source_index >= slot_count ||
+                        !tree->persons[internal->relationship_source_index])
                     {
-                        internal->relationship_source_index = 0;
-                        internal->relationship_source_id    = tree->persons[0]->id;
+                        int first_index = ui_relationship_find_first_person_slot(tree);
+                        if (first_index >= 0)
+                        {
+                            internal->relationship_source_index = first_index;
+                            internal->relationship_source_id =
+                                tree->persons[first_index] ? tree->persons[first_index]->id : 0U;
+                        }
                     }
-                    else if ((size_t)internal->relationship_source_index >= people_count ||
-                             !tree->persons[internal->relationship_source_index] ||
+                    else if (tree->persons[internal->relationship_source_index] &&
                              tree->persons[internal->relationship_source_index]->id !=
                                  internal->relationship_source_id)
                     {
                         int resolved = ui_relationship_find_person_index(
                             tree, internal->relationship_source_id);
-                        if (resolved < 0)
-                        {
-                            internal->relationship_source_index = 0;
-                            internal->relationship_source_id    = tree->persons[0]->id;
-                            ui_relationship_invalidate(internal);
-                        }
-                        else
+                        if (resolved >= 0 && tree->persons[resolved])
                         {
                             internal->relationship_source_index = resolved;
                         }
+                        else
+                        {
+                            int first_index = ui_relationship_find_first_person_slot(tree);
+                            if (first_index >= 0 && tree->persons[first_index])
+                            {
+                                internal->relationship_source_index = first_index;
+                                internal->relationship_source_id = tree->persons[first_index]->id;
+                                ui_relationship_invalidate(internal);
+                            }
+                        }
                     }
 
-                    if (internal->relationship_target_index < 0)
+                    if (internal->relationship_target_index < 0 ||
+                        (size_t)internal->relationship_target_index >= slot_count ||
+                        !tree->persons[internal->relationship_target_index])
                     {
-                        int fallback =
-                            (internal->relationship_source_index + 1) % (int)people_count;
-                        if (fallback == internal->relationship_source_index && people_count > 1U)
+                        int fallback = ui_relationship_find_next_person_slot(
+                            tree, internal->relationship_source_index);
+                        if (fallback < 0)
                         {
-                            fallback = (fallback + 1) % (int)people_count;
+                            fallback = internal->relationship_source_index;
                         }
                         internal->relationship_target_index = fallback;
-                        if (tree->persons[fallback])
+                        if (fallback >= 0 && (size_t)fallback < slot_count &&
+                            tree->persons[fallback])
                         {
                             internal->relationship_target_id = tree->persons[fallback]->id;
                         }
+                        else
+                        {
+                            internal->relationship_target_id = 0U;
+                        }
                     }
-                    else if ((size_t)internal->relationship_target_index >= people_count ||
-                             !tree->persons[internal->relationship_target_index] ||
+                    else if (tree->persons[internal->relationship_target_index] &&
                              tree->persons[internal->relationship_target_index]->id !=
                                  internal->relationship_target_id)
                     {
                         int resolved = ui_relationship_find_person_index(
                             tree, internal->relationship_target_id);
-                        if (resolved < 0)
+                        if (resolved >= 0 && tree->persons[resolved])
                         {
-                            if (people_count > 1U)
+                            internal->relationship_target_index = resolved;
+                        }
+                        else
+                        {
+                            int fallback = ui_relationship_find_next_person_slot(
+                                tree, internal->relationship_source_index);
+                            if (fallback >= 0 && (size_t)fallback < slot_count &&
+                                tree->persons[fallback])
                             {
-                                resolved =
-                                    (internal->relationship_source_index + 1) % (int)people_count;
-                                if (resolved == internal->relationship_source_index)
-                                {
-                                    resolved = (resolved + 1) % (int)people_count;
-                                }
-                                if (tree->persons[resolved])
-                                {
-                                    internal->relationship_target_id = tree->persons[resolved]->id;
-                                }
-                                ui_relationship_invalidate(internal);
+                                internal->relationship_target_index = fallback;
+                                internal->relationship_target_id    = tree->persons[fallback]->id;
                             }
                             else
                             {
-                                resolved = internal->relationship_source_index;
+                                internal->relationship_target_index =
+                                    internal->relationship_source_index;
                                 internal->relationship_target_id = internal->relationship_source_id;
                             }
+                            ui_relationship_invalidate(internal);
                         }
-                        internal->relationship_target_index = resolved;
                     }
 
-                    if (people_count > 1U &&
+                    if (valid_person_count > 1U &&
                         internal->relationship_source_index == internal->relationship_target_index)
                     {
-                        int next_index =
-                            (internal->relationship_source_index + 1) % (int)people_count;
-                        if (next_index == internal->relationship_source_index && people_count > 1U)
+                        int next_index = ui_relationship_find_next_person_slot(
+                            tree, internal->relationship_source_index);
+                        if (next_index >= 0 && (size_t)next_index < slot_count &&
+                            tree->persons[next_index])
                         {
-                            next_index = (next_index + 1) % (int)people_count;
-                        }
-                        internal->relationship_target_index = next_index;
-                        if (tree->persons[next_index])
-                        {
-                            internal->relationship_target_id = tree->persons[next_index]->id;
+                            internal->relationship_target_index = next_index;
+                            internal->relationship_target_id    = tree->persons[next_index]->id;
                         }
                     }
 
                     if (internal->relationship_source_index < 0)
                     {
-                        internal->relationship_source_index = 0;
+                        int first_index = ui_relationship_find_first_person_slot(tree);
+                        if (first_index >= 0)
+                        {
+                            internal->relationship_source_index = first_index;
+                            internal->relationship_source_id =
+                                tree->persons[first_index] ? tree->persons[first_index]->id : 0U;
+                        }
                     }
                     if (internal->relationship_target_index < 0)
                     {
                         internal->relationship_target_index = internal->relationship_source_index;
+                        internal->relationship_target_id    = internal->relationship_source_id;
                     }
 
-                    Person *source_person =
-                        tree->persons[(size_t)internal->relationship_source_index % people_count];
-                    Person *target_person =
-                        tree->persons[(size_t)internal->relationship_target_index % people_count];
+                    Person *source_person = NULL;
+                    if (internal->relationship_source_index >= 0 &&
+                        (size_t)internal->relationship_source_index < slot_count)
+                    {
+                        source_person = tree->persons[internal->relationship_source_index];
+                    }
+                    if (!source_person)
+                    {
+                        int first_index = ui_relationship_find_first_person_slot(tree);
+                        if (first_index >= 0)
+                        {
+                            source_person                       = tree->persons[first_index];
+                            internal->relationship_source_index = first_index;
+                            internal->relationship_source_id =
+                                source_person ? source_person->id : 0U;
+                        }
+                    }
+
+                    Person *target_person = NULL;
+                    if (internal->relationship_target_index >= 0 &&
+                        (size_t)internal->relationship_target_index < slot_count)
+                    {
+                        target_person = tree->persons[internal->relationship_target_index];
+                    }
+                    if (!target_person)
+                    {
+                        int fallback = ui_relationship_find_next_person_slot(
+                            tree, internal->relationship_source_index);
+                        if (fallback >= 0)
+                        {
+                            target_person                       = tree->persons[fallback];
+                            internal->relationship_target_index = fallback;
+                            internal->relationship_target_id =
+                                target_person ? target_person->id : 0U;
+                        }
+                    }
 
                     internal->relationship_source_id = source_person ? source_person->id : 0U;
                     internal->relationship_target_id = target_person ? target_person->id : 0U;
@@ -2757,16 +2818,34 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     if (nk_combo_begin_label(ctx, source_label, nk_vec2(280.0f, 320.0f)))
                     {
-                        for (size_t index = 0U; index < people_count; ++index)
+                        nk_layout_row_dynamic(ctx, 22.0f, 1);
+                        for (size_t index = 0U; index < slot_count; ++index)
                         {
                             Person *candidate = tree->persons[index];
+                            if (!candidate)
+                            {
+                                continue;
+                            }
                             char item_label[128];
                             ui_compose_person_label(candidate, item_label, sizeof(item_label));
                             if (nk_combo_item_label(ctx, item_label, NK_TEXT_LEFT))
                             {
                                 internal->relationship_source_index = (int)index;
-                                internal->relationship_source_id = candidate ? candidate->id : 0U;
+                                internal->relationship_source_id    = candidate->id;
                                 ui_relationship_invalidate(internal);
+                                if (internal->relationship_source_index ==
+                                    internal->relationship_target_index)
+                                {
+                                    int next_index = ui_relationship_find_next_person_slot(
+                                        tree, internal->relationship_source_index);
+                                    if (next_index >= 0 && (size_t)next_index < slot_count &&
+                                        tree->persons[next_index])
+                                    {
+                                        internal->relationship_target_index = next_index;
+                                        internal->relationship_target_id =
+                                            tree->persons[next_index]->id;
+                                    }
+                                }
                             }
                         }
                         nk_combo_end(ctx);
@@ -2777,15 +2856,20 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                     nk_layout_row_dynamic(ctx, 26.0f, 1);
                     if (nk_combo_begin_label(ctx, target_label, nk_vec2(280.0f, 320.0f)))
                     {
-                        for (size_t index = 0U; index < people_count; ++index)
+                        nk_layout_row_dynamic(ctx, 22.0f, 1);
+                        for (size_t index = 0U; index < slot_count; ++index)
                         {
                             Person *candidate = tree->persons[index];
+                            if (!candidate)
+                            {
+                                continue;
+                            }
                             char item_label[128];
                             ui_compose_person_label(candidate, item_label, sizeof(item_label));
                             if (nk_combo_item_label(ctx, item_label, NK_TEXT_LEFT))
                             {
                                 internal->relationship_target_index = (int)index;
-                                internal->relationship_target_id = candidate ? candidate->id : 0U;
+                                internal->relationship_target_id    = candidate->id;
                                 ui_relationship_invalidate(internal);
                             }
                         }
@@ -2801,14 +2885,36 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                         internal->relationship_source_id    = internal->relationship_target_id;
                         internal->relationship_target_index = src_index;
                         internal->relationship_target_id    = src_id;
+                        if (internal->relationship_source_index ==
+                            internal->relationship_target_index)
+                        {
+                            int next_index = ui_relationship_find_next_person_slot(
+                                tree, internal->relationship_source_index);
+                            if (next_index >= 0 && (size_t)next_index < slot_count &&
+                                tree->persons[next_index])
+                            {
+                                internal->relationship_target_index = next_index;
+                                internal->relationship_target_id    = tree->persons[next_index]->id;
+                            }
+                        }
                         ui_relationship_invalidate(internal);
                     }
                     bool relationship_calculated = ui_nav_button_label(internal, ctx, "Calculate");
                     if (relationship_calculated)
                     {
                         RelationshipResult path;
-                        Person *source_calc = tree->persons[internal->relationship_source_index];
-                        Person *target_calc = tree->persons[internal->relationship_target_index];
+                        Person *source_calc = NULL;
+                        if (internal->relationship_source_index >= 0 &&
+                            (size_t)internal->relationship_source_index < slot_count)
+                        {
+                            source_calc = tree->persons[internal->relationship_source_index];
+                        }
+                        Person *target_calc = NULL;
+                        if (internal->relationship_target_index >= 0 &&
+                            (size_t)internal->relationship_target_index < slot_count)
+                        {
+                            target_calc = tree->persons[internal->relationship_target_index];
+                        }
                         if (!source_calc || !target_calc)
                         {
                             ui_relationship_invalidate(internal);
@@ -4107,6 +4213,57 @@ static int ui_relationship_find_person_index(const FamilyTree *tree, uint32_t pe
             }
             return (int)index;
         }
+    }
+    return -1;
+}
+
+static int ui_relationship_find_first_person_slot(const FamilyTree *tree)
+{
+    if (!tree)
+    {
+        return -1;
+    }
+    for (size_t index = 0U; index < tree->person_count; ++index)
+    {
+        if (tree->persons[index])
+        {
+            if (index > (size_t)INT_MAX)
+            {
+                return -1;
+            }
+            return (int)index;
+        }
+    }
+    return -1;
+}
+
+static int ui_relationship_find_next_person_slot(const FamilyTree *tree, int current_index)
+{
+    if (!tree || tree->person_count == 0U)
+    {
+        return -1;
+    }
+    size_t start = 0U;
+    if (current_index >= 0 && (size_t)current_index < tree->person_count)
+    {
+        start = (size_t)current_index + 1U;
+    }
+    for (size_t step = 0U; step < tree->person_count; ++step)
+    {
+        size_t slot = (start + step) % tree->person_count;
+        if (!tree->persons[slot])
+        {
+            continue;
+        }
+        if ((int)slot == current_index)
+        {
+            continue;
+        }
+        if (slot > (size_t)INT_MAX)
+        {
+            return -1;
+        }
+        return (int)slot;
     }
     return -1;
 }
