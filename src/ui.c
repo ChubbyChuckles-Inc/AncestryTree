@@ -2058,12 +2058,15 @@ static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
 
     const Person *matches[UI_SEARCH_MAX_RESULTS];
     SearchFilter filter;
+    memset(&filter, 0, sizeof(filter));
     filter.name_substring   = (internal->search_query[0] != '\0') ? internal->search_query : NULL;
     filter.include_alive    = internal->search_include_alive;
     filter.include_deceased = internal->search_include_deceased;
     filter.use_birth_year_range = internal->search_use_birth_year_range;
     filter.birth_year_min       = internal->search_birth_year_min;
     filter.birth_year_max       = internal->search_birth_year_max;
+    filter.query_mode           = SEARCH_QUERY_MODE_SUBSTRING;
+    filter.query_expression     = NULL;
 
     size_t count = search_execute(tree, &filter, matches, UI_SEARCH_MAX_RESULTS);
     if (count > UI_SEARCH_MAX_RESULTS)
@@ -2379,7 +2382,8 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
             results_height = 160.0f;
         }
         nk_layout_row_dynamic(ctx, results_height, 1);
-        if (nk_group_begin(ctx, "SearchResultsGroup", NK_WINDOW_BORDER))
+        if (nk_group_begin(ctx, "SearchResultsGroup",
+                           NK_WINDOW_BORDER | NK_WINDOW_SCROLL_AUTO_HIDE))
         {
             for (size_t index = 0U; index < internal->search_result_count; ++index)
             {
@@ -3294,6 +3298,34 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
     }
     struct nk_context *ctx  = &internal->ctx;
     struct nk_rect bar_rect = nk_rect(0.0f, 0.0f, (float)ui->width, 30.0f);
+    float screen_height     = (float)ui->height;
+    if (!(screen_height > 0.0f))
+    {
+        screen_height = 600.0f;
+    }
+    float menu_height_limit = screen_height - 96.0f;
+    if (!(menu_height_limit > 0.0f))
+    {
+        menu_height_limit = screen_height * 0.6f;
+    }
+    if (menu_height_limit < 240.0f)
+    {
+        menu_height_limit = 240.0f;
+    }
+    float popup_file_height = fminf(menu_height_limit, 320.0f);
+    float popup_edit_height = fminf(menu_height_limit, 280.0f);
+    float popup_view_height = fminf(menu_height_limit, 420.0f);
+    float popup_help_height = fminf(menu_height_limit, 260.0f);
+    float popup_view_width  = 280.0f;
+    float screen_width      = (float)ui->width;
+    if (screen_width > 0.0f)
+    {
+        float desired_width = screen_width * 0.4f;
+        if (desired_width > popup_view_width)
+        {
+            popup_view_width = fminf(desired_width, 340.0f);
+        }
+    }
     if (nk_begin(ctx, "MenuBar", bar_rect,
                  NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND))
     {
@@ -3301,7 +3333,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 11);
 
         nk_layout_row_push(ctx, 60.0f);
-        if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT, nk_vec2(200.0f, 220.0f)))
+        if (nk_menu_begin_label(ctx, "File", NK_TEXT_LEFT, nk_vec2(220.0f, popup_file_height)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (ui_nav_menu_item_label(internal, ctx, "New Tree", NK_TEXT_LEFT))
@@ -3356,7 +3388,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         }
 
         nk_layout_row_push(ctx, 60.0f);
-        if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT, nk_vec2(160.0f, 180.0f)))
+        if (nk_menu_begin_label(ctx, "Edit", NK_TEXT_LEFT, nk_vec2(200.0f, popup_edit_height)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (ui_nav_menu_item_label(internal, ctx, "Undo", NK_TEXT_LEFT))
@@ -3394,7 +3426,8 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         }
 
         nk_layout_row_push(ctx, 70.0f);
-        if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT, nk_vec2(220.0f, 200.0f)))
+        if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT,
+                                nk_vec2(popup_view_width, popup_view_height)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             const char *settings_label = settings_dirty ? "Settings... *" : "Settings...";
@@ -3593,7 +3626,7 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
         }
 
         nk_layout_row_push(ctx, 70.0f);
-        if (nk_menu_begin_label(ctx, "Help", NK_TEXT_LEFT, nk_vec2(180.0f, 160.0f)))
+        if (nk_menu_begin_label(ctx, "Help", NK_TEXT_LEFT, nk_vec2(220.0f, popup_help_height)))
         {
             nk_layout_row_dynamic(ctx, 24.0f, 1);
             if (ui_nav_menu_item_label(internal, ctx, "About", NK_TEXT_LEFT))
@@ -4194,7 +4227,7 @@ static void ui_draw_onboarding_overlay(UIInternal *internal, UIContext *ui)
 
     struct nk_context *ctx = &internal->ctx;
     float width            = 340.0f;
-    float height           = 220.0f;
+    float height           = 280.0f;
     float margin           = 24.0f;
     if (ui->width <= 0)
     {
@@ -4214,21 +4247,32 @@ static void ui_draw_onboarding_overlay(UIInternal *internal, UIContext *ui)
             margin = 0.0f;
         }
     }
-    float top = 80.0f;
-    if (ui->height > 0)
+    float screen_height = (ui->height > 0) ? (float)ui->height : (height + margin + 120.0f);
+    float max_height    = screen_height - margin - 12.0f;
+    if (max_height < 200.0f)
     {
-        float max_top = (float)ui->height - height - margin;
-        if (max_top < 12.0f)
-        {
-            max_top = 12.0f;
-        }
-        if (top > max_top)
-        {
-            top = max_top;
-        }
+        max_height = fmaxf(screen_height - 24.0f, 200.0f);
+    }
+    if (height > max_height)
+    {
+        height = max_height;
+    }
+    float top     = 80.0f;
+    float max_top = screen_height - height - margin;
+    if (max_top < 12.0f)
+    {
+        max_top = 12.0f;
+    }
+    if (top > max_top)
+    {
+        top = max_top;
+    }
+    if (top < 12.0f)
+    {
+        top = 12.0f;
     }
     struct nk_rect bounds = nk_rect(screen_width - width - margin, top, width, height);
-    nk_flags flags        = NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND;
+    nk_flags flags        = NK_WINDOW_BORDER | NK_WINDOW_BACKGROUND | NK_WINDOW_SCROLL_AUTO_HIDE;
     if (nk_begin(ctx, "OnboardingOverlay", bounds, flags))
     {
         size_t step_index =

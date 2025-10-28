@@ -291,3 +291,80 @@ Grid lines enabled.
 Grid lines hidden.
 Relationship lines hidden.
 Selection cleared.
+Silvia Massalsky selected, alive.
+Thomas Rickert selected, alive.
+Relationship lines enabled.
+Relationship lines hidden.
+Relationship lines enabled.
+Relationship lines hidden.
+Relationship lines enabled.
+Overlay hidden.
+Holographic name panels hidden.
+Jutta Massalsky selected, deceased.
+Martin Massalsky selected, deceased.
+Jutta Massalsky selected, deceased.
+Christian Rickert selected, alive.
+Relationship analysis refreshed.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Florian Rickert (ID 8).
+Florian Rickert selected, alive.
+Add-person request queued.
+Created holographic profile for Tina Rickert (ID 9).
+Tina Rickert selected, alive.
+Thomas Rickert selected, alive.
+Jutta Massalsky selected, deceased.
+Florian Rickert selected, alive.
+Jutta Massalsky selected, deceased.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Add-person request queued.
+Created holographic profile for Phil Masalsky (ID 10).
+Phil Masalsky selected, alive.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Selection cleared.
+Ramona Massalky selected, alive.
+Jutta Massalsky selected, deceased.
+Edit panel opened for selected hologram.
+Selection cleared.
+Harald Massalsky selected, alive.
+Edit panel closed.
+Ramona Massalky selected, alive.
+Screen reader narration enabled.
+Frame the earliest generation so you can branch outward from the family origins.
+Snap the orbit camera back to its default distance and orientation.
+Camera centered on root generation.
+Camera reset to default orbit.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Smooth line rendering disabled.
+Smooth line rendering enabled.
+Smooth line rendering disabled.
+Smooth line rendering enabled.
+Portraits hidden from name panels.
+Holographic name panels hidden.
+Portraits enabled in name panels.
+Portraits hidden from name panels.
+Holographic name panels enabled.
+Holographic name panels hidden.
+Overlay hidden.
+Relationship lines hidden.
+Relationship lines enabled.
+Grid lines hidden.
+Tina Rickert selected, alive.
