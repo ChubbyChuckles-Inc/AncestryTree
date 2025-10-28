@@ -13,7 +13,7 @@ DECLARE_TEST(test_bootstrap_prefers_cli_path)
 
     AppStartupDecision decision;
     char message[256];
-    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true,
+    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true, NULL,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_CLI_PATH);
     ASSERT_STREQ(decision.resolved_path, "custom.json");
@@ -28,7 +28,7 @@ DECLARE_TEST(test_bootstrap_uses_sample_when_available)
 
     AppStartupDecision decision;
     char message[256];
-    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true,
+    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true, NULL,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_SAMPLE_ASSET);
     ASSERT_STREQ(decision.resolved_path, "assets/example_tree.json");
@@ -42,7 +42,7 @@ DECLARE_TEST(test_bootstrap_respects_disable_flag)
 
     AppStartupDecision decision;
     char message[256];
-    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true,
+    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", true, NULL,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_PLACEHOLDER);
     ASSERT_STREQ(decision.resolved_path, "");
@@ -57,7 +57,7 @@ DECLARE_TEST(test_bootstrap_handles_missing_sample)
 
     AppStartupDecision decision;
     char message[256];
-    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, NULL, true, &decision, message,
+    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, NULL, true, NULL, &decision, message,
                                                  sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_PLACEHOLDER);
     ASSERT_TRUE(strstr(message, "scripts/setup_dependencies") != NULL);
@@ -68,8 +68,8 @@ DECLARE_TEST(test_bootstrap_rejects_null_inputs)
 {
     AppStartupDecision decision;
     char message[256];
-    ASSERT_FALSE(
-        app_bootstrap_decide_tree_source(NULL, NULL, true, &decision, message, sizeof(message)));
+    ASSERT_FALSE(app_bootstrap_decide_tree_source(NULL, NULL, true, NULL, &decision, message,
+                                                  sizeof(message)));
     ASSERT_TRUE(strstr(message, "Invalid") != NULL);
 }
 
@@ -80,7 +80,7 @@ DECLARE_TEST(test_bootstrap_respects_sample_history_flag)
 
     AppStartupDecision decision;
     char message[256];
-    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", false,
+    ASSERT_TRUE(app_bootstrap_decide_tree_source(&options, "assets/example_tree.json", false, NULL,
                                                  &decision, message, sizeof(message)));
     ASSERT_EQ(decision.source, APP_STARTUP_SOURCE_PLACEHOLDER);
     ASSERT_TRUE(strstr(message, "already showcased") != NULL);

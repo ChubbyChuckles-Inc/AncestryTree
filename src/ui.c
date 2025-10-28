@@ -168,6 +168,121 @@ typedef struct UIInternal
 #endif
 } UIInternal;
 
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+static struct nk_rect ui_panel_clamp_bounds(const UIContext *ui, struct nk_rect bounds,
+                                            float min_width, float min_height)
+{
+    if (!ui)
+    {
+        return bounds;
+    }
+    if (!(bounds.w > 0.0f))
+    {
+        bounds.w = min_width;
+    }
+    if (!(bounds.h > 0.0f))
+    {
+        bounds.h = min_height;
+    }
+    if (bounds.w < min_width)
+    {
+        bounds.w = min_width;
+    }
+    if (bounds.h < min_height)
+    {
+        bounds.h = min_height;
+    }
+    float max_width  = (float)ui->width;
+    float max_height = (float)ui->height;
+    if (bounds.w > max_width && max_width > 0.0f)
+    {
+        bounds.w = max_width;
+    }
+    if (bounds.h > max_height && max_height > 0.0f)
+    {
+        bounds.h = max_height;
+    }
+    if (bounds.x + bounds.w > (float)ui->width)
+    {
+        bounds.x = (float)ui->width - bounds.w;
+    }
+    if (bounds.y + bounds.h > (float)ui->height)
+    {
+        bounds.y = (float)ui->height - bounds.h;
+    }
+    if (!(bounds.x > 0.0f) && bounds.x != 0.0f)
+    {
+        bounds.x = 0.0f;
+    }
+    if (!(bounds.y > 0.0f) && bounds.y != 0.0f)
+    {
+        bounds.y = 0.0f;
+    }
+    if (bounds.x < 0.0f)
+    {
+        bounds.x = 0.0f;
+    }
+    if (bounds.y < 0.0f)
+    {
+        bounds.y = 0.0f;
+    }
+    return bounds;
+}
+
+static struct nk_rect ui_panel_apply_layout(const UIContext *ui, const SettingsPanelLayout *layout,
+                                            struct nk_rect defaults, float min_width,
+                                            float min_height)
+{
+    struct nk_rect result = defaults;
+    if (!ui || !layout || !layout->valid)
+    {
+        return ui_panel_clamp_bounds(ui, result, min_width, min_height);
+    }
+    if (layout->width > 0.0f && layout->height > 0.0f)
+    {
+        result.x = layout->x;
+        result.y = layout->y;
+        result.w = layout->width;
+        result.h = layout->height;
+    }
+    return ui_panel_clamp_bounds(ui, result, min_width, min_height);
+}
+
+static bool ui_panel_store_layout(Settings *settings, SettingsPanelLayout *layout,
+                                  const UIContext *ui, struct nk_rect bounds, float min_width,
+                                  float min_height)
+{
+    if (!settings || !layout)
+    {
+        return false;
+    }
+    bounds = ui_panel_clamp_bounds(ui, bounds, min_width, min_height);
+    if (!(bounds.w > 0.0f) || !(bounds.h > 0.0f))
+    {
+        return false;
+    }
+    if (!isfinite(bounds.x) || !isfinite(bounds.y) || !isfinite(bounds.w) || !isfinite(bounds.h))
+    {
+        return false;
+    }
+
+    bool changed = !layout->valid || fabsf(layout->x - bounds.x) > 0.25f ||
+                   fabsf(layout->y - bounds.y) > 0.25f || fabsf(layout->width - bounds.w) > 0.25f ||
+                   fabsf(layout->height - bounds.h) > 0.25f;
+    if (!changed)
+    {
+        return false;
+    }
+    layout->valid  = true;
+    layout->x      = bounds.x;
+    layout->y      = bounds.y;
+    layout->width  = bounds.w;
+    layout->height = bounds.h;
+    settings_mark_dirty(settings);
+    return true;
+}
+#endif /* ANCESTRYTREE_HAVE_RAYLIB && ANCESTRYTREE_HAVE_NUKLEAR */
+
 static void ui_internal_set_status(UIInternal *internal, const char *message);
 static void ui_accessibility_set_enabled(UIInternal *internal, bool enabled);
 
@@ -2327,7 +2442,7 @@ static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
 }
 #endif
 
-static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
+static void ui_draw_about_window(UIInternal *internal, const UIContext *ui, Settings *settings)
 {
     if (!internal || !ui)
     {
@@ -2351,6 +2466,13 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
     float height          = 240.0f;
     float x               = ((float)ui->width - width) * 0.5f;
     struct nk_rect bounds = nk_rect(x, 64.0f, width, height);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    bounds =
+        ui_panel_apply_layout(ui, settings ? &settings->panel_about : NULL, bounds, 220.0f, 160.0f);
+    struct nk_rect captured_bounds = bounds;
+#else
+    struct nk_rect captured_bounds = bounds;
+#endif
     if (nk_begin(ctx, "About##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
     {
@@ -2376,15 +2498,22 @@ static void ui_draw_about_window(UIInternal *internal, const UIContext *ui)
     {
         internal->show_about_window = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    captured_bounds = nk_window_get_bounds(ctx);
+#endif
     nk_end(ctx);
     if (nk_window_is_closed(ctx, "About##AncestryTree"))
     {
         internal->show_about_window = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    (void)ui_panel_store_layout(settings, settings ? &settings->panel_about : NULL, ui,
+                                captured_bounds, 220.0f, 160.0f);
+#endif
     ui_theme_pop_panel_alpha(ctx, &token);
 }
 
-static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
+static void ui_draw_help_window(UIInternal *internal, const UIContext *ui, Settings *settings)
 {
     if (!internal || !ui)
     {
@@ -2408,6 +2537,13 @@ static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
     float height          = fminf(320.0f, (float)ui->height * 0.75f);
     float x               = ((float)ui->width - width) * 0.5f;
     struct nk_rect bounds = nk_rect(x, 80.0f, width, height);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    bounds =
+        ui_panel_apply_layout(ui, settings ? &settings->panel_help : NULL, bounds, 260.0f, 200.0f);
+    struct nk_rect captured_bounds = bounds;
+#else
+    struct nk_rect captured_bounds = bounds;
+#endif
     if (nk_begin(ctx, "Quick Help##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_CLOSABLE))
     {
@@ -2449,15 +2585,23 @@ static void ui_draw_help_window(UIInternal *internal, const UIContext *ui)
     {
         internal->show_help_window = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    captured_bounds = nk_window_get_bounds(ctx);
+#endif
     nk_end(ctx);
     if (nk_window_is_closed(ctx, "Quick Help##AncestryTree"))
     {
         internal->show_help_window = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    (void)ui_panel_store_layout(settings, settings ? &settings->panel_help : NULL, ui,
+                                captured_bounds, 260.0f, 200.0f);
+#endif
     ui_theme_pop_panel_alpha(ctx, &token);
 }
 
-static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree,
+                                 Settings *settings)
 {
     if (!internal || !ui)
     {
@@ -2502,6 +2646,13 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         x = 10.0f;
     }
     struct nk_rect bounds = nk_rect(x, 70.0f, width, height);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    bounds = ui_panel_apply_layout(ui, settings ? &settings->panel_search : NULL, bounds, 320.0f,
+                                   260.0f);
+    struct nk_rect captured_bounds = bounds;
+#else
+    struct nk_rect captured_bounds = bounds;
+#endif
 
     if (nk_begin(ctx, "Search##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
@@ -2695,15 +2846,23 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
     {
         internal->show_search_panel = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    captured_bounds = nk_window_get_bounds(ctx);
+#endif
     nk_end(ctx);
     if (nk_window_is_closed(ctx, "Search##AncestryTree"))
     {
         internal->show_search_panel = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    (void)ui_panel_store_layout(settings, settings ? &settings->panel_search : NULL, ui,
+                                captured_bounds, 320.0f, 260.0f);
+#endif
     ui_theme_pop_panel_alpha(ctx, &token);
 }
 
-static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree,
+                                    Settings *settings)
 {
     if (!internal || !ui)
     {
@@ -2751,6 +2910,13 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
         height = 280.0f;
     }
     struct nk_rect bounds = nk_rect(36.0f, 260.0f, width, height);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    bounds = ui_panel_apply_layout(ui, settings ? &settings->panel_analytics : NULL, bounds, 300.0f,
+                                   240.0f);
+    struct nk_rect captured_bounds = bounds;
+#else
+    struct nk_rect captured_bounds = bounds;
+#endif
 
     /* Manual QA: Populate the sample tree, open View -> Tree Analytics, verify generation counts,
      * average lifespan, and location tallies update as persons are edited or toggled
@@ -2779,11 +2945,18 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
             char line[160];
 
             nk_layout_row_dynamic(ctx, 20.0f, 1);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+            captured_bounds = nk_window_get_bounds(ctx);
+#endif
             (void)snprintf(line, sizeof(line), "Generations detected: %zu",
                            stats->generation_count);
             nk_label(ctx, line, NK_TEXT_LEFT);
 
             nk_layout_row_dynamic(ctx, 20.0f, 1);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+            (void)ui_panel_store_layout(settings, settings ? &settings->panel_analytics : NULL, ui,
+                                        captured_bounds, 300.0f, 240.0f);
+#endif
             (void)snprintf(line, sizeof(line), "Living persons: %zu", stats->living_count);
             nk_label(ctx, line, NK_TEXT_LEFT);
 
@@ -3234,6 +3407,12 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
         width = 280.0f;
     }
     struct nk_rect bounds = nk_rect((float)ui->width - width - 20.0f, 60.0f, width, 460.0f);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    bounds = ui_panel_apply_layout(ui, &settings->panel_settings, bounds, 280.0f, 260.0f);
+    struct nk_rect captured_bounds = bounds;
+#else
+    struct nk_rect captured_bounds = bounds;
+#endif
     if (nk_begin(ctx, "Settings##AncestryTree", bounds,
                  NK_WINDOW_TITLE | NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
                      NK_WINDOW_CLOSABLE))
@@ -3535,11 +3714,18 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
     {
         internal->show_settings_window = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    captured_bounds = nk_window_get_bounds(ctx);
+#endif
     nk_end(ctx);
     if (nk_window_is_closed(ctx, "Settings##AncestryTree"))
     {
         internal->show_settings_window = false;
     }
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    (void)ui_panel_store_layout(settings, &settings->panel_settings, ui, captured_bounds, 280.0f,
+                                260.0f);
+#endif
     ui_theme_pop_panel_alpha(ctx, &token);
 }
 
@@ -4287,8 +4473,22 @@ void ui_resize(UIContext *ui, int width, int height)
     {
         return;
     }
+
     ui->width  = width;
     ui->height = height;
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return;
+    }
+
+    (void)internal;
+#else
+    (void)width;
+    (void)height;
+#endif
 }
 
 void ui_cleanup(UIContext *ui)
@@ -4375,6 +4575,7 @@ static void ui_compose_person_name(const Person *person, char *buffer, size_t ca
     {
         return;
     }
+
     buffer[0] = '\0';
     if (!person)
     {
@@ -4382,35 +4583,26 @@ static void ui_compose_person_name(const Person *person, char *buffer, size_t ca
         return;
     }
 
-    size_t written       = 0U;
-    const char *parts[3] = {person->name.first, person->name.middle, person->name.last};
-    for (size_t index = 0U; index < 3U; ++index)
+    const char *parts[] = {person->name.first, person->name.middle, person->name.last};
+    size_t written      = 0U;
+
+    for (size_t index = 0U; index < sizeof(parts) / sizeof(parts[0]); ++index)
     {
         const char *part = parts[index];
         if (!part || part[0] == '\0')
         {
             continue;
         }
-        if (written > 0U)
+
+        int result = (written > 0U) ? snprintf(buffer + written, capacity - written, " %s", part)
+                                    : snprintf(buffer, capacity, "%s", part);
+        if (result < 0)
         {
-            int result = snprintf(buffer + written, capacity - written, " %s", part);
-            if (result < 0)
-            {
-                buffer[written] = '\0';
-                break;
-            }
-            written += (size_t)result;
+            buffer[0] = '\0';
+            return;
         }
-        else
-        {
-            int result = snprintf(buffer, capacity, "%s", part);
-            if (result < 0)
-            {
-                buffer[0] = '\0';
-                break;
-            }
-            written = (size_t)result;
-        }
+
+        written += (size_t)result;
         if (written >= capacity)
         {
             buffer[capacity - 1U] = '\0';
@@ -4973,7 +5165,8 @@ static void ui_draw_progress_overlay(UIInternal *internal, UIContext *ui)
     nk_end(ctx);
 }
 
-static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree,
+                                     Settings *settings)
 {
     if (!internal || !ui)
     {
@@ -5005,6 +5198,13 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         x = 18.0f;
     }
     struct nk_rect bounds = nk_rect(x, 48.0f, width, height);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    bounds = ui_panel_apply_layout(ui, settings ? &settings->panel_add_person : NULL, bounds,
+                                   360.0f, 320.0f);
+    struct nk_rect captured_bounds = bounds;
+#else
+    struct nk_rect captured_bounds = bounds;
+#endif
     if (nk_begin(ctx, "Add Person##Panel", bounds,
                  NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_TITLE |
                      NK_WINDOW_SCROLL_AUTO_HIDE))
@@ -5545,10 +5745,16 @@ static void ui_draw_add_person_panel(UIInternal *internal, UIContext *ui, const 
         }
     }
     nk_end(ctx);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    captured_bounds = nk_window_get_bounds(ctx);
+    (void)ui_panel_store_layout(settings, settings ? &settings->panel_add_person : NULL, ui,
+                                captured_bounds, 360.0f, 320.0f);
+#endif
     ui_theme_pop_panel_alpha(ctx, &token);
 }
 
-static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree)
+static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const FamilyTree *tree,
+                                      Settings *settings)
 {
     if (!internal || !ui)
     {
@@ -5582,6 +5788,13 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
     }
     ui_theme_pop_panel_alpha(ctx, &token);
     struct nk_rect bounds = nk_rect(x, 48.0f, width, height);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    bounds = ui_panel_apply_layout(ui, settings ? &settings->panel_edit_person : NULL, bounds,
+                                   360.0f, 320.0f);
+    struct nk_rect captured_bounds = bounds;
+#else
+    struct nk_rect captured_bounds = bounds;
+#endif
     if (nk_begin(ctx, "Edit Person##Panel", bounds,
                  NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_TITLE |
                      NK_WINDOW_SCROLL_AUTO_HIDE))
@@ -6161,6 +6374,11 @@ static void ui_draw_edit_person_panel(UIInternal *internal, UIContext *ui, const
         }
     }
     nk_end(ctx);
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    captured_bounds = nk_window_get_bounds(ctx);
+    (void)ui_panel_store_layout(settings, settings ? &settings->panel_edit_person : NULL, ui,
+                                captured_bounds, 360.0f, 320.0f);
+#endif
     if (nk_window_is_closed(ctx, "Edit Person##Panel"))
     {
         internal->show_edit_person_panel          = false;
@@ -6198,12 +6416,12 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
     }
     ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings, settings_dirty);
     ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
-    ui_draw_about_window(internal, ui);
-    ui_draw_help_window(internal, ui);
-    ui_draw_search_panel(internal, ui, tree);
-    ui_draw_analytics_panel(internal, ui, tree);
-    ui_draw_add_person_panel(internal, ui, tree);
-    ui_draw_edit_person_panel(internal, ui, tree);
+    ui_draw_about_window(internal, ui, settings);
+    ui_draw_help_window(internal, ui, settings);
+    ui_draw_search_panel(internal, ui, tree, settings);
+    ui_draw_analytics_panel(internal, ui, tree, settings);
+    ui_draw_add_person_panel(internal, ui, tree, settings);
+    ui_draw_edit_person_panel(internal, ui, tree, settings);
     ui_draw_settings_window(internal, ui, settings, settings_dirty);
     ui_draw_exit_prompt(internal, ui);
     ui_draw_error_dialog(internal, ui);

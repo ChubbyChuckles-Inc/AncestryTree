@@ -44,8 +44,9 @@ static void app_bootstrap_copy_path(char (*destination)[512], const char *source
 }
 
 bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options, const char *sample_tree_path,
-                                      bool sample_allowed, AppStartupDecision *decision,
-                                      char *message_buffer, size_t message_capacity)
+                                      bool sample_allowed, const char *last_session_path,
+                                      AppStartupDecision *decision, char *message_buffer,
+                                      size_t message_capacity)
 {
     if (message_buffer && message_capacity > 0U)
     {
@@ -79,7 +80,21 @@ bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options, const cha
     }
 
     bool sample_available = (sample_tree_path && sample_tree_path[0] != '\0');
-    bool use_sample       = sample_allowed && !options->disable_sample_tree && sample_available;
+    if (last_session_path && last_session_path[0] != '\0')
+    {
+        decision->source = APP_STARTUP_SOURCE_LAST_SESSION;
+        app_bootstrap_copy_path(&decision->resolved_path, last_session_path);
+        if (message_buffer && message_capacity > 0U)
+        {
+            app_bootstrap_write_message(message_buffer, message_capacity,
+                                        "Restoring holographic family tree from '%s'. Press Ctrl+O "
+                                        "to load a different archive.",
+                                        last_session_path);
+        }
+        return true;
+    }
+
+    bool use_sample = sample_allowed && !options->disable_sample_tree && sample_available;
     if (use_sample)
     {
         decision->source = APP_STARTUP_SOURCE_SAMPLE_ASSET;

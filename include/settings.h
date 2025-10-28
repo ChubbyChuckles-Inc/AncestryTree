@@ -28,6 +28,15 @@ typedef enum SettingsLanguage
     SETTINGS_LANGUAGE_FUTURE  = 1
 } SettingsLanguage;
 
+typedef struct SettingsPanelLayout
+{
+    bool valid;
+    float x;
+    float y;
+    float width;
+    float height;
+} SettingsPanelLayout;
+
 typedef struct Settings
 {
     SettingsGraphicsQuality graphics_quality;
@@ -48,6 +57,14 @@ typedef struct Settings
     bool screen_reader_enabled;
     bool has_loaded_sample_tree;
     bool onboarding_completed;
+    char last_tree_path[512];
+    SettingsPanelLayout panel_about;
+    SettingsPanelLayout panel_help;
+    SettingsPanelLayout panel_search;
+    SettingsPanelLayout panel_analytics;
+    SettingsPanelLayout panel_add_person;
+    SettingsPanelLayout panel_edit_person;
+    SettingsPanelLayout panel_settings;
     unsigned int revision;
 } Settings;
 

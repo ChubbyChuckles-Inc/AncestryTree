@@ -293,6 +293,25 @@ static void app_append_message(char *buffer, size_t capacity, const char *messag
     buffer[existing + length] = '\0';
 }
 
+static void app_settings_set_last_tree(Settings *settings, const char *path)
+{
+    if (!settings)
+    {
+        return;
+    }
+    const char *value = (path && path[0] != '\0') ? path : "";
+    if (strcmp(settings->last_tree_path, value) == 0)
+    {
+        return;
+    }
+#if defined(_MSC_VER)
+    (void)strncpy_s(settings->last_tree_path, sizeof(settings->last_tree_path), value, _TRUNCATE);
+#else
+    (void)snprintf(settings->last_tree_path, sizeof(settings->last_tree_path), "%s", value);
+#endif
+    settings_mark_dirty(settings);
+}
+
 static bool app_prepare_asset_reference(const char *input_path, const char *subdirectory,
                                         const char *prefix, char *output, size_t capacity,
                                         const char **out_relative, bool *out_copied,
@@ -740,6 +759,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             ui_progress_complete(ui, true, status_message);
         }
         app_report_status(ui, logger, status_message);
+        if (settings)
+        {
+            app_settings_set_last_tree(settings, chosen_path);
+        }
     }
     break;
     case UI_EVENT_SAVE_TREE:
@@ -789,6 +812,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 app_report_error(ui, logger, message);
                 return;
             }
+            if (settings)
+            {
+                app_settings_set_last_tree(settings, saved_path);
+            }
             if (app_state)
             {
                 app_state_clear_tree_dirty(app_state);
@@ -821,6 +848,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 }
                 app_report_error(ui, logger, message);
                 return;
+            }
+            if (settings)
+            {
+                app_settings_set_last_tree(settings, file_state->current_path);
             }
             if (app_state)
             {
@@ -882,6 +913,10 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
                 }
                 app_report_error(ui, logger, message);
                 return;
+            }
+            if (settings)
+            {
+                app_settings_set_last_tree(settings, saved_path);
             }
             if (app_state)
             {
@@ -2282,7 +2317,7 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
     startup_message[0] = '\0';
     if (!app_bootstrap_decide_tree_source(
             effective_options, sample_tree_available ? sample_tree_path : NULL, allow_sample_start,
-            &startup_decision, startup_message, sizeof(startup_message)))
+            settings.last_tree_path, &startup_decision, startup_message, sizeof(startup_message)))
     {
         AT_LOG(logger, AT_LOG_ERROR, "%s",
                (startup_message[0] != '\0') ? startup_message
@@ -2326,8 +2361,42 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
         {
             tree_loaded_from_cli = true;
             app_file_state_set(&file_state, startup_decision.resolved_path);
+            app_settings_set_last_tree(&settings, startup_decision.resolved_path);
             (void)snprintf(initial_status, sizeof(initial_status), "Loaded tree from %s.",
                            startup_decision.resolved_path);
+        }
+        break;
+    case APP_STARTUP_SOURCE_LAST_SESSION:
+        AT_LOG(logger, AT_LOG_INFO, "Restoring tree from %s", startup_decision.resolved_path);
+        tree = persistence_tree_load(startup_decision.resolved_path, error_buffer,
+                                     sizeof(error_buffer));
+        if (!tree)
+        {
+            const char *detail = (error_buffer[0] != '\0') ? error_buffer : NULL;
+            char restore_hint[256];
+            if (!status_message_format_load_error(startup_decision.resolved_path, detail,
+                                                  restore_hint, sizeof(restore_hint)))
+            {
+                (void)snprintf(restore_hint, sizeof(restore_hint),
+                               "Unable to restore the family tree from '%s'. %s.",
+                               startup_decision.resolved_path, detail ? detail : "Unknown error");
+            }
+            AT_LOG(logger, AT_LOG_WARN, "%s Placeholder data will be used.", restore_hint);
+            if (!warning_pending)
+            {
+                initial_warning[0] = '\0';
+            }
+            app_append_message(initial_warning, sizeof(initial_warning), restore_hint);
+            app_append_message(initial_warning, sizeof(initial_warning),
+                               "Placeholder data will be used.");
+            warning_pending = true;
+        }
+        else
+        {
+            app_file_state_set(&file_state, startup_decision.resolved_path);
+            app_settings_set_last_tree(&settings, startup_decision.resolved_path);
+            (void)snprintf(initial_status, sizeof(initial_status),
+                           "Restored last session tree from %s.", startup_decision.resolved_path);
         }
         break;
     case APP_STARTUP_SOURCE_SAMPLE_ASSET:
@@ -2729,6 +2798,31 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
             AT_LOG(logger, AT_LOG_WARN, "Auto-save flush failed on shutdown: %s", auto_save_error);
         }
         persistence_auto_save_shutdown(&auto_save);
+    }
+
+    if (settings_path && memcmp(&settings, &persisted_settings, sizeof(Settings)) != 0)
+    {
+        char final_settings_error[256];
+        final_settings_error[0] = '\0';
+        if (settings_save(&settings, settings_path, final_settings_error,
+                          sizeof(final_settings_error)))
+        {
+            persisted_settings = settings;
+            AT_LOG(logger, AT_LOG_INFO, "Settings saved to %s on shutdown.", settings_path);
+        }
+        else
+        {
+            if (final_settings_error[0] != '\0')
+            {
+                AT_LOG(logger, AT_LOG_WARN, "Failed to persist settings on shutdown: %s",
+                       final_settings_error);
+            }
+            else
+            {
+                AT_LOG(logger, AT_LOG_WARN,
+                       "Failed to persist settings on shutdown (unknown error).");
+            }
+        }
     }
 
     EnableCursor();

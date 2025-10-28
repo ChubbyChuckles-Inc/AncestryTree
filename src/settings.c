@@ -15,6 +15,52 @@ static int settings_strcasecmp(const char *a, const char *b)
 #endif
 }
 
+static void settings_panel_layout_reset(SettingsPanelLayout *layout)
+{
+    if (!layout)
+    {
+        return;
+    }
+    layout->valid  = false;
+    layout->x      = 0.0f;
+    layout->y      = 0.0f;
+    layout->width  = 0.0f;
+    layout->height = 0.0f;
+}
+
+static bool settings_parse_panel_layout(const char *value, SettingsPanelLayout *layout)
+{
+    if (!value || !layout)
+    {
+        return false;
+    }
+    unsigned int valid = 0U;
+    double x           = 0.0;
+    double y           = 0.0;
+    double w           = 0.0;
+    double h           = 0.0;
+    int parsed         = sscanf(value, "%u,%lf,%lf,%lf,%lf", &valid, &x, &y, &w, &h);
+    if (parsed != 5)
+    {
+        return false;
+    }
+    layout->x      = (float)x;
+    layout->y      = (float)y;
+    layout->width  = (float)w;
+    layout->height = (float)h;
+    if (!(w > 0.0) || !(h > 0.0))
+    {
+        layout->valid  = false;
+        layout->x      = 0.0f;
+        layout->y      = 0.0f;
+        layout->width  = 0.0f;
+        layout->height = 0.0f;
+        return true;
+    }
+    layout->valid = valid != 0U;
+    return true;
+}
+
 static void settings_set_defaults(Settings *settings)
 {
     if (!settings)
@@ -39,6 +85,18 @@ static void settings_set_defaults(Settings *settings)
     settings->screen_reader_enabled           = false;
     settings->has_loaded_sample_tree          = false;
     settings->onboarding_completed            = false;
+#if defined(_MSC_VER)
+    (void)strncpy_s(settings->last_tree_path, sizeof(settings->last_tree_path), "", _TRUNCATE);
+#else
+    settings->last_tree_path[0] = '\0';
+#endif
+    settings_panel_layout_reset(&settings->panel_about);
+    settings_panel_layout_reset(&settings->panel_help);
+    settings_panel_layout_reset(&settings->panel_search);
+    settings_panel_layout_reset(&settings->panel_analytics);
+    settings_panel_layout_reset(&settings->panel_add_person);
+    settings_panel_layout_reset(&settings->panel_edit_person);
+    settings_panel_layout_reset(&settings->panel_settings);
 }
 void settings_init_defaults(Settings *settings)
 {
@@ -332,6 +390,43 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
                 settings->onboarding_completed = parsed;
             }
         }
+        else if (settings_strcasecmp(key, "last_tree_path") == 0)
+        {
+#if defined(_MSC_VER)
+            (void)strncpy_s(settings->last_tree_path, sizeof(settings->last_tree_path), value,
+                            _TRUNCATE);
+#else
+            (void)snprintf(settings->last_tree_path, sizeof(settings->last_tree_path), "%s", value);
+#endif
+        }
+        else if (settings_strcasecmp(key, "panel_about") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_about);
+        }
+        else if (settings_strcasecmp(key, "panel_help") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_help);
+        }
+        else if (settings_strcasecmp(key, "panel_search") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_search);
+        }
+        else if (settings_strcasecmp(key, "panel_analytics") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_analytics);
+        }
+        else if (settings_strcasecmp(key, "panel_add_person") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_add_person);
+        }
+        else if (settings_strcasecmp(key, "panel_edit_person") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_edit_person);
+        }
+        else if (settings_strcasecmp(key, "panel_settings") == 0)
+        {
+            (void)settings_parse_panel_layout(value, &settings->panel_settings);
+        }
     }
 
     fclose(stream);
@@ -391,7 +486,15 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         "ui_font_scale=%.3f\n"
         "screen_reader_enabled=%u\n"
         "onboarding_completed=%u\n"
-        "has_loaded_sample_tree=%u\n",
+        "has_loaded_sample_tree=%u\n"
+        "last_tree_path=%s\n"
+        "panel_about=%u,%.2f,%.2f,%.2f,%.2f\n"
+        "panel_help=%u,%.2f,%.2f,%.2f,%.2f\n"
+        "panel_search=%u,%.2f,%.2f,%.2f,%.2f\n"
+        "panel_analytics=%u,%.2f,%.2f,%.2f,%.2f\n"
+        "panel_add_person=%u,%.2f,%.2f,%.2f,%.2f\n"
+        "panel_edit_person=%u,%.2f,%.2f,%.2f,%.2f\n"
+        "panel_settings=%u,%.2f,%.2f,%.2f,%.2f\n",
         (unsigned int)settings->graphics_quality, settings->camera_rotation_sensitivity,
         settings->camera_pan_sensitivity, settings->camera_keyboard_pan_sensitivity,
         settings->camera_zoom_sensitivity, settings->auto_save_enabled ? 1U : 0U,
@@ -400,7 +503,25 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         settings->name_panel_width_scale, settings->name_panel_height_scale,
         (unsigned int)settings->language, settings->high_contrast_mode ? 1U : 0U,
         settings->ui_font_scale, settings->screen_reader_enabled ? 1U : 0U,
-        settings->onboarding_completed ? 1U : 0U, settings->has_loaded_sample_tree ? 1U : 0U);
+        settings->onboarding_completed ? 1U : 0U, settings->has_loaded_sample_tree ? 1U : 0U,
+        settings->last_tree_path, settings->panel_about.valid ? 1U : 0U,
+        (double)settings->panel_about.x, (double)settings->panel_about.y,
+        (double)settings->panel_about.width, (double)settings->panel_about.height,
+        settings->panel_help.valid ? 1U : 0U, (double)settings->panel_help.x,
+        (double)settings->panel_help.y, (double)settings->panel_help.width,
+        (double)settings->panel_help.height, settings->panel_search.valid ? 1U : 0U,
+        (double)settings->panel_search.x, (double)settings->panel_search.y,
+        (double)settings->panel_search.width, (double)settings->panel_search.height,
+        settings->panel_analytics.valid ? 1U : 0U, (double)settings->panel_analytics.x,
+        (double)settings->panel_analytics.y, (double)settings->panel_analytics.width,
+        (double)settings->panel_analytics.height, settings->panel_add_person.valid ? 1U : 0U,
+        (double)settings->panel_add_person.x, (double)settings->panel_add_person.y,
+        (double)settings->panel_add_person.width, (double)settings->panel_add_person.height,
+        settings->panel_edit_person.valid ? 1U : 0U, (double)settings->panel_edit_person.x,
+        (double)settings->panel_edit_person.y, (double)settings->panel_edit_person.width,
+        (double)settings->panel_edit_person.height, settings->panel_settings.valid ? 1U : 0U,
+        (double)settings->panel_settings.x, (double)settings->panel_settings.y,
+        (double)settings->panel_settings.width, (double)settings->panel_settings.height);
 
     bool success = written >= 0;
     if (!success && error_buffer && error_buffer_size > 0U)

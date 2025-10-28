@@ -15,6 +15,7 @@ extern "C"
     {
         APP_STARTUP_SOURCE_NONE = 0,
         APP_STARTUP_SOURCE_CLI_PATH,
+        APP_STARTUP_SOURCE_LAST_SESSION,
         APP_STARTUP_SOURCE_SAMPLE_ASSET,
         APP_STARTUP_SOURCE_PLACEHOLDER
     } AppStartupSource;
@@ -27,6 +28,7 @@ extern "C"
 
     bool app_bootstrap_decide_tree_source(const AppLaunchOptions *options,
                                           const char *sample_tree_path, bool sample_allowed,
+                                          const char *last_session_path,
                                           AppStartupDecision *decision, char *message_buffer,
                                           size_t message_capacity);
 
