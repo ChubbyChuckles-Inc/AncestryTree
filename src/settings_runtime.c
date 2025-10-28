@@ -223,6 +223,10 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
         config->glow_intensity          = fmaxf(0.3f, config->glow_intensity);
         config->connection_radius       = fmaxf(0.03f, config->connection_radius);
         config->show_profile_images     = true;
+        if (!(config->name_panel_font_size > 0.0f))
+        {
+            config->name_panel_font_size = 26.0f;
+        }
         return true;
     }
 
@@ -250,6 +254,21 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
     {
         apply_high_contrast_environment(config);
     }
+
+    float font_size = settings->name_panel_font_size;
+    if (!(font_size > 0.0f))
+    {
+        font_size = 26.0f;
+    }
+    if (font_size < 16.0f)
+    {
+        font_size = 16.0f;
+    }
+    if (font_size > 72.0f)
+    {
+        font_size = 72.0f;
+    }
+    config->name_panel_font_size = font_size;
 
     return true;
 }

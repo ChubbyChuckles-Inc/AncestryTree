@@ -118,10 +118,10 @@ static void detail_view_default_content(DetailViewContent *content)
     detail_copy_string(content->lifespan, sizeof(content->lifespan), "Awaiting selection");
     detail_copy_string(content->facts[0], sizeof(content->facts[0]),
                        "Choose an ancestor to explore their holographic records.");
-    content->fact_count = 1U;
-    content->certificate_count = 0U;
+    content->fact_count              = 1U;
+    content->certificate_count       = 0U;
     content->certificate_focus_index = 0U;
-    content->timeline_event_count = 0U;
+    content->timeline_event_count    = 0U;
 }
 
 static void detail_view_reset_state(DetailViewSystem *system)
@@ -130,16 +130,16 @@ static void detail_view_reset_state(DetailViewSystem *system)
     {
         return;
     }
-    system->rotation = 0.0f;
-    system->pulse_time = 0.0f;
-    system->detail_phase = 0.0f;
-    system->timeline_phase = 0.0f;
-    system->panel_phase = 0.0f;
-    system->detail_target_phase = 0.0f;
+    system->rotation              = 0.0f;
+    system->pulse_time            = 0.0f;
+    system->detail_phase          = 0.0f;
+    system->timeline_phase        = 0.0f;
+    system->panel_phase           = 0.0f;
+    system->detail_target_phase   = 0.0f;
     system->timeline_target_phase = 0.0f;
-    system->panel_target_phase = 0.0f;
-    system->panel_focus_index = 0U;
-    system->panel_focus_locked = false;
+    system->panel_target_phase    = 0.0f;
+    system->panel_focus_index     = 0U;
+    system->panel_focus_locked    = false;
     certificate_reset(&system->certificate_state);
     timeline_reset(&system->timeline_state);
     system->timeline_hover_index = -1;
@@ -153,7 +153,7 @@ static void detail_view_configure_slots(DetailViewSystem *system)
     }
 
     system->base_timeline_radius = 0.74f;
-    system->base_panel_radius = 0.58f;
+    system->base_panel_radius    = 0.58f;
 
     system->timeline_count = 8U;
     if (system->timeline_count > DETAIL_VIEW_MAX_TIMELINE_SLOTS)
@@ -164,28 +164,28 @@ static void detail_view_configure_slots(DetailViewSystem *system)
     for (size_t index = 0; index < system->timeline_count; ++index)
     {
         DetailViewTimelineSlot *slot = &system->timeline[index];
-        slot->base_angle = angle_step * (float)index;
-        slot->height = (index % 2U == 0U) ? 0.36f : -0.30f;
-        slot->radius = 1.0f;
-        slot->pulse_speed = 0.85f + 0.12f * (float)(index % 3U);
-        slot->pulse_offset = (float)index * 0.58f;
-        slot->anchor[0] = cosf(slot->base_angle) * slot->radius;
-        slot->anchor[1] = slot->height;
-        slot->anchor[2] = sinf(slot->base_angle) * slot->radius;
+        slot->base_angle             = angle_step * (float)index;
+        slot->height                 = (index % 2U == 0U) ? 0.36f : -0.30f;
+        slot->radius                 = 1.0f;
+        slot->pulse_speed            = 0.85f + 0.12f * (float)(index % 3U);
+        slot->pulse_offset           = (float)index * 0.58f;
+        slot->anchor[0]              = cosf(slot->base_angle) * slot->radius;
+        slot->anchor[1]              = slot->height;
+        slot->anchor[2]              = sinf(slot->base_angle) * slot->radius;
     }
 
     if (system->panel_system)
     {
         ImagePanelLayoutParams params;
         memset(&params, 0, sizeof(params));
-        params.desired_count = 6U;
-        params.cone_inner_radius = 0.54f;
-        params.cone_outer_radius = 0.68f;
-        params.min_height = 0.28f;
-        params.max_height = 0.72f;
-        params.min_angle_radians = 0.58f;
-        params.timeline_radius = system->base_timeline_radius;
-        params.timeline_height = 0.0f;
+        params.desired_count         = 6U;
+        params.cone_inner_radius     = 0.54f;
+        params.cone_outer_radius     = 0.68f;
+        params.min_height            = 0.28f;
+        params.max_height            = 0.72f;
+        params.min_angle_radians     = 0.58f;
+        params.timeline_radius       = system->base_timeline_radius;
+        params.timeline_height       = 0.0f;
         params.timeline_clear_margin = 0.12f;
 
         if (!image_panel_layout_init(system->panel_system, &params))
@@ -196,7 +196,8 @@ static void detail_view_configure_slots(DetailViewSystem *system)
         else
         {
             system->panel_count = image_panel_count(system->panel_system);
-            for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS; ++index)
+            for (size_t index = 0;
+                 index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS; ++index)
             {
                 ImagePanelAnchor anchor;
                 if (image_panel_get_anchor(system->panel_system, index, &anchor))
@@ -281,11 +282,11 @@ void detail_view_cleanup(DetailViewSystem *system)
     {
         return;
     }
-    system->initialized = false;
-    system->content_ready = false;
-    system->timeline_count = 0U;
-    system->panel_count = 0U;
-    system->panel_focus_index = 0U;
+    system->initialized        = false;
+    system->content_ready      = false;
+    system->timeline_count     = 0U;
+    system->panel_count        = 0U;
+    system->panel_focus_index  = 0U;
     system->panel_focus_locked = false;
     detail_view_reset_state(system);
     if (system->panel_system)
@@ -346,7 +347,8 @@ bool detail_view_set_content(DetailViewSystem *system, const DetailViewContent *
     }
     for (size_t index = 0; index < fact_limit; ++index)
     {
-        detail_copy_string(sanitized.facts[index], sizeof(sanitized.facts[index]), content->facts[index]);
+        detail_copy_string(sanitized.facts[index], sizeof(sanitized.facts[index]),
+                           content->facts[index]);
     }
     sanitized.fact_count = fact_limit;
 
@@ -360,8 +362,8 @@ bool detail_view_set_content(DetailViewSystem *system, const DetailViewContent *
         sanitized.certificates[index] = content->certificates[index];
     }
     sanitized.certificate_count = certificate_limit;
-    sanitized.certificate_focus_index = (certificate_limit > 0U) ? (content->certificate_focus_index % certificate_limit)
-                                                                 : 0U;
+    sanitized.certificate_focus_index =
+        (certificate_limit > 0U) ? (content->certificate_focus_index % certificate_limit) : 0U;
 
     size_t timeline_limit = content->timeline_event_count;
     if (timeline_limit > DETAIL_VIEW_MAX_TIMELINE_EVENTS)
@@ -374,7 +376,7 @@ bool detail_view_set_content(DetailViewSystem *system, const DetailViewContent *
     }
     sanitized.timeline_event_count = timeline_limit;
 
-    system->content = sanitized;
+    system->content       = sanitized;
     system->content_ready = true;
     certificate_reset(&system->certificate_state);
     if (system->content.certificate_count > 0U)
@@ -420,7 +422,8 @@ void detail_view_clear_certificate_zoom(DetailViewSystem *system)
     certificate_zoom(&system->certificate_state, system->content.certificate_focus_index, false);
 }
 
-bool detail_view_get_timeline_info(const DetailViewSystem *system, size_t index, DetailViewTimelineInfo *out_info)
+bool detail_view_get_timeline_info(const DetailViewSystem *system, size_t index,
+                                   DetailViewTimelineInfo *out_info)
 {
     if (!system || !out_info)
     {
@@ -431,13 +434,14 @@ bool detail_view_get_timeline_info(const DetailViewSystem *system, size_t index,
         return false;
     }
     const DetailViewTimelineSlot *slot = &system->timeline[index];
-    out_info->base_angle = slot->base_angle;
-    out_info->height = slot->height;
-    out_info->radius = slot->radius;
+    out_info->base_angle               = slot->base_angle;
+    out_info->height                   = slot->height;
+    out_info->radius                   = slot->radius;
     return true;
 }
 
-bool detail_view_get_panel_info(const DetailViewSystem *system, size_t index, DetailViewPanelInfo *out_info)
+bool detail_view_get_panel_info(const DetailViewSystem *system, size_t index,
+                                DetailViewPanelInfo *out_info)
 {
     if (!system || !out_info || !system->panel_system)
     {
@@ -451,10 +455,10 @@ bool detail_view_get_panel_info(const DetailViewSystem *system, size_t index, De
     out_info->position[0] = anchor.position[0];
     out_info->position[1] = anchor.position[1];
     out_info->position[2] = anchor.position[2];
-    out_info->normal[0] = anchor.normal[0];
-    out_info->normal[1] = anchor.normal[1];
-    out_info->normal[2] = anchor.normal[2];
-    out_info->scale = anchor.width;
+    out_info->normal[0]   = anchor.normal[0];
+    out_info->normal[1]   = anchor.normal[1];
+    out_info->normal[2]   = anchor.normal[2];
+    out_info->scale       = anchor.width;
     return true;
 }
 
@@ -485,8 +489,9 @@ float detail_view_get_detail_phase(const DetailViewSystem *system)
     return detail_clamp01(system->detail_phase);
 }
 
-void detail_view_update(DetailViewSystem *system, float delta_seconds, const struct ExpansionState *expansion,
-                        float timeline_phase, float panel_phase, float wheel_delta)
+void detail_view_update(DetailViewSystem *system, float delta_seconds,
+                        const struct ExpansionState *expansion, float timeline_phase,
+                        float panel_phase, float wheel_delta)
 {
     if (!system)
     {
@@ -500,22 +505,23 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
         }
     }
 
-    float safe_delta = (delta_seconds > 0.0f) ? delta_seconds : 0.0f;
+    float safe_delta       = (delta_seconds > 0.0f) ? delta_seconds : 0.0f;
     float expansion_detail = expansion ? expansion_detail_activation(expansion) : 0.0f;
-    float expansion_timeline = expansion ? expansion_timeline_activation(expansion) : expansion_detail;
+    float expansion_timeline =
+        expansion ? expansion_timeline_activation(expansion) : expansion_detail;
     float expansion_panel = expansion ? expansion_panel_activation(expansion) : expansion_detail;
 
     float desired_timeline = detail_clamp01(fmaxf(timeline_phase, expansion_timeline));
-    float desired_panel = detail_clamp01(fmaxf(panel_phase, expansion_panel));
-    float desired_detail = detail_clamp01(fmaxf(expansion_detail, desired_panel));
+    float desired_panel    = detail_clamp01(fmaxf(panel_phase, expansion_panel));
+    float desired_detail   = detail_clamp01(fmaxf(expansion_detail, desired_panel));
 
     float smoothing = detail_clamp01(safe_delta * DETAIL_VIEW_ROTATION_SMOOTHING);
     system->detail_phase += (desired_detail - system->detail_phase) * smoothing;
     system->timeline_phase += (desired_timeline - system->timeline_phase) * smoothing;
     system->panel_phase += (desired_panel - system->panel_phase) * smoothing;
-    system->detail_target_phase = desired_detail;
+    system->detail_target_phase   = desired_detail;
     system->timeline_target_phase = desired_timeline;
-    system->panel_target_phase = desired_panel;
+    system->panel_target_phase    = desired_panel;
 
     float rotation_speed = 0.35f + 0.9f * system->timeline_phase;
     system->rotation += safe_delta * rotation_speed;
@@ -533,13 +539,14 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
 
     if (system->panel_system && system->panel_count > 0U)
     {
-        float view_angle = detail_wrap_angle(system->rotation * 0.55f);
+        float view_angle      = detail_wrap_angle(system->rotation * 0.55f);
         float best_difference = FLT_MAX;
-        size_t best_index = system->panel_focus_index;
-        for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS; ++index)
+        size_t best_index     = system->panel_focus_index;
+        for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS;
+             ++index)
         {
             float panel_angle = system->panel_angles[index];
-            float diff = fabsf(view_angle - panel_angle);
+            float diff        = fabsf(view_angle - panel_angle);
             if (diff > (float)M_PI)
             {
                 diff = (float)(2.0 * M_PI) - diff;
@@ -547,14 +554,16 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
             if (diff < best_difference)
             {
                 best_difference = diff;
-                best_index = index;
+                best_index      = index;
             }
         }
-        system->panel_focus_index = best_index;
-        bool lock_focus = system->panel_phase > 0.75f;
+        system->panel_focus_index  = best_index;
+        bool lock_focus            = system->panel_phase > 0.75f;
         system->panel_focus_locked = lock_focus;
-        image_panel_interaction(system->panel_system, safe_delta, system->panel_focus_index, lock_focus);
-        for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS; ++index)
+        image_panel_interaction(system->panel_system, safe_delta, system->panel_focus_index,
+                                lock_focus);
+        for (size_t index = 0; index < system->panel_count && index < DETAIL_VIEW_MAX_PANEL_SLOTS;
+             ++index)
         {
             ImagePanelAnchor anchor;
             if (image_panel_get_anchor(system->panel_system, index, &anchor))
@@ -564,16 +573,17 @@ void detail_view_update(DetailViewSystem *system, float delta_seconds, const str
         }
     }
 
-    certificate_update(&system->certificate_state, safe_delta, system->detail_phase, system->content.certificate_count,
-                       system->content.certificate_focus_index);
+    certificate_update(&system->certificate_state, safe_delta, system->detail_phase,
+                       system->content.certificate_count, system->content.certificate_focus_index);
     timeline_update(&system->timeline_state, safe_delta, system->timeline_phase);
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     if (system->content.timeline_event_count > 0U)
     {
         Vector2 cursor = GetMousePosition();
-        system->timeline_hover_index = timeline_event_hover(&system->timeline_state, (int)cursor.x, (int)cursor.y,
-                                                            GetScreenWidth(), GetScreenHeight(), &system->content);
+        system->timeline_hover_index =
+            timeline_event_hover(&system->timeline_state, (int)cursor.x, (int)cursor.y,
+                                 GetScreenWidth(), GetScreenHeight(), &system->content);
         bool shift_down = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         if (shift_down && timeline_requires_scroll(&system->timeline_state) &&
             timeline_area_hovered(&system->timeline_state))
@@ -614,9 +624,11 @@ bool detail_view_timeline_hovered(const DetailViewSystem *system)
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 /*
  * Manual validation checklist:
- * 1. Trigger a sphere expansion and confirm the holographic room spawns with orbiting timeline nodes.
+ * 1. Trigger a sphere expansion and confirm the holographic room spawns with orbiting timeline
+ * nodes.
  * 2. Observe that tree lighting dims while interior cones brighten as the detail view activates.
- * 3. Reverse the expansion and ensure the room collapses smoothly without camera pops or lingering overlays.
+ * 3. Reverse the expansion and ensure the room collapses smoothly without camera pops or lingering
+ * overlays.
  */
 
 static void detail_view_draw_overlay(const DetailViewSystem *system, float activation)
@@ -631,20 +643,28 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
         return;
     }
 
-    int screen_width = GetScreenWidth();
-    int screen_height = GetScreenHeight();
-    int margin = screen_width < 960 ? 24 : 48;
+    int screen_width          = GetScreenWidth();
+    int screen_height         = GetScreenHeight();
+    int margin                = screen_width < 960 ? 24 : 48;
+    const int menu_bar_height = 36;
+    const int ui_padding      = screen_width < 960 ? 12 : 18;
+    int header_top            = margin + menu_bar_height + ui_padding;
+
+    if (header_top + 20 > screen_height)
+    {
+        header_top = margin + 20;
+    }
     unsigned char title_alpha = (unsigned char)(alpha * 245.0f);
-    unsigned char text_alpha = (unsigned char)(alpha * 210.0f);
+    unsigned char text_alpha  = (unsigned char)(alpha * 210.0f);
 
-    Color title_color = {200, 240, 255, title_alpha};
+    Color title_color    = {200, 240, 255, title_alpha};
     Color subtitle_color = {120, 195, 255, text_alpha};
-    Color hint_color = {90, 160, 255, text_alpha};
+    Color hint_color     = {90, 160, 255, text_alpha};
 
-    DrawText(system->content.name, margin, margin, 34, title_color);
-    DrawText(system->content.lifespan, margin, margin + 40, 22, subtitle_color);
+    DrawText(system->content.name, margin, header_top, 34, title_color);
+    DrawText(system->content.lifespan, margin, header_top + 40, 22, subtitle_color);
 
-    int fact_y = margin + 74;
+    int fact_y = header_top + 74;
     for (size_t index = 0; index < system->content.fact_count; ++index)
     {
         DrawText(system->content.facts[index], margin, fact_y, 20, subtitle_color);
@@ -660,20 +680,22 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
         info_y += 24;
         DrawText(certificate->heading, margin, info_y, 22, subtitle_color);
         info_y += 24;
-        const char *summary = certificate->summary[0] != '\0' ? certificate->summary : "Summary unavailable.";
+        const char *summary =
+            certificate->summary[0] != '\0' ? certificate->summary : "Summary unavailable.";
         DrawText(summary, margin, info_y, 18, subtitle_color);
         info_y += 22;
         if (certificate->has_media_asset)
         {
-            const char *media_label = certificate->is_pdf ? "Source: PDF archive" : certificate->media_path;
+            const char *media_label =
+                certificate->is_pdf ? "Source: PDF archive" : certificate->media_path;
             DrawText(media_label, margin, info_y, 16, hint_color);
             info_y += 18;
         }
     }
     else
     {
-        DrawText("No certificates on record. Upload documents to populate this hologram.", margin, info_y, 18,
-                 hint_color);
+        DrawText("No certificates on record. Upload documents to populate this hologram.", margin,
+                 info_y, 18, hint_color);
         info_y += 22;
     }
 
@@ -683,7 +705,8 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
     if (system->timeline_hover_index >= 0 &&
         (size_t)system->timeline_hover_index < system->content.timeline_event_count)
     {
-        const DetailViewTimelineEvent *event = &system->content.timeline_events[system->timeline_hover_index];
+        const DetailViewTimelineEvent *event =
+            &system->content.timeline_events[system->timeline_hover_index];
         DrawText(event->title, margin, tooltip_y, 22, subtitle_color);
         tooltip_y += 24;
         if (event->date[0] != '\0')
@@ -702,16 +725,17 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
                                                      : (Color){140, 220, 200, text_alpha};
             DrawText("Associated media:", margin, tooltip_y, 18, subtitle_color);
             tooltip_y += 20;
-            int preview_width = screen_width < 1280 ? 220 : 280;
+            int preview_width  = screen_width < 1280 ? 220 : 280;
             int preview_height = 64;
-            Rectangle preview = {(float)margin, (float)tooltip_y, (float)preview_width, (float)preview_height};
+            Rectangle preview  = {(float)margin, (float)tooltip_y, (float)preview_width,
+                                  (float)preview_height};
             DrawRectangleRounded(preview, 0.25f, 6, media_colour);
             DrawRectangleRoundedLines(preview, 0.25f, 6, 2.0f,
                                       (Color){media_colour.r, media_colour.g, media_colour.b, 255});
             int text_x = margin + 16;
             int text_y = tooltip_y + 20;
-            DrawText(event->media_label[0] != '\0' ? event->media_label : "Media reference", text_x, text_y, 18,
-                     (Color){12, 18, 28, 235});
+            DrawText(event->media_label[0] != '\0' ? event->media_label : "Media reference", text_x,
+                     text_y, 18, (Color){12, 18, 28, 235});
             if (event->multiple_media_assets)
             {
                 DrawText("Multiple attachments", text_x, text_y + 20, 16, (Color){20, 26, 38, 220});
@@ -721,10 +745,12 @@ static void detail_view_draw_overlay(const DetailViewSystem *system, float activ
     }
     else
     {
-        DrawText("Hover timeline markers to inspect milestones.", margin, tooltip_y, 20, hint_color);
+        DrawText("Hover timeline markers to inspect milestones.", margin, tooltip_y, 20,
+                 hint_color);
     }
 
-    DrawText("Press Backspace to exit detail view | C: cycle documents | X: reset zoom | Shift+Wheel: scroll timeline",
+    DrawText("Press Backspace to exit detail view | C: cycle documents | X: reset zoom | "
+             "Shift+Wheel: scroll timeline",
              margin, screen_height - margin, 18, hint_color);
 }
 
@@ -764,8 +790,8 @@ void detail_view_render(const DetailViewSystem *system, const struct ExpansionSt
     }
 
     float timeline_activation = detail_clamp01(system->timeline_phase);
-    float panel_activation = detail_clamp01(system->panel_phase);
-    float detail_activation = detail_clamp01(system->detail_phase);
+    float panel_activation    = detail_clamp01(system->panel_phase);
+    float detail_activation   = detail_clamp01(system->detail_phase);
     float room_light = expansion ? expansion_room_light_factor(expansion) : panel_activation;
 
     rlDisableBackfaceCulling();
@@ -774,45 +800,48 @@ void detail_view_render(const DetailViewSystem *system, const struct ExpansionSt
     rlEnableBackfaceCulling();
 
     Vector3 ring_normal = {0.0f, 1.0f, 0.0f};
-    Color ring_primary = {72, 180, 255, (unsigned char)(90 + (int)(timeline_activation * 140.0f))};
-    Color ring_secondary = {42, 120, 255, (unsigned char)(70 + (int)(timeline_activation * 110.0f))};
+    Color ring_primary  = {72, 180, 255, (unsigned char)(90 + (int)(timeline_activation * 140.0f))};
+    Color ring_secondary   = {42, 120, 255,
+                              (unsigned char)(70 + (int)(timeline_activation * 110.0f))};
     float base_ring_radius = room_radius * system->base_timeline_radius;
     DrawCircle3D(origin, base_ring_radius, ring_normal, 90.0f, ring_primary);
     DrawCircle3D(origin, base_ring_radius * 0.88f, ring_normal, 90.0f, ring_secondary);
 
     float timeline_height_scale = room_radius * 0.45f;
-    Color timeline_color = {120, 220, 255, (unsigned char)(120 + (int)(timeline_activation * 135.0f))};
+    Color timeline_color        = {120, 220, 255,
+                                   (unsigned char)(120 + (int)(timeline_activation * 135.0f))};
     for (size_t index = 0; index < system->timeline_count; ++index)
     {
         const DetailViewTimelineSlot *slot = &system->timeline[index];
-        float angle = slot->base_angle + system->rotation;
-        float sin_angle = sinf(angle);
-        float cos_angle = cosf(angle);
-        float ring_radius = base_ring_radius * slot->radius;
+        float angle                        = slot->base_angle + system->rotation;
+        float sin_angle                    = sinf(angle);
+        float cos_angle                    = cosf(angle);
+        float ring_radius                  = base_ring_radius * slot->radius;
 
-        Vector3 node_position = {
-            origin.x + cos_angle * ring_radius,
-            origin.y + slot->height * timeline_height_scale,
-            origin.z + sin_angle * ring_radius};
+        Vector3 node_position = {origin.x + cos_angle * ring_radius,
+                                 origin.y + slot->height * timeline_height_scale,
+                                 origin.z + sin_angle * ring_radius};
 
         Vector3 stem_base = {node_position.x, origin.y - room_radius * 0.28f, node_position.z};
-        float pulse = 0.36f + 0.24f * sinf(system->pulse_time * slot->pulse_speed + slot->pulse_offset);
+        float pulse =
+            0.36f + 0.24f * sinf(system->pulse_time * slot->pulse_speed + slot->pulse_offset);
         float node_radius = (0.18f + pulse * 0.12f) * timeline_activation * room_radius * 0.18f;
         float stem_radius = 0.02f * timeline_activation * room_radius;
 
         if (node_radius > 0.0f)
         {
-            DrawCylinderEx(stem_base, node_position, stem_radius, stem_radius * 0.6f, 12, timeline_color);
+            DrawCylinderEx(stem_base, node_position, stem_radius, stem_radius * 0.6f, 12,
+                           timeline_color);
             DrawSphere(node_position, node_radius, timeline_color);
         }
     }
 
-    certificate_render(&system->certificate_state, &system->content, detail_activation, origin_array, room_radius,
-                       camera);
+    certificate_render(&system->certificate_state, &system->content, detail_activation,
+                       origin_array, room_radius, camera);
 
     image_panel_render(system->panel_system, panel_activation, origin_array, room_radius);
 
-    Color exit_ring = {255, 200, 140, (unsigned char)(70 + (int)(panel_activation * 150.0f))};
+    Color exit_ring     = {255, 200, 140, (unsigned char)(70 + (int)(panel_activation * 150.0f))};
     Vector2 exit_center = {origin.x, origin.z};
     DrawRing(exit_center, room_radius * 0.18f, room_radius * 0.21f, 0.0f, 360.0f, 48, exit_ring);
 

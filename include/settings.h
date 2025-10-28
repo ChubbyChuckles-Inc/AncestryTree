@@ -39,6 +39,7 @@ typedef struct Settings
     unsigned int auto_save_interval_seconds;
     SettingsLayoutAlgorithm default_layout_algorithm;
     SettingsColorScheme color_scheme;
+    float name_panel_font_size;
     SettingsLanguage language;
     bool high_contrast_mode;
     float ui_font_scale;

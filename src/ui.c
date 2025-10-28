@@ -2763,7 +2763,7 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                             Person *candidate = tree->persons[index];
                             char item_label[128];
                             ui_compose_person_label(candidate, item_label, sizeof(item_label));
-                            if (nk_combo_item_label(ctx, item_label, NK_TEXT_LEFT))
+                            if (ui_nav_combo_item_label(internal, ctx, item_label, NK_TEXT_LEFT))
                             {
                                 internal->relationship_source_index = (int)index;
                                 internal->relationship_source_id = candidate ? candidate->id : 0U;
@@ -2784,7 +2784,7 @@ static void ui_draw_analytics_panel(UIInternal *internal, UIContext *ui, const F
                             Person *candidate = tree->persons[index];
                             char item_label[128];
                             ui_compose_person_label(candidate, item_label, sizeof(item_label));
-                            if (nk_combo_item_label(ctx, item_label, NK_TEXT_LEFT))
+                            if (ui_nav_combo_item_label(internal, ctx, item_label, NK_TEXT_LEFT))
                             {
                                 internal->relationship_target_index = (int)index;
                                 internal->relationship_target_id = candidate ? candidate->id : 0U;
@@ -2964,6 +2964,23 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
                 settings_mark_dirty(settings);
             }
             nk_combo_end(ctx);
+        }
+
+        float name_panel_font = settings->name_panel_font_size;
+        ui_nav_property_float(internal, ctx, "Name panel font", 16.0f, &name_panel_font, 72.0f,
+                              1.0f, 0.2f, 1.0f, NULL);
+        if (name_panel_font < 16.0f)
+        {
+            name_panel_font = 16.0f;
+        }
+        if (name_panel_font > 72.0f)
+        {
+            name_panel_font = 72.0f;
+        }
+        if (fabsf(name_panel_font - settings->name_panel_font_size) > 0.05f)
+        {
+            settings->name_panel_font_size = name_panel_font;
+            settings_mark_dirty(settings);
         }
 
         nk_layout_row_dynamic(ctx, 6.0f, 1);
@@ -3290,7 +3307,7 @@ static void ui_draw_error_dialog(UIInternal *internal, UIContext *ui)
 
 static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTree *tree,
                              const LayoutResult *layout, CameraController *camera,
-                             RenderConfig *render_config, bool settings_dirty)
+                             RenderConfig *render_config, Settings *settings, bool settings_dirty)
 {
     if (!internal || !ui)
     {
@@ -3544,68 +3561,76 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                                                          : "Smooth line rendering disabled.");
                 }
 
-                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_layout_row_dynamic(ctx, 20.0f, 1);
                 nk_label(ctx, "Parent connection style", NK_TEXT_LEFT);
-                nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (ui_nav_combo_begin_label(
-                        internal, ctx,
-                        ui_connection_style_label(render_config->connection_style_parent_child),
-                        nk_vec2(180.0f, 70.0f)))
+                nk_layout_row_dynamic(ctx, 20.0f, 1);
+                nk_bool parent_straight_option = (render_config->connection_style_parent_child ==
+                                                  RENDER_CONNECTION_STYLE_STRAIGHT)
+                                                     ? nk_true
+                                                     : nk_false;
+                if (nk_option_label(ctx, "Straight", parent_straight_option) == nk_true &&
+                    render_config->connection_style_parent_child !=
+                        RENDER_CONNECTION_STYLE_STRAIGHT)
                 {
-                    nk_layout_row_dynamic(ctx, 20.0f, 1);
-                    if (ui_nav_combo_item_label(internal, ctx, "Straight", NK_TEXT_LEFT) &&
-                        render_config->connection_style_parent_child !=
-                            RENDER_CONNECTION_STYLE_STRAIGHT)
-                    {
-                        render_config->connection_style_parent_child =
-                            RENDER_CONNECTION_STYLE_STRAIGHT;
-                        ui_internal_set_status(internal,
-                                               "Parent connections set to straight segments.");
-                    }
-                    if (ui_nav_combo_item_label(internal, ctx, "Bezier", NK_TEXT_LEFT) &&
-                        render_config->connection_style_parent_child !=
-                            RENDER_CONNECTION_STYLE_BEZIER)
-                    {
-                        render_config->connection_style_parent_child =
-                            RENDER_CONNECTION_STYLE_BEZIER;
-                        ui_internal_set_status(internal,
-                                               "Parent connections set to bezier curves.");
-                    }
-                    nk_combo_end(ctx);
+                    render_config->connection_style_parent_child = RENDER_CONNECTION_STYLE_STRAIGHT;
+                    ui_internal_set_status(internal,
+                                           "Parent connections set to straight segments.");
+                }
+                nk_bool parent_bezier_option =
+                    (render_config->connection_style_parent_child == RENDER_CONNECTION_STYLE_BEZIER)
+                        ? nk_true
+                        : nk_false;
+                if (nk_option_label(ctx, "Bezier", parent_bezier_option) == nk_true &&
+                    render_config->connection_style_parent_child != RENDER_CONNECTION_STYLE_BEZIER)
+                {
+                    render_config->connection_style_parent_child = RENDER_CONNECTION_STYLE_BEZIER;
+                    ui_internal_set_status(internal, "Parent connections set to bezier curves.");
                 }
 
-                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                nk_layout_row_dynamic(ctx, 20.0f, 1);
                 nk_label(ctx, "Spouse connection style", NK_TEXT_LEFT);
-                nk_layout_row_dynamic(ctx, 24.0f, 1);
-                if (ui_nav_combo_begin_label(
-                        internal, ctx,
-                        ui_connection_style_label(render_config->connection_style_spouse),
-                        nk_vec2(180.0f, 70.0f)))
+                nk_layout_row_dynamic(ctx, 20.0f, 1);
+                nk_bool spouse_straight_option =
+                    (render_config->connection_style_spouse == RENDER_CONNECTION_STYLE_STRAIGHT)
+                        ? nk_true
+                        : nk_false;
+                if (nk_option_label(ctx, "Straight", spouse_straight_option) == nk_true &&
+                    render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_STRAIGHT)
                 {
-                    nk_layout_row_dynamic(ctx, 20.0f, 1);
-                    if (ui_nav_combo_item_label(internal, ctx, "Straight", NK_TEXT_LEFT) &&
-                        render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_STRAIGHT)
-                    {
-                        render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_STRAIGHT;
-                        ui_internal_set_status(internal,
-                                               "Spouse connections set to straight segments.");
-                    }
-                    if (ui_nav_combo_item_label(internal, ctx, "Bezier", NK_TEXT_LEFT) &&
-                        render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_BEZIER)
-                    {
-                        render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_BEZIER;
-                        ui_internal_set_status(internal,
-                                               "Spouse connections set to bezier curves.");
-                    }
-                    nk_combo_end(ctx);
+                    render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_STRAIGHT;
+                    ui_internal_set_status(internal,
+                                           "Spouse connections set to straight segments.");
+                }
+                nk_bool spouse_bezier_option =
+                    (render_config->connection_style_spouse == RENDER_CONNECTION_STYLE_BEZIER)
+                        ? nk_true
+                        : nk_false;
+                if (nk_option_label(ctx, "Bezier", spouse_bezier_option) == nk_true &&
+                    render_config->connection_style_spouse != RENDER_CONNECTION_STYLE_BEZIER)
+                {
+                    render_config->connection_style_spouse = RENDER_CONNECTION_STYLE_BEZIER;
+                    ui_internal_set_status(internal, "Spouse connections set to bezier curves.");
                 }
 
                 float font_control = render_config->name_panel_font_size;
-                ui_nav_property_float(internal, ctx, "Name panel font", 16.0f, &font_control, 64.0f,
+                ui_nav_property_float(internal, ctx, "Name panel font", 16.0f, &font_control, 72.0f,
                                       1.0f, 0.2f, 1.0f, NULL);
+                if (font_control < 16.0f)
+                {
+                    font_control = 16.0f;
+                }
+                if (font_control > 72.0f)
+                {
+                    font_control = 72.0f;
+                }
                 if (fabsf(font_control - render_config->name_panel_font_size) > 0.05f)
                 {
                     render_config->name_panel_font_size = font_control;
+                    if (settings)
+                    {
+                        settings->name_panel_font_size = font_control;
+                        settings_mark_dirty(settings);
+                    }
                     ui_internal_set_status(internal, "Name panel font size updated.");
                 }
             }
@@ -5357,7 +5382,7 @@ void ui_draw_overlay(UIContext *ui, const FamilyTree *tree, const LayoutResult *
         ui_search_clear_results(internal);
         internal->search_selected_index = -1;
     }
-    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings_dirty);
+    ui_draw_menu_bar(internal, ui, tree, layout, camera, render_config, settings, settings_dirty);
     ui_draw_tree_panel(internal, tree, layout, camera, fps, selected_person, hovered_person);
     ui_draw_about_window(internal, ui);
     ui_draw_help_window(internal, ui);

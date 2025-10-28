@@ -368,3 +368,76 @@ Relationship lines hidden.
 Relationship lines enabled.
 Grid lines hidden.
 Tina Rickert selected, alive.
+Focus request queued for Harald Massalsky.
+Focused on Harald Massalsky.
+Harald Massalsky selected, alive.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Smooth line rendering disabled.
+Portraits hidden from name panels.
+Overlay hidden.
+Relationship lines hidden.
+Grid lines hidden.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Frame the earliest generation so you can branch outward from the family origins.
+Snap the orbit camera back to its default distance and orientation.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Holographic name panels hidden.
+Jutta Massalsky selected, deceased.
+Thomas Rickert selected, alive.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Christian Rickert selected, alive.
+Florian Rickert selected, alive.
+Tina Rickert selected, alive.
+Thomas Rickert selected, alive.
+Selection cleared.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Frame the earliest generation so you can branch outward from the family origins.
+Snap the orbit camera back to its default distance and orientation.
+Parent connections set to straight segments.
+Snap the orbit camera back to its default distance and orientation.
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Snap the orbit camera back to its default distance and orientation.
+Frame the earliest generation so you can branch outward from the family origins.
+Portraits hidden from name panels.
+Holographic name panels hidden.
+Overlay hidden.
+Frame the earliest generation so you can branch outward from the family origins.
+Grid lines hidden.
+Frame the earliest generation so you can branch outward from the family origins.
+Snap the orbit camera back to its default distance and orientation.
+Parent connections set to bezier curves.
+Parent connections set to straight segments.
+Parent connections set to bezier curves.
+Parent connections set to straight segments.
+Snap the orbit camera back to its default distance and orientation.
+Frame the earliest generation so you can branch outward from the family origins.
+Snap the orbit camera back to its default distance and orientation.
+Silvia Massalsky selected, alive.

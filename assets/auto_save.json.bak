@@ -3,24 +3,289 @@
     "version": "1.0",
     "name": "Placeholder Tree",
     "creation_date": "",
-    "root_ids": [1]
+    "root_ids": [1, 2, 4, 6, 9]
   },
   "persons": [
     {
       "id": 1,
       "name": {
-        "first": "Avery",
+        "first": "Martin",
         "middle": "",
-        "last": "Prototype"
+        "last": "Massalsky"
       },
       "dates": {
-        "birth_date": "1990-01-01",
-        "birth_location": "Unknown",
+        "birth_date": "1928-01-01",
+        "birth_location": "Wilkau-Haßlau",
+        "death_date": "2012-05-10",
+        "death_location": "Vielau",
+        "is_alive": false
+      },
+      "parents": [null, null],
+      "children": [3, 5],
+      "spouses": [
+        {
+          "id": 2,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 2,
+      "name": {
+        "first": "Jutta",
+        "middle": "",
+        "last": "Massalsky"
+      },
+      "dates": {
+        "birth_date": "1934-01-01",
+        "birth_location": "Reinsdorf",
+        "death_date": "2014-01-01",
+        "death_location": "Zwickau",
+        "is_alive": false
+      },
+      "parents": [null, null],
+      "children": [3, 5],
+      "spouses": [
+        {
+          "id": 1,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 3,
+      "name": {
+        "first": "Harald",
+        "middle": "",
+        "last": "Massalsky"
+      },
+      "dates": {
+        "birth_date": "1956-01-01",
+        "birth_location": "Wilkau-Haßlau",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [1, 2],
+      "children": [10],
+      "spouses": [
+        {
+          "id": 4,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 4,
+      "name": {
+        "first": "Ramona",
+        "middle": "",
+        "last": "Massalky"
+      },
+      "dates": {
+        "birth_date": "1971-01-01",
+        "birth_location": "Zwickau",
         "death_date": "",
         "death_location": "",
         "is_alive": true
       },
       "parents": [null, null],
+      "children": [10],
+      "spouses": [
+        {
+          "id": 3,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 5,
+      "name": {
+        "first": "Silvia",
+        "middle": "",
+        "last": "Massalsky"
+      },
+      "dates": {
+        "birth_date": "1964-01-01",
+        "birth_location": "Reinsdorf",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [1, 2],
+      "children": [7, 8],
+      "spouses": [
+        {
+          "id": 6,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 6,
+      "name": {
+        "first": "Thomas",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1957-01-01",
+        "birth_location": "Schkeuditz",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [null, null],
+      "children": [7, 8],
+      "spouses": [
+        {
+          "id": 5,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 7,
+      "name": {
+        "first": "Christian",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1989-01-01",
+        "birth_location": "Schlkeuditz",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [6, 5],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 8,
+      "name": {
+        "first": "Florian",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1991-01-01",
+        "birth_location": "Leipzig",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [6, 5],
+      "children": [],
+      "spouses": [
+        {
+          "id": 9,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 9,
+      "name": {
+        "first": "Tina",
+        "middle": "",
+        "last": "Rickert"
+      },
+      "dates": {
+        "birth_date": "1993-01-01",
+        "birth_location": "Rackwitz",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [null, null],
+      "children": [],
+      "spouses": [
+        {
+          "id": 8,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 10,
+      "name": {
+        "first": "Phil",
+        "middle": "",
+        "last": "Masalsky"
+      },
+      "dates": {
+        "birth_date": "1996-01-01",
+        "birth_location": "Reinsdorf",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [3, 4],
       "children": [],
       "spouses": [
       ],
