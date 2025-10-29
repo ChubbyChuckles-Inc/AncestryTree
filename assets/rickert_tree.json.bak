@@ -81,7 +81,7 @@
         "is_alive": true
       },
       "parents": [1, 2],
-      "children": [10],
+      "children": [10, 20],
       "spouses": [
         {
           "id": 4,
@@ -111,7 +111,7 @@
         "is_alive": true
       },
       "parents": [null, null],
-      "children": [10],
+      "children": [10, 20],
       "spouses": [
         {
           "id": 3,
@@ -536,6 +536,31 @@
       ],
       "certificates": [],
       "profile_image": "",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 20,
+      "name": {
+        "first": "Xenia",
+        "middle": "",
+        "last": "Massalsky"
+      },
+      "dates": {
+        "birth_date": "2001-01-01",
+        "birth_location": "Wilkau-Haßlau",
+        "death_date": "",
+        "death_location": "",
+        "is_alive": true
+      },
+      "parents": [3, 4],
+      "children": [],
+      "spouses": [
+      ],
+      "certificates": [],
+      "profile_image": "profiles/profile_1761691388000.png",
       "timeline": [
       ],
       "metadata": {

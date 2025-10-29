@@ -293,5 +293,16 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
     config->name_panel_width_scale  = width_scale;
     config->name_panel_height_scale = height_scale;
 
+    config->show_grid               = settings->view_show_grid;
+    config->show_connections        = settings->view_show_connections;
+    config->show_overlay            = settings->view_show_overlay;
+    config->show_name_panels        = settings->view_show_name_panels;
+    config->show_profile_images     = settings->view_show_profile_images;
+    config->connection_antialiasing = settings->view_smooth_connections;
+
+    bool particles_enabled             = settings->view_particles_enabled;
+    config->enable_selection_particles = particles_enabled;
+    config->enable_life_particles      = particles_enabled;
+
     return true;
 }

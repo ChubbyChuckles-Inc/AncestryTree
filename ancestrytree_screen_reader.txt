@@ -882,3 +882,95 @@ Saving holographic archive...: 85% complete.
 Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
 Screen reader narration enabled.
 Sigrid Förster selected, alive.
+Screen reader narration enabled.
+Frame the earliest generation so you can branch outward from the family origins.
+Snap the orbit camera back to its default distance and orientation.
+Camera reset to default orbit.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Particle effects disabled.
+Grid lines hidden.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Frame the earliest generation so you can branch outward from the family origins.
+Parent connections set to straight segments.
+Smooth line rendering disabled.
+Smooth line rendering enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Irmgard Rickert selected, deceased.
+New tree request queued.
+New placeholder tree created.
+Selection cleared.
+Avery Prototype selected, alive.
+Edit panel opened for selected hologram.
+Profile image path updated.
+Certificate path updated.
+Edit-person request queued.
+Updated profile for Elizabeth Alexandra Mary Windsor.
+Camera reset to default orbit.
+Profile image path updated.
+Add-person request queued.
+Created holographic profile for Philip Mountbatten (ID 2).
+Philip Mountbatten selected, deceased.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\royals.json
+Open request queued.
+Loading holographic archive...
+Loading holographic archive...: 55% complete.
+Loading holographic archive...: 90% complete.
+Loading holographic archive...: 100% complete.
+Loaded tree from C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Selection cleared.
+Profile image path updated.
+Add-person request queued.
+Created holographic profile for Xenia Massalsky (ID 20).
+Xenia Massalsky selected, alive.
+Selection cleared.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Lou Rickert selected, alive.
+Selection cleared.
+Herbert Rickert selected, deceased.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Irmgard Rickert selected, deceased.
+Selection cleared.
+Irmgard Rickert selected, deceased.
+Edit panel opened for selected hologram.
+Certificate path updated.
+Edit-person request queued.
+Updated profile for Irmgard Rickert.
+Herbert Rickert selected, deceased.
+Irmgard Rickert selected, deceased.
+Edit panel opened for selected hologram.
+Camera reset to default orbit.
+Edit-person request queued.
+Updated profile for Irmgard Rickert.
+Manfred Gruß selected, alive.
+Irmgard Rickert selected, deceased with 1 timeline events.
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Edit panel opened for selected hologram.
+Profile image path updated.
+Edit-person request queued.
+Updated profile for Irmgard Rickert.
+Focus request queued for Harald Massalsky.
+Focused on Harald Massalsky.
+Harald Massalsky selected, alive.
+Focus request queued for Herbert Rickert.
+Focused on Herbert Rickert.
+Herbert Rickert selected, deceased.
+Focus request queued for Lou Rickert.
+Focused on Lou Rickert.
+Lou Rickert selected, alive.
+Selection cleared.

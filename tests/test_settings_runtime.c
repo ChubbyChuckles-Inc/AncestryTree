@@ -38,11 +38,20 @@ TEST(test_settings_runtime_render_quality_and_colors)
     ASSERT_EQ((unsigned int)config.alive_color.r, 0U);
     ASSERT_EQ((unsigned int)config.connection_color_parent_child.r, 64U);
 
-    settings.graphics_quality = SETTINGS_GRAPHICS_QUALITY_PERFORMANCE;
-    settings.color_scheme     = SETTINGS_COLOR_SCHEME_SOLAR_ORCHID;
+    settings.graphics_quality         = SETTINGS_GRAPHICS_QUALITY_PERFORMANCE;
+    settings.color_scheme             = SETTINGS_COLOR_SCHEME_SOLAR_ORCHID;
+    settings.view_smooth_connections  = false;
+    settings.view_show_profile_images = false;
+    settings.view_show_grid           = false;
+    settings.view_show_connections    = false;
+    settings.view_particles_enabled   = false;
     ASSERT_TRUE(settings_runtime_apply_render(&settings, &config));
     ASSERT_FALSE(config.connection_antialiasing);
     ASSERT_FALSE(config.show_profile_images);
+    ASSERT_FALSE(config.show_grid);
+    ASSERT_FALSE(config.show_connections);
+    ASSERT_FALSE(config.enable_selection_particles);
+    ASSERT_FALSE(config.enable_life_particles);
     ASSERT_EQ((unsigned int)config.alive_color.r, 255U);
     ASSERT_EQ((unsigned int)config.connection_color_parent_child.r, 255U);
 }

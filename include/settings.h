@@ -86,6 +86,13 @@ typedef struct Settings
     SettingsPanelLayout panel_add_person;
     SettingsPanelLayout panel_edit_person;
     SettingsPanelLayout panel_settings;
+    bool view_show_grid;
+    bool view_show_connections;
+    bool view_show_overlay;
+    bool view_show_name_panels;
+    bool view_show_profile_images;
+    bool view_smooth_connections;
+    bool view_particles_enabled;
     bool panel_hud_visible;
     bool panel_about_visible;
     bool panel_help_visible;

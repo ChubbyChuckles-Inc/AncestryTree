@@ -4058,6 +4058,11 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 if (new_grid != render_config->show_grid)
                 {
                     render_config->show_grid = new_grid;
+                    if (settings && settings->view_show_grid != new_grid)
+                    {
+                        settings->view_show_grid = new_grid;
+                        settings_mark_dirty(settings);
+                    }
                     ui_internal_set_status(internal,
                                            new_grid ? "Grid lines enabled." : "Grid lines hidden.");
                 }
@@ -4068,6 +4073,11 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 if (new_connections != render_config->show_connections)
                 {
                     render_config->show_connections = new_connections;
+                    if (settings && settings->view_show_connections != new_connections)
+                    {
+                        settings->view_show_connections = new_connections;
+                        settings_mark_dirty(settings);
+                    }
                     ui_internal_set_status(internal, new_connections
                                                          ? "Relationship lines enabled."
                                                          : "Relationship lines hidden.");
@@ -4080,6 +4090,11 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 if (new_overlay != render_config->show_overlay)
                 {
                     render_config->show_overlay = new_overlay;
+                    if (settings && settings->view_show_overlay != new_overlay)
+                    {
+                        settings->view_show_overlay = new_overlay;
+                        settings_mark_dirty(settings);
+                    }
                     ui_internal_set_status(internal,
                                            new_overlay ? "Overlay enabled." : "Overlay hidden.");
                 }
@@ -4090,6 +4105,11 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 if (new_labels != render_config->show_name_panels)
                 {
                     render_config->show_name_panels = new_labels;
+                    if (settings && settings->view_show_name_panels != new_labels)
+                    {
+                        settings->view_show_name_panels = new_labels;
+                        settings_mark_dirty(settings);
+                    }
                     ui_internal_set_status(internal, new_labels
                                                          ? "Holographic name panels enabled."
                                                          : "Holographic name panels hidden.");
@@ -4101,9 +4121,36 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 if (new_profiles != render_config->show_profile_images)
                 {
                     render_config->show_profile_images = new_profiles;
+                    if (settings && settings->view_show_profile_images != new_profiles)
+                    {
+                        settings->view_show_profile_images = new_profiles;
+                        settings_mark_dirty(settings);
+                    }
                     ui_internal_set_status(internal, new_profiles
                                                          ? "Portraits enabled in name panels."
                                                          : "Portraits hidden from name panels.");
+                }
+
+                bool current_particles = render_config->enable_selection_particles ||
+                                         render_config->enable_life_particles;
+                nk_bool show_particles = current_particles ? nk_true : nk_false;
+                (void)ui_nav_checkbox_label(internal, ctx, "Show particle effects",
+                                            &show_particles);
+                bool new_particles = (show_particles == nk_true);
+                bool particles_changed =
+                    (render_config->enable_selection_particles != new_particles) ||
+                    (render_config->enable_life_particles != new_particles);
+                if (particles_changed)
+                {
+                    render_config->enable_selection_particles = new_particles;
+                    render_config->enable_life_particles      = new_particles;
+                    if (settings && settings->view_particles_enabled != new_particles)
+                    {
+                        settings->view_particles_enabled = new_particles;
+                        settings_mark_dirty(settings);
+                    }
+                    ui_internal_set_status(internal, new_particles ? "Particle effects enabled."
+                                                                   : "Particle effects disabled.");
                 }
 
                 /* Manual validation checklist:
@@ -4121,6 +4168,11 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 if (new_smoothing != render_config->connection_antialiasing)
                 {
                     render_config->connection_antialiasing = new_smoothing;
+                    if (settings && settings->view_smooth_connections != new_smoothing)
+                    {
+                        settings->view_smooth_connections = new_smoothing;
+                        settings_mark_dirty(settings);
+                    }
                     ui_internal_set_status(internal, new_smoothing
                                                          ? "Smooth line rendering enabled."
                                                          : "Smooth line rendering disabled.");

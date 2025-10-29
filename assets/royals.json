@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "name": "Placeholder Tree",
+    "creation_date": "",
+    "root_ids": [1, 2]
+  },
+  "persons": [
+    {
+      "id": 1,
+      "name": {
+        "first": "Elizabeth Alexandra Mary",
+        "middle": "",
+        "last": "Windsor"
+      },
+      "dates": {
+        "birth_date": "1926-04-21",
+        "birth_location": "London",
+        "death_date": "2022-09-08",
+        "death_location": "Aberdeenshire",
+        "is_alive": false
+      },
+      "parents": [null, null],
+      "children": [],
+      "spouses": [
+        {
+          "id": 2,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "profiles/profile_1761690876000.png",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    },
+    {
+      "id": 2,
+      "name": {
+        "first": "Philip",
+        "middle": "",
+        "last": "Mountbatten"
+      },
+      "dates": {
+        "birth_date": "1921-06-10",
+        "birth_location": "Mon Repos",
+        "death_date": "2021-04-09",
+        "death_location": "Windsor",
+        "is_alive": false
+      },
+      "parents": [null, null],
+      "children": [],
+      "spouses": [
+        {
+          "id": 1,
+          "marriage_date": "",
+          "marriage_location": ""
+        }
+      ],
+      "certificates": [],
+      "profile_image": "profiles/profile_1761691076000.png",
+      "timeline": [
+      ],
+      "metadata": {
+      }
+    }
+  ]
+}

@@ -7,8 +7,8 @@
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <commdlg.h>
+#include <windows.h>
 #elif defined(__APPLE__)
 #include <stdlib.h>
 #elif defined(__linux__)
@@ -72,7 +72,7 @@ bool file_dialog_ensure_extension(char *path, size_t capacity, const char *exten
     {
         return false;
     }
-    size_t path_length = file_dialog_strnlen(path, capacity);
+    size_t path_length      = file_dialog_strnlen(path, capacity);
     size_t extension_length = strlen(extension);
     if (path_length < extension_length)
     {
@@ -88,7 +88,7 @@ bool file_dialog_ensure_extension(char *path, size_t capacity, const char *exten
         return true;
     }
     size_t offset = path_length - extension_length;
-    bool matches = true;
+    bool matches  = true;
     for (size_t index = 0U; index < extension_length; ++index)
     {
         char a = (char)tolower((unsigned char)path[offset + index]);
@@ -117,8 +117,27 @@ bool file_dialog_ensure_extension(char *path, size_t capacity, const char *exten
 
 #if defined(_WIN32)
 
-static void file_dialog_split_path(const char *source, char *directory, size_t dir_capacity, char *filename,
-                                   size_t file_capacity)
+static UINT_PTR CALLBACK file_dialog_hook_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    (void)wParam;
+    (void)lParam;
+    switch (msg)
+    {
+    case WM_INITDIALOG:
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        SetForegroundWindow(hwnd);
+        break;
+    case WM_DESTROY:
+        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        break;
+    default:
+        break;
+    }
+    return 0U;
+}
+
+static void file_dialog_split_path(const char *source, char *directory, size_t dir_capacity,
+                                   char *filename, size_t file_capacity)
 {
     if (directory && dir_capacity > 0U)
     {
@@ -157,18 +176,19 @@ static void file_dialog_split_path(const char *source, char *directory, size_t d
     }
 }
 
-static bool file_dialog_build_filter_string(const FileDialogOptions *options, char *buffer, size_t capacity)
+static bool file_dialog_build_filter_string(const FileDialogOptions *options, char *buffer,
+                                            size_t capacity)
 {
     if (!buffer || capacity == 0U)
     {
         return false;
     }
-    buffer[0] = '\0';
+    buffer[0]     = '\0';
     size_t cursor = 0U;
     if (!options || !options->filters || options->filter_count == 0U)
     {
         const char fallback[] = "All Files\0*.*\0";
-        size_t fallback_len = sizeof(fallback);
+        size_t fallback_len   = sizeof(fallback);
         if (fallback_len > capacity)
         {
             return false;
@@ -183,7 +203,7 @@ static bool file_dialog_build_filter_string(const FileDialogOptions *options, ch
         {
             continue;
         }
-        size_t label_len = strlen(filter->label);
+        size_t label_len   = strlen(filter->label);
         size_t pattern_len = strlen(filter->pattern);
         if (cursor + label_len + 1U >= capacity)
         {
@@ -213,17 +233,19 @@ static bool file_dialog_win32_run(const FileDialogOptions *options, char *out_pa
 {
     if (!out_path || capacity == 0U)
     {
-        file_dialog_set_error(error_buffer, error_capacity, "Invalid output buffer for file dialog.");
+        file_dialog_set_error(error_buffer, error_capacity,
+                              "Invalid output buffer for file dialog.");
         return false;
     }
     file_dialog_clear_buffer(out_path, capacity);
     file_dialog_clear_buffer(error_buffer, error_capacity);
 
     char directory[MAX_PATH] = {0};
-    char filename[MAX_PATH] = {0};
+    char filename[MAX_PATH]  = {0};
     if (options && options->default_path)
     {
-        file_dialog_split_path(options->default_path, directory, sizeof(directory), filename, sizeof(filename));
+        file_dialog_split_path(options->default_path, directory, sizeof(directory), filename,
+                               sizeof(filename));
     }
     else if (save_dialog)
     {
@@ -240,18 +262,25 @@ static bool file_dialog_win32_run(const FileDialogOptions *options, char *out_pa
     char filter_buffer[256];
     if (!file_dialog_build_filter_string(options, filter_buffer, sizeof(filter_buffer)))
     {
-        file_dialog_set_error(error_buffer, error_capacity, "Unable to build filter list for file dialog.");
+        file_dialog_set_error(error_buffer, error_capacity,
+                              "Unable to build filter list for file dialog.");
         return false;
+    }
+
+    HWND owner = GetActiveWindow();
+    if (!owner)
+    {
+        owner = GetForegroundWindow();
     }
 
     OPENFILENAMEA dialog;
     ZeroMemory(&dialog, sizeof(dialog));
-    dialog.lStructSize = sizeof(dialog);
-    dialog.lpstrFile = file_buffer;
-    dialog.nMaxFile = (DWORD)sizeof(file_buffer);
-    dialog.lpstrFilter = filter_buffer;
+    dialog.lStructSize  = sizeof(dialog);
+    dialog.lpstrFile    = file_buffer;
+    dialog.nMaxFile     = (DWORD)sizeof(file_buffer);
+    dialog.lpstrFilter  = filter_buffer;
     dialog.nFilterIndex = 1U;
-    dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR;
+    dialog.Flags        = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_ENABLESIZING;
     if (save_dialog)
     {
         dialog.Flags |= OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
@@ -260,6 +289,9 @@ static bool file_dialog_win32_run(const FileDialogOptions *options, char *out_pa
     {
         dialog.Flags |= OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
     }
+    dialog.hwndOwner = owner;
+    dialog.Flags |= OFN_ENABLEHOOK;
+    dialog.lpfnHook = file_dialog_hook_proc;
     if (directory[0] != '\0')
     {
         dialog.lpstrInitialDir = directory;
@@ -276,7 +308,8 @@ static bool file_dialog_win32_run(const FileDialogOptions *options, char *out_pa
         if (error != 0U)
         {
             char buffer[128];
-            (void)snprintf(buffer, sizeof(buffer), "File dialog failed (code %lu).", (unsigned long)error);
+            (void)snprintf(buffer, sizeof(buffer), "File dialog failed (code %lu).",
+                           (unsigned long)error);
             file_dialog_set_error(error_buffer, error_capacity, buffer);
         }
         return false;
@@ -290,22 +323,22 @@ static bool file_dialog_win32_run(const FileDialogOptions *options, char *out_pa
     return true;
 }
 
-bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     return file_dialog_win32_run(options, out_path, capacity, error_buffer, error_capacity, false);
 }
 
-bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     return file_dialog_win32_run(options, out_path, capacity, error_buffer, error_capacity, true);
 }
 
 #elif defined(__APPLE__)
 
-static bool file_dialog_run_osascript(const char *script, char *out_path, size_t capacity, char *error_buffer,
-                                      size_t error_capacity)
+static bool file_dialog_run_osascript(const char *script, char *out_path, size_t capacity,
+                                      char *error_buffer, size_t error_capacity)
 {
     FILE *pipe = popen(script, "r");
     if (!pipe)
@@ -327,7 +360,8 @@ static bool file_dialog_run_osascript(const char *script, char *out_path, size_t
     int status = pclose(pipe);
     if (status != 0)
     {
-        file_dialog_set_error(error_buffer, error_capacity, "osascript returned a non-zero status.");
+        file_dialog_set_error(error_buffer, error_capacity,
+                              "osascript returned a non-zero status.");
         return false;
     }
     size_t length = file_dialog_strnlen(buffer, sizeof(buffer));
@@ -373,7 +407,8 @@ static bool file_dialog_mac_run(const FileDialogOptions *options, char *out_path
     char title_buffer[128];
     file_dialog_escape_quotes(options ? options->title : "", title_buffer, sizeof(title_buffer));
     char default_buffer[512];
-    file_dialog_escape_quotes(options ? options->default_path : "", default_buffer, sizeof(default_buffer));
+    file_dialog_escape_quotes(options ? options->default_path : "", default_buffer,
+                              sizeof(default_buffer));
 
     char script[1024];
     if (save_dialog)
@@ -381,14 +416,17 @@ static bool file_dialog_mac_run(const FileDialogOptions *options, char *out_path
         if (default_buffer[0] != '\0')
         {
             (void)snprintf(script, sizeof(script),
-                           "osascript -e 'set _path to POSIX path of (choose file name default name \"%s\" with prompt "
+                           "osascript -e 'set _path to POSIX path of (choose file name default "
+                           "name \"%s\" with prompt "
                            "\"%s\")' -e 'print _path'",
-                           default_buffer, title_buffer[0] != '\0' ? title_buffer : "Save Family Tree");
+                           default_buffer,
+                           title_buffer[0] != '\0' ? title_buffer : "Save Family Tree");
         }
         else
         {
             (void)snprintf(script, sizeof(script),
-                           "osascript -e 'set _path to POSIX path of (choose file name with prompt \"%s\")' -e 'print _path'",
+                           "osascript -e 'set _path to POSIX path of (choose file name with prompt "
+                           "\"%s\")' -e 'print _path'",
                            title_buffer[0] != '\0' ? title_buffer : "Save Family Tree");
         }
     }
@@ -397,14 +435,17 @@ static bool file_dialog_mac_run(const FileDialogOptions *options, char *out_path
         if (default_buffer[0] != '\0')
         {
             (void)snprintf(script, sizeof(script),
-                           "osascript -e 'set _path to POSIX path of (choose file with prompt \"%s\" default location "
+                           "osascript -e 'set _path to POSIX path of (choose file with prompt "
+                           "\"%s\" default location "
                            "POSIX file \"%s\")' -e 'print _path'",
-                           title_buffer[0] != '\0' ? title_buffer : "Open Family Tree", default_buffer);
+                           title_buffer[0] != '\0' ? title_buffer : "Open Family Tree",
+                           default_buffer);
         }
         else
         {
             (void)snprintf(script, sizeof(script),
-                           "osascript -e 'set _path to POSIX path of (choose file with prompt \"%s\")' -e 'print _path'",
+                           "osascript -e 'set _path to POSIX path of (choose file with prompt "
+                           "\"%s\")' -e 'print _path'",
                            title_buffer[0] != '\0' ? title_buffer : "Open Family Tree");
         }
     }
@@ -412,14 +453,14 @@ static bool file_dialog_mac_run(const FileDialogOptions *options, char *out_path
     return file_dialog_run_osascript(script, out_path, capacity, error_buffer, error_capacity);
 }
 
-bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     return file_dialog_mac_run(options, out_path, capacity, error_buffer, error_capacity, false);
 }
 
-bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     return file_dialog_mac_run(options, out_path, capacity, error_buffer, error_capacity, true);
 }
@@ -438,13 +479,14 @@ static bool file_dialog_command_available(const char *command)
     return status == 0;
 }
 
-static bool file_dialog_run_capture(const char *command, char *out_path, size_t capacity, char *error_buffer,
-                                    size_t error_capacity)
+static bool file_dialog_run_capture(const char *command, char *out_path, size_t capacity,
+                                    char *error_buffer, size_t error_capacity)
 {
     FILE *pipe = popen(command, "r");
     if (!pipe)
     {
-        file_dialog_set_error(error_buffer, error_capacity, "Failed to spawn file selection command.");
+        file_dialog_set_error(error_buffer, error_capacity,
+                              "Failed to spawn file selection command.");
         return false;
     }
     file_dialog_clear_buffer(out_path, capacity);
@@ -454,14 +496,16 @@ static bool file_dialog_run_capture(const char *command, char *out_path, size_t 
         int status = pclose(pipe);
         if (status != 0)
         {
-            file_dialog_set_error(error_buffer, error_capacity, "File selection command returned an error.");
+            file_dialog_set_error(error_buffer, error_capacity,
+                                  "File selection command returned an error.");
         }
         return false;
     }
     int status = pclose(pipe);
     if (status != 0)
     {
-        file_dialog_set_error(error_buffer, error_capacity, "File selection command returned non-zero status.");
+        file_dialog_set_error(error_buffer, error_capacity,
+                              "File selection command returned non-zero status.");
         return false;
     }
     size_t length = file_dialog_strnlen(buffer, sizeof(buffer));
@@ -529,8 +573,8 @@ static bool file_dialog_append_format(char *destination, size_t capacity, const 
     return true;
 }
 
-static bool file_dialog_build_linux_command(const FileDialogOptions *options, bool save_dialog, char *command,
-                                            size_t capacity)
+static bool file_dialog_build_linux_command(const FileDialogOptions *options, bool save_dialog,
+                                            char *command, size_t capacity)
 {
     const char *tool = NULL;
     if (file_dialog_command_available("zenity"))
@@ -556,7 +600,8 @@ static bool file_dialog_build_linux_command(const FileDialogOptions *options, bo
         int written = 0;
         if (save_dialog)
         {
-            written = snprintf(command, capacity, "zenity --file-selection --save --confirm-overwrite%s%s%s",
+            written = snprintf(command, capacity,
+                               "zenity --file-selection --save --confirm-overwrite%s%s%s",
                                title[0] != '\0' ? " --title='" : "", title[0] != '\0' ? title : "",
                                title[0] != '\0' ? "'" : "");
         }
@@ -590,7 +635,8 @@ static bool file_dialog_build_linux_command(const FileDialogOptions *options, bo
                 file_dialog_escape_shell(filter->label, label, sizeof(label));
                 char pattern[128];
                 file_dialog_escape_shell(filter->pattern, pattern, sizeof(pattern));
-                if (!file_dialog_append_format(command, capacity, " --file-filter='%s | %s'", label, pattern))
+                if (!file_dialog_append_format(command, capacity, " --file-filter='%s | %s'", label,
+                                               pattern))
                 {
                     return false;
                 }
@@ -639,35 +685,37 @@ static bool file_dialog_linux_run(const FileDialogOptions *options, char *out_pa
     return file_dialog_run_capture(command, out_path, capacity, error_buffer, error_capacity);
 }
 
-bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     return file_dialog_linux_run(options, out_path, capacity, error_buffer, error_capacity, false);
 }
 
-bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     return file_dialog_linux_run(options, out_path, capacity, error_buffer, error_capacity, true);
 }
 
 #else
 
-bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_open(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     (void)options;
     file_dialog_clear_buffer(out_path, capacity);
-    file_dialog_set_error(error_buffer, error_capacity, "File dialog not supported on this platform.");
+    file_dialog_set_error(error_buffer, error_capacity,
+                          "File dialog not supported on this platform.");
     return false;
 }
 
-bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity, char *error_buffer,
-                      size_t error_capacity)
+bool file_dialog_save(const FileDialogOptions *options, char *out_path, size_t capacity,
+                      char *error_buffer, size_t error_capacity)
 {
     (void)options;
     file_dialog_clear_buffer(out_path, capacity);
-    file_dialog_set_error(error_buffer, error_capacity, "File dialog not supported on this platform.");
+    file_dialog_set_error(error_buffer, error_capacity,
+                          "File dialog not supported on this platform.");
     return false;
 }
 
