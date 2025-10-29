@@ -235,6 +235,18 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
         {
             config->name_panel_height_scale = 1.0f;
         }
+        if (!isfinite(config->name_panel_offset_x))
+        {
+            config->name_panel_offset_x = 0.0f;
+        }
+        if (!isfinite(config->name_panel_offset_y))
+        {
+            config->name_panel_offset_y = 0.0f;
+        }
+        if (!isfinite(config->name_panel_offset_z))
+        {
+            config->name_panel_offset_z = 0.0f;
+        }
         return true;
     }
 
@@ -292,6 +304,25 @@ bool settings_runtime_apply_render(const Settings *settings, RenderConfig *confi
 
     config->name_panel_width_scale  = width_scale;
     config->name_panel_height_scale = height_scale;
+
+    float offset_x = settings->name_panel_offset_x;
+    float offset_y = settings->name_panel_offset_y;
+    float offset_z = settings->name_panel_offset_z;
+    if (!isfinite(offset_x))
+    {
+        offset_x = 0.0f;
+    }
+    if (!isfinite(offset_y))
+    {
+        offset_y = 0.0f;
+    }
+    if (!isfinite(offset_z))
+    {
+        offset_z = 0.0f;
+    }
+    config->name_panel_offset_x = offset_x;
+    config->name_panel_offset_y = offset_y;
+    config->name_panel_offset_z = offset_z;
 
     config->show_grid               = settings->view_show_grid;
     config->show_connections        = settings->view_show_connections;

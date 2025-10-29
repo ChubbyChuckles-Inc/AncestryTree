@@ -3536,6 +3536,33 @@ static void ui_draw_settings_window(UIInternal *internal, UIContext *ui, Setting
             settings_mark_dirty(settings);
         }
 
+        float name_panel_offset_x = settings->name_panel_offset_x;
+        ui_nav_property_float(internal, ctx, "Name panel offset X", -4.0f, &name_panel_offset_x,
+                              4.0f, 0.2f, 0.05f, 0.15f, "Horizontal offset relative to node");
+        if (fabsf(name_panel_offset_x - settings->name_panel_offset_x) > 0.0005f)
+        {
+            settings->name_panel_offset_x = name_panel_offset_x;
+            settings_mark_dirty(settings);
+        }
+
+        float name_panel_offset_y = settings->name_panel_offset_y;
+        ui_nav_property_float(internal, ctx, "Name panel offset Y", -4.0f, &name_panel_offset_y,
+                              4.0f, 0.2f, 0.05f, 0.15f, "Vertical offset relative to node");
+        if (fabsf(name_panel_offset_y - settings->name_panel_offset_y) > 0.0005f)
+        {
+            settings->name_panel_offset_y = name_panel_offset_y;
+            settings_mark_dirty(settings);
+        }
+
+        float name_panel_offset_z = settings->name_panel_offset_z;
+        ui_nav_property_float(internal, ctx, "Name panel offset Z", -4.0f, &name_panel_offset_z,
+                              4.0f, 0.2f, 0.05f, 0.15f, "Depth offset relative to node");
+        if (fabsf(name_panel_offset_z - settings->name_panel_offset_z) > 0.0005f)
+        {
+            settings->name_panel_offset_z = name_panel_offset_z;
+            settings_mark_dirty(settings);
+        }
+
         nk_layout_row_dynamic(ctx, 6.0f, 1);
         nk_spacer(ctx);
 

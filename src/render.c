@@ -109,6 +109,9 @@ static void render_set_default_config(RenderConfig *config)
     config->name_panel_font_size            = 26.0f;
     config->name_panel_width_scale          = 1.0f;
     config->name_panel_height_scale         = 1.0f;
+    config->name_panel_offset_x             = 0.0f;
+    config->name_panel_offset_y             = 0.0f;
+    config->name_panel_offset_z             = 0.0f;
     config->enable_frustum_culling          = true;
     config->enable_lod                      = true;
     config->lod_near_distance               = 14.0f;
@@ -248,6 +251,11 @@ bool render_config_validate(const RenderConfig *config)
         return false;
     }
     if (!(config->name_panel_height_scale > 0.0f))
+    {
+        return false;
+    }
+    if (!isfinite(config->name_panel_offset_x) || !isfinite(config->name_panel_offset_y) ||
+        !isfinite(config->name_panel_offset_z))
     {
         return false;
     }
@@ -2143,7 +2151,11 @@ static void render_draw_label(RenderState *state, const LayoutResult *layout,
     Rectangle source       = {0.0f, 0.0f, (float)info.texture.width, (float)info.texture.height};
     Vector3 base_position  = {node->position[0], node->position[1], node->position[2]};
     float vertical_offset  = fmaxf(state->config.sphere_radius * 1.6f, 0.5f);
-    Vector3 label_position = {base_position.x, base_position.y + vertical_offset, base_position.z};
+    Vector3 offset         = {state->config.name_panel_offset_x, state->config.name_panel_offset_y,
+                              state->config.name_panel_offset_z};
+    Vector3 label_position = {base_position.x + offset.x,
+                              base_position.y + vertical_offset + offset.y,
+                              base_position.z + offset.z};
 
     float distance     = Vector3Distance(camera->position, label_position);
     float scale_factor = 0.0018f * distance;
@@ -2220,6 +2232,9 @@ bool render_init(RenderState *state, const RenderConfig *config, char *error_buf
         state->config.name_panel_font_size          = config->name_panel_font_size;
         state->config.name_panel_width_scale        = config->name_panel_width_scale;
         state->config.name_panel_height_scale       = config->name_panel_height_scale;
+        state->config.name_panel_offset_x           = config->name_panel_offset_x;
+        state->config.name_panel_offset_y           = config->name_panel_offset_y;
+        state->config.name_panel_offset_z           = config->name_panel_offset_z;
         state->config.enable_frustum_culling        = config->enable_frustum_culling;
         state->config.enable_lod                    = config->enable_lod;
         state->config.lod_near_distance             = config->lod_near_distance;

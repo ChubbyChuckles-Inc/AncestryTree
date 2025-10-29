@@ -69,6 +69,9 @@ typedef struct Settings
     float name_panel_font_size;
     float name_panel_width_scale;
     float name_panel_height_scale;
+    float name_panel_offset_x;
+    float name_panel_offset_y;
+    float name_panel_offset_z;
     SettingsLanguage language;
     bool high_contrast_mode;
     float ui_font_scale;

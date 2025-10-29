@@ -974,3 +974,25 @@ Focus request queued for Lou Rickert.
 Focused on Lou Rickert.
 Lou Rickert selected, alive.
 Selection cleared.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Frame the earliest generation so you can branch outward from the family origins.
+Particle effects enabled.
+Onboarding paused. Re-enable it from Settings when ready.
+Grid lines enabled.
+Holographic name panels hidden.
+Screen reader narration enabled.
+Snap the orbit camera back to its default distance and orientation.
+Frame the earliest generation so you can branch outward from the family origins.
+Holographic name panels enabled.
+Depth offset relative to node
+Vertical offset relative to node
+Horizontal offset relative to node
+Depth offset relative to node
+Vertical offset relative to node
+Horizontal offset relative to node
+Save request queued.
+Saving holographic archive...
+Saving holographic archive...: 85% complete.
+Saved tree to C:\Users\Chuck\Desktop\CR_AI_Engineering\GameDev\AncestryTree\assets\rickert_tree.json
+Onboarding paused. Re-enable it from Settings when ready.

@@ -179,6 +179,9 @@ static void settings_set_defaults(Settings *settings)
     settings->name_panel_font_size            = 26.0f;
     settings->name_panel_width_scale          = 1.0f;
     settings->name_panel_height_scale         = 1.0f;
+    settings->name_panel_offset_x             = 0.0f;
+    settings->name_panel_offset_y             = 0.0f;
+    settings->name_panel_offset_z             = 0.0f;
     settings->language                        = SETTINGS_LANGUAGE_ENGLISH;
     settings->high_contrast_mode              = false;
     settings->ui_font_scale                   = 1.0f;
@@ -448,6 +451,30 @@ bool settings_try_load(Settings *settings, const char *path, char *error_buffer,
             if (settings_parse_float(value, &parsed) && parsed > 0.0f)
             {
                 settings->name_panel_height_scale = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "name_panel_offset_x") == 0)
+        {
+            float parsed = 0.0f;
+            if (settings_parse_float(value, &parsed))
+            {
+                settings->name_panel_offset_x = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "name_panel_offset_y") == 0)
+        {
+            float parsed = 0.0f;
+            if (settings_parse_float(value, &parsed))
+            {
+                settings->name_panel_offset_y = parsed;
+            }
+        }
+        else if (settings_strcasecmp(key, "name_panel_offset_z") == 0)
+        {
+            float parsed = 0.0f;
+            if (settings_parse_float(value, &parsed))
+            {
+                settings->name_panel_offset_z = parsed;
             }
         }
         else if (settings_strcasecmp(key, "view_show_grid") == 0)
@@ -722,6 +749,9 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         "name_panel_font_size=%.2f\n"
         "name_panel_width_scale=%.3f\n"
         "name_panel_height_scale=%.3f\n"
+        "name_panel_offset_x=%.3f\n"
+        "name_panel_offset_y=%.3f\n"
+        "name_panel_offset_z=%.3f\n"
         "view_show_grid=%u\n"
         "view_show_connections=%u\n"
         "view_show_overlay=%u\n"
@@ -759,6 +789,7 @@ bool settings_save(const Settings *settings, const char *path, char *error_buffe
         settings->auto_save_interval_seconds, (unsigned int)settings->default_layout_algorithm,
         (unsigned int)settings->color_scheme, settings->name_panel_font_size,
         settings->name_panel_width_scale, settings->name_panel_height_scale,
+        settings->name_panel_offset_x, settings->name_panel_offset_y, settings->name_panel_offset_z,
         settings->view_show_grid ? 1U : 0U, settings->view_show_connections ? 1U : 0U,
         settings->view_show_overlay ? 1U : 0U, settings->view_show_name_panels ? 1U : 0U,
         settings->view_show_profile_images ? 1U : 0U, settings->view_smooth_connections ? 1U : 0U,
