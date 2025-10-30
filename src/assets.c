@@ -12,8 +12,8 @@
 #include <time.h>
 
 #if defined(_WIN32)
-#include <windows.h>
 #include <direct.h>
+#include <windows.h>
 #else
 #include <dirent.h>
 #include <sys/stat.h>
@@ -214,8 +214,8 @@ static void asset_path_list_init(AssetPathList *list)
     {
         return;
     }
-    list->items = NULL;
-    list->count = 0U;
+    list->items    = NULL;
+    list->count    = 0U;
     list->capacity = 0U;
 }
 
@@ -230,8 +230,8 @@ static void asset_path_list_dispose(AssetPathList *list)
         AT_FREE(list->items[index]);
     }
     AT_FREE(list->items);
-    list->items = NULL;
-    list->count = 0U;
+    list->items    = NULL;
+    list->count    = 0U;
     list->capacity = 0U;
 }
 
@@ -274,7 +274,7 @@ static bool asset_path_list_add_unique(AssetPathList *list, const char *path)
         {
             return false;
         }
-        list->items = items;
+        list->items    = items;
         list->capacity = new_capacity;
     }
     char *copy = at_string_dup(path);
@@ -288,10 +288,10 @@ static bool asset_path_list_add_unique(AssetPathList *list, const char *path)
 
 static int asset_path_compare(const void *lhs, const void *rhs)
 {
-    const char *const *left = (const char *const *)lhs;
+    const char *const *left  = (const char *const *)lhs;
     const char *const *right = (const char *const *)rhs;
-    const char *left_value = left ? *left : NULL;
-    const char *right_value = right ? *right : NULL;
+    const char *left_value   = left ? *left : NULL;
+    const char *right_value  = right ? *right : NULL;
     if (!left_value && !right_value)
     {
         return 0;
@@ -480,11 +480,11 @@ static bool asset_join_path(char *buffer, size_t capacity, const char *base, con
     {
         return false;
     }
-    size_t base_length = strlen(base);
+    size_t base_length      = strlen(base);
     bool base_has_separator = false;
     if (base_length > 0U)
     {
-        char last = base[base_length - 1U];
+        char last          = base[base_length - 1U];
         base_has_separator = (last == '/' || last == '\\');
     }
     int written;
@@ -503,7 +503,8 @@ static bool asset_join_path(char *buffer, size_t capacity, const char *base, con
     return true;
 }
 
-static bool asset_build_relative_path(char *buffer, size_t capacity, const char *prefix, const char *name)
+static bool asset_build_relative_path(char *buffer, size_t capacity, const char *prefix,
+                                      const char *name)
 {
     if (!buffer || capacity == 0U || !name)
     {
@@ -551,8 +552,8 @@ static bool asset_copy_stream(FILE *source, FILE *destination)
     return ferror(source) == 0;
 }
 
-static bool asset_generate_unique_name(const char *prefix, const char *extension, const char *directory,
-                                       char *out_name, size_t name_capacity)
+static bool asset_generate_unique_name(const char *prefix, const char *extension,
+                                       const char *directory, char *out_name, size_t name_capacity)
 {
     if (!prefix || prefix[0] == '\0')
     {
@@ -569,7 +570,8 @@ static bool asset_generate_unique_name(const char *prefix, const char *extension
     }
     for (unsigned int attempt = 0U; attempt < 2000U; ++attempt)
     {
-        unsigned long long stamp = (unsigned long long)now * 1000ULL + (unsigned long long)(attempt);
+        unsigned long long stamp =
+            (unsigned long long)now * 1000ULL + (unsigned long long)(attempt);
         int written;
         if (extension[0] != '\0')
         {
@@ -584,7 +586,8 @@ static bool asset_generate_unique_name(const char *prefix, const char *extension
             return false;
         }
         char absolute[ASSET_PATH_MAX];
-        if (snprintf(absolute, sizeof(absolute), "%s/%s", directory, out_name) >= (int)sizeof(absolute))
+        if (snprintf(absolute, sizeof(absolute), "%s/%s", directory, out_name) >=
+            (int)sizeof(absolute))
         {
             return false;
         }
@@ -606,8 +609,11 @@ bool asset_copy(const AssetCopyRequest *request, char *out_relative_path, size_t
         asset_set_error(error_buffer, error_capacity, "Invalid asset copy request");
         return false;
     }
-    const char *asset_root = (request->asset_root && request->asset_root[0] != '\0') ? request->asset_root : "assets";
-    const char *subdirectory = (request->subdirectory && request->subdirectory[0] != '\0') ? request->subdirectory : "imports";
+    const char *asset_root =
+        (request->asset_root && request->asset_root[0] != '\0') ? request->asset_root : "assets";
+    const char *subdirectory = (request->subdirectory && request->subdirectory[0] != '\0')
+                                   ? request->subdirectory
+                                   : "imports";
 
     char root_buffer[ASSET_PATH_MAX];
     if (snprintf(root_buffer, sizeof(root_buffer), "%s", asset_root) >= (int)sizeof(root_buffer))
@@ -618,7 +624,8 @@ bool asset_copy(const AssetCopyRequest *request, char *out_relative_path, size_t
     asset_normalise_path(root_buffer);
 
     char subdir_buffer[ASSET_PATH_MAX];
-    if (snprintf(subdir_buffer, sizeof(subdir_buffer), "%s", subdirectory) >= (int)sizeof(subdir_buffer))
+    if (snprintf(subdir_buffer, sizeof(subdir_buffer), "%s", subdirectory) >=
+        (int)sizeof(subdir_buffer))
     {
         asset_set_error(error_buffer, error_capacity, "Asset subdirectory too long");
         return false;
@@ -627,15 +634,16 @@ bool asset_copy(const AssetCopyRequest *request, char *out_relative_path, size_t
     asset_trim_leading_slashes(subdir_buffer);
     if (strstr(subdir_buffer, ".."))
     {
-        asset_set_error(error_buffer, error_capacity, "Relative asset path must not traverse upward");
+        asset_set_error(error_buffer, error_capacity,
+                        "Relative asset path must not traverse upward");
         return false;
     }
 
     char destination_directory[ASSET_PATH_MAX];
     if (subdir_buffer[0] != '\0')
     {
-        if (snprintf(destination_directory, sizeof(destination_directory), "%s/%s", root_buffer, subdir_buffer) >=
-            (int)sizeof(destination_directory))
+        if (snprintf(destination_directory, sizeof(destination_directory), "%s/%s", root_buffer,
+                     subdir_buffer) >= (int)sizeof(destination_directory))
         {
             asset_set_error(error_buffer, error_capacity, "Destination path too long");
             return false;
@@ -675,8 +683,8 @@ bool asset_copy(const AssetCopyRequest *request, char *out_relative_path, size_t
 
     const char *extension = asset_find_extension(request->source_path);
     char filename[ASSET_FILENAME_MAX];
-    if (!asset_generate_unique_name(request->name_prefix ? request->name_prefix : "asset", extension,
-                                    destination_directory, filename, sizeof(filename)))
+    if (!asset_generate_unique_name(request->name_prefix ? request->name_prefix : "asset",
+                                    extension, destination_directory, filename, sizeof(filename)))
     {
         fclose(source);
         asset_set_error(error_buffer, error_capacity, "Unable to generate unique filename");
@@ -684,8 +692,8 @@ bool asset_copy(const AssetCopyRequest *request, char *out_relative_path, size_t
     }
 
     char destination_path[ASSET_PATH_MAX];
-    if (snprintf(destination_path, sizeof(destination_path), "%s/%s", destination_directory, filename) >=
-        (int)sizeof(destination_path))
+    if (snprintf(destination_path, sizeof(destination_path), "%s/%s", destination_directory,
+                 filename) >= (int)sizeof(destination_path))
     {
         fclose(source);
         asset_set_error(error_buffer, error_capacity, "Destination file path too long");
@@ -739,7 +747,8 @@ bool asset_copy(const AssetCopyRequest *request, char *out_relative_path, size_t
         }
         else
         {
-            if (snprintf(out_relative_path, relative_capacity, "%s", filename) >= (int)relative_capacity)
+            if (snprintf(out_relative_path, relative_capacity, "%s", filename) >=
+                (int)relative_capacity)
             {
                 asset_set_error(error_buffer, error_capacity, "Relative path buffer too small");
                 return false;
@@ -773,20 +782,23 @@ static bool asset_collect_reference(AssetPathList *list, AssetCleanupStats *stat
     }
     if (!asset_path_list_add_unique(list, normalized))
     {
-        asset_set_error(error_buffer, error_capacity, "Out of memory while tracking asset references");
+        asset_set_error(error_buffer, error_capacity,
+                        "Out of memory while tracking asset references");
         return false;
     }
     return true;
 }
 
-static bool asset_collect_person_assets(const Person *person, AssetPathList *list, AssetCleanupStats *stats,
-                                        char *error_buffer, size_t error_capacity)
+static bool asset_collect_person_assets(const Person *person, AssetPathList *list,
+                                        AssetCleanupStats *stats, char *error_buffer,
+                                        size_t error_capacity)
 {
     if (!person)
     {
         return true;
     }
-    if (!asset_collect_reference(list, stats, person->profile_image_path, error_buffer, error_capacity))
+    if (!asset_collect_reference(list, stats, person->profile_image_path, error_buffer,
+                                 error_capacity))
     {
         return false;
     }
@@ -802,7 +814,8 @@ static bool asset_collect_person_assets(const Person *person, AssetPathList *lis
     {
         for (size_t index = 0U; index < person->certificate_count; ++index)
         {
-            if (!asset_collect_reference(list, stats, person->certificate_paths[index], error_buffer, error_capacity))
+            if (!asset_collect_reference(list, stats, person->certificate_paths[index],
+                                         error_buffer, error_capacity))
             {
                 return false;
             }
@@ -831,7 +844,8 @@ static bool asset_collect_person_assets(const Person *person, AssetPathList *lis
                 {
                     stats->integrity_failures += 1U;
                 }
-                asset_set_error_once(error_buffer, error_capacity, "Timeline entry media list is missing");
+                asset_set_error_once(error_buffer, error_capacity,
+                                     "Timeline entry media list is missing");
                 continue;
             }
             if (!entry->media_paths)
@@ -840,7 +854,8 @@ static bool asset_collect_person_assets(const Person *person, AssetPathList *lis
             }
             for (size_t media = 0U; media < entry->media_count; ++media)
             {
-                if (!asset_collect_reference(list, stats, entry->media_paths[media], error_buffer, error_capacity))
+                if (!asset_collect_reference(list, stats, entry->media_paths[media], error_buffer,
+                                             error_capacity))
                 {
                     return false;
                 }
@@ -850,8 +865,9 @@ static bool asset_collect_person_assets(const Person *person, AssetPathList *lis
     return true;
 }
 
-static bool asset_collect_tree_assets(const FamilyTree *tree, AssetPathList *list, AssetCleanupStats *stats,
-                                      char *error_buffer, size_t error_capacity)
+static bool asset_collect_tree_assets(const FamilyTree *tree, AssetPathList *list,
+                                      AssetCleanupStats *stats, char *error_buffer,
+                                      size_t error_capacity)
 {
     if (!tree || !list)
     {
@@ -876,7 +892,8 @@ static bool asset_collect_tree_assets(const FamilyTree *tree, AssetPathList *lis
             {
                 stats->integrity_failures += 1U;
             }
-            asset_set_error_once(error_buffer, error_capacity, "Encountered null person while collecting assets");
+            asset_set_error_once(error_buffer, error_capacity,
+                                 "Encountered null person while collecting assets");
             success = false;
             continue;
         }
@@ -889,11 +906,13 @@ static bool asset_collect_tree_assets(const FamilyTree *tree, AssetPathList *lis
 }
 
 static bool asset_verify_references(const char *asset_root, const AssetPathList *references,
-                                    AssetCleanupStats *stats, char *error_buffer, size_t error_capacity)
+                                    AssetCleanupStats *stats, char *error_buffer,
+                                    size_t error_capacity)
 {
     if (!asset_root || !references || !stats)
     {
-        asset_set_error_once(error_buffer, error_capacity, "Invalid parameters for asset verification");
+        asset_set_error_once(error_buffer, error_capacity,
+                             "Invalid parameters for asset verification");
         return false;
     }
     bool success = true;
@@ -980,14 +999,15 @@ static bool asset_cleanup_directory_win(const char *absolute_dir, const char *re
         if (is_directory)
         {
             char child_relative[ASSET_PATH_MAX];
-            if (!asset_build_relative_path(child_relative, sizeof(child_relative), relative_prefix, name))
+            if (!asset_build_relative_path(child_relative, sizeof(child_relative), relative_prefix,
+                                           name))
             {
                 asset_set_error_once(error_buffer, error_capacity, "Relative asset path too long");
                 success = false;
                 continue;
             }
-            if (!asset_cleanup_directory_win(child_absolute, child_relative, references, stats, error_buffer,
-                                             error_capacity, false))
+            if (!asset_cleanup_directory_win(child_absolute, child_relative, references, stats,
+                                             error_buffer, error_capacity, false))
             {
                 success = false;
             }
@@ -996,7 +1016,8 @@ static bool asset_cleanup_directory_win(const char *absolute_dir, const char *re
         else
         {
             char relative_path[ASSET_PATH_MAX];
-            if (!asset_build_relative_path(relative_path, sizeof(relative_path), relative_prefix, name))
+            if (!asset_build_relative_path(relative_path, sizeof(relative_path), relative_prefix,
+                                           name))
             {
                 asset_set_error_once(error_buffer, error_capacity, "Relative asset path too long");
                 success = false;
@@ -1007,7 +1028,8 @@ static bool asset_cleanup_directory_win(const char *absolute_dir, const char *re
                 if (!asset_remove_file_native(child_absolute))
                 {
                     char message[ASSET_PATH_MAX + 64U];
-                    (void)snprintf(message, sizeof(message), "Failed to remove asset: %s", child_absolute);
+                    (void)snprintf(message, sizeof(message), "Failed to remove asset: %s",
+                                   child_absolute);
                     asset_set_error_once(error_buffer, error_capacity, message);
                     success = false;
                 }
@@ -1052,7 +1074,7 @@ static bool asset_cleanup_directory_posix(const char *absolute_dir, const char *
         asset_set_error_once(error_buffer, error_capacity, message);
         return false;
     }
-    bool success = true;
+    bool success         = true;
     struct dirent *entry = NULL;
     while ((entry = readdir(dir)) != NULL)
     {
@@ -1079,14 +1101,15 @@ static bool asset_cleanup_directory_posix(const char *absolute_dir, const char *
         if (is_directory)
         {
             char child_relative[ASSET_PATH_MAX];
-            if (!asset_build_relative_path(child_relative, sizeof(child_relative), relative_prefix, name))
+            if (!asset_build_relative_path(child_relative, sizeof(child_relative), relative_prefix,
+                                           name))
             {
                 asset_set_error_once(error_buffer, error_capacity, "Relative asset path too long");
                 success = false;
                 continue;
             }
-            if (!asset_cleanup_directory_posix(child_absolute, child_relative, references, stats, error_buffer,
-                                               error_capacity, false))
+            if (!asset_cleanup_directory_posix(child_absolute, child_relative, references, stats,
+                                               error_buffer, error_capacity, false))
             {
                 success = false;
             }
@@ -1095,7 +1118,8 @@ static bool asset_cleanup_directory_posix(const char *absolute_dir, const char *
         else
         {
             char relative_path[ASSET_PATH_MAX];
-            if (!asset_build_relative_path(relative_path, sizeof(relative_path), relative_prefix, name))
+            if (!asset_build_relative_path(relative_path, sizeof(relative_path), relative_prefix,
+                                           name))
             {
                 asset_set_error_once(error_buffer, error_capacity, "Relative asset path too long");
                 success = false;
@@ -1106,7 +1130,8 @@ static bool asset_cleanup_directory_posix(const char *absolute_dir, const char *
                 if (!asset_remove_file_native(child_absolute))
                 {
                     char message[ASSET_PATH_MAX + 64U];
-                    (void)snprintf(message, sizeof(message), "Failed to remove asset: %s", child_absolute);
+                    (void)snprintf(message, sizeof(message), "Failed to remove asset: %s",
+                                   child_absolute);
                     asset_set_error_once(error_buffer, error_capacity, message);
                     success = false;
                 }
@@ -1161,14 +1186,15 @@ static bool asset_remove_unreferenced(const char *asset_root, const char *normal
         }
     }
     asset_normalise_path(base_path);
-    const char *relative_prefix = (normalized_subdir && normalized_subdir[0] != '\0') ? normalized_subdir : "";
+    const char *relative_prefix =
+        (normalized_subdir && normalized_subdir[0] != '\0') ? normalized_subdir : "";
 
 #if defined(_WIN32)
-    return asset_cleanup_directory_win(base_path, relative_prefix, references, stats, error_buffer, error_capacity,
-                                       true);
+    return asset_cleanup_directory_win(base_path, relative_prefix, references, stats, error_buffer,
+                                       error_capacity, true);
 #else
-    return asset_cleanup_directory_posix(base_path, relative_prefix, references, stats, error_buffer, error_capacity,
-                                         true);
+    return asset_cleanup_directory_posix(base_path, relative_prefix, references, stats,
+                                         error_buffer, error_capacity, true);
 #endif
 }
 
@@ -1176,9 +1202,9 @@ bool asset_cleanup(const FamilyTree *tree, const char *asset_root, const char *i
                    AssetCleanupStats *stats, char *error_buffer, size_t error_capacity)
 {
     AssetCleanupStats local_stats;
-    local_stats.referenced_files = 0U;
-    local_stats.removed_files = 0U;
-    local_stats.missing_files = 0U;
+    local_stats.referenced_files   = 0U;
+    local_stats.removed_files      = 0U;
+    local_stats.missing_files      = 0U;
     local_stats.integrity_failures = 0U;
 
     if (stats)
@@ -1202,13 +1228,15 @@ bool asset_cleanup(const FamilyTree *tree, const char *asset_root, const char *i
 
     char normalized_subdir[ASSET_PATH_MAX];
     normalized_subdir[0] = '\0';
-    const char *raw_subdir = (import_subdirectory && import_subdirectory[0] != '\0') ? import_subdirectory : "";
+    const char *raw_subdir =
+        (import_subdirectory && import_subdirectory[0] != '\0') ? import_subdirectory : "";
     if (raw_subdir[0] != '\0')
     {
         if (!asset_prepare_relative_path(raw_subdir, normalized_subdir, sizeof(normalized_subdir)))
         {
             local_stats.integrity_failures += 1U;
-            asset_set_error_once(error_buffer, error_capacity, "Invalid asset cleanup subdirectory");
+            asset_set_error_once(error_buffer, error_capacity,
+                                 "Invalid asset cleanup subdirectory");
             if (stats)
             {
                 *stats = local_stats;
@@ -1221,7 +1249,8 @@ bool asset_cleanup(const FamilyTree *tree, const char *asset_root, const char *i
     asset_path_list_init(&references);
 
     bool success = true;
-    bool collection_ok = asset_collect_tree_assets(tree, &references, &local_stats, error_buffer, error_capacity);
+    bool collection_ok =
+        asset_collect_tree_assets(tree, &references, &local_stats, error_buffer, error_capacity);
     if (!collection_ok)
     {
         success = false;
@@ -1231,13 +1260,14 @@ bool asset_cleanup(const FamilyTree *tree, const char *asset_root, const char *i
 
     if (collection_ok)
     {
-        bool verify_ok = asset_verify_references(asset_root, &references, &local_stats, error_buffer, error_capacity);
+        bool verify_ok = asset_verify_references(asset_root, &references, &local_stats,
+                                                 error_buffer, error_capacity);
         if (!verify_ok)
         {
             success = false;
         }
-        else if (!asset_remove_unreferenced(asset_root, normalized_subdir, &references, &local_stats, error_buffer,
-                                            error_capacity))
+        else if (!asset_remove_unreferenced(asset_root, normalized_subdir, &references,
+                                            &local_stats, error_buffer, error_capacity))
         {
             success = false;
         }
@@ -1290,8 +1320,63 @@ static bool asset_write_u64(FILE *file, uint64_t value)
     return fwrite(buffer, 1U, sizeof(buffer), file) == sizeof(buffer);
 }
 
-static bool asset_package_write_entry(FILE *package, const char *entry_path, const char *source_path,
-                                      AssetExportStats *stats, char *error_buffer, size_t error_capacity)
+static bool asset_read_u16(FILE *file, uint16_t *out_value)
+{
+    if (!file || !out_value)
+    {
+        return false;
+    }
+    unsigned char buffer[2];
+    size_t read = fread(buffer, 1U, sizeof(buffer), file);
+    if (read != sizeof(buffer))
+    {
+        return false;
+    }
+    *out_value = (uint16_t)(buffer[0] | ((uint16_t)buffer[1] << 8U));
+    return true;
+}
+
+static bool asset_read_u32(FILE *file, uint32_t *out_value)
+{
+    if (!file || !out_value)
+    {
+        return false;
+    }
+    unsigned char buffer[4];
+    size_t read = fread(buffer, 1U, sizeof(buffer), file);
+    if (read != sizeof(buffer))
+    {
+        return false;
+    }
+    *out_value = (uint32_t)buffer[0] | ((uint32_t)buffer[1] << 8U) | ((uint32_t)buffer[2] << 16U) |
+                 ((uint32_t)buffer[3] << 24U);
+    return true;
+}
+
+static bool asset_read_u64(FILE *file, uint64_t *out_value)
+{
+    if (!file || !out_value)
+    {
+        return false;
+    }
+    unsigned char buffer[8];
+    size_t read = fread(buffer, 1U, sizeof(buffer), file);
+    if (read != sizeof(buffer))
+    {
+        return false;
+    }
+    uint64_t value = 0U;
+    for (size_t index = 0U; index < sizeof(buffer); ++index)
+    {
+        value |= ((uint64_t)buffer[index]) << (index * 8U);
+    }
+    *out_value = value;
+    return true;
+}
+
+static bool asset_package_write_entry(FILE *package, const char *entry_path,
+                                      const char *source_path, AssetExportStats *stats,
+                                      char *error_buffer, size_t error_capacity)
 {
     if (!package || !entry_path || !source_path)
     {
@@ -1353,14 +1438,15 @@ static bool asset_package_write_entry(FILE *package, const char *entry_path, con
     size_t total_written = 0U;
     while (success && total_written < file_size)
     {
-        size_t remaining = file_size - total_written;
+        size_t remaining  = file_size - total_written;
         size_t chunk_size = remaining > sizeof(buffer) ? sizeof(buffer) : remaining;
-        size_t read = fread(buffer, 1U, chunk_size, source);
+        size_t read       = fread(buffer, 1U, chunk_size, source);
         if (read == 0U)
         {
             if (ferror(source))
             {
-                asset_set_error_once(error_buffer, error_capacity, "Failed to read asset while exporting");
+                asset_set_error_once(error_buffer, error_capacity,
+                                     "Failed to read asset while exporting");
             }
             success = false;
             break;
@@ -1391,20 +1477,21 @@ static bool asset_package_write_entry(FILE *package, const char *entry_path, con
 }
 
 bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tree_json_path,
-                  const char *package_path, AssetExportStats *stats, char *error_buffer, size_t error_capacity)
+                  const char *package_path, AssetExportStats *stats, char *error_buffer,
+                  size_t error_capacity)
 {
     AssetExportStats local_stats;
     local_stats.referenced_files = 0U;
-    local_stats.exported_files = 0U;
-    local_stats.exported_bytes = 0U;
+    local_stats.exported_files   = 0U;
+    local_stats.exported_bytes   = 0U;
 
     if (stats)
     {
         *stats = local_stats;
     }
 
-    if (!tree || !asset_root || asset_root[0] == '\0' || !tree_json_path || tree_json_path[0] == '\0' ||
-        !package_path || package_path[0] == '\0')
+    if (!tree || !asset_root || asset_root[0] == '\0' || !tree_json_path ||
+        tree_json_path[0] == '\0' || !package_path || package_path[0] == '\0')
     {
         asset_set_error(error_buffer, error_capacity, "Invalid parameters for asset export");
         return false;
@@ -1422,12 +1509,13 @@ bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tr
     asset_path_list_init(&references);
 
     AssetCleanupStats verification_stats;
-    verification_stats.referenced_files = 0U;
-    verification_stats.removed_files = 0U;
-    verification_stats.missing_files = 0U;
+    verification_stats.referenced_files   = 0U;
+    verification_stats.removed_files      = 0U;
+    verification_stats.missing_files      = 0U;
     verification_stats.integrity_failures = 0U;
 
-    bool success = asset_collect_tree_assets(tree, &references, &verification_stats, error_buffer, error_capacity);
+    bool success = asset_collect_tree_assets(tree, &references, &verification_stats, error_buffer,
+                                             error_capacity);
     if (!success)
     {
         asset_path_list_dispose(&references);
@@ -1436,7 +1524,8 @@ bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tr
 
     local_stats.referenced_files = references.count;
 
-    if (!asset_verify_references(asset_root, &references, &verification_stats, error_buffer, error_capacity))
+    if (!asset_verify_references(asset_root, &references, &verification_stats, error_buffer,
+                                 error_capacity))
     {
         asset_path_list_dispose(&references);
         if (stats)
@@ -1470,7 +1559,8 @@ bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tr
 #endif
     if (!package)
     {
-        asset_set_error_once(error_buffer, error_capacity, "Unable to open export package for writing");
+        asset_set_error_once(error_buffer, error_capacity,
+                             "Unable to open export package for writing");
         asset_path_list_dispose(&references);
         if (stats)
         {
@@ -1479,7 +1569,7 @@ bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tr
         return false;
     }
 
-    bool write_ok = true;
+    bool write_ok                = true;
     const unsigned char magic[5] = {'A', 'T', 'P', 'K', 'G'};
     if (fwrite(magic, 1U, sizeof(magic), package) != sizeof(magic))
     {
@@ -1500,14 +1590,15 @@ bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tr
 
     if (write_ok)
     {
-        write_ok = asset_package_write_entry(package, "tree.json", tree_json_path, &local_stats, error_buffer,
-                                             error_capacity);
+        write_ok = asset_package_write_entry(package, "tree.json", tree_json_path, &local_stats,
+                                             error_buffer, error_capacity);
     }
 
     for (size_t index = 0U; write_ok && index < references.count; ++index)
     {
         char entry_path[ASSET_PATH_MAX + 32U];
-        int written = snprintf(entry_path, sizeof(entry_path), "assets/%s", references.items[index]);
+        int written =
+            snprintf(entry_path, sizeof(entry_path), "assets/%s", references.items[index]);
         if (written < 0 || (size_t)written >= sizeof(entry_path))
         {
             asset_set_error_once(error_buffer, error_capacity, "Export entry path too long");
@@ -1518,13 +1609,15 @@ bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tr
         char absolute[ASSET_PATH_MAX];
         if (!asset_join_path(absolute, sizeof(absolute), asset_root, references.items[index]))
         {
-            asset_set_error_once(error_buffer, error_capacity, "Failed to build absolute asset path for export");
+            asset_set_error_once(error_buffer, error_capacity,
+                                 "Failed to build absolute asset path for export");
             write_ok = false;
             break;
         }
         asset_normalise_path(absolute);
 
-        write_ok = asset_package_write_entry(package, entry_path, absolute, &local_stats, error_buffer, error_capacity);
+        write_ok = asset_package_write_entry(package, entry_path, absolute, &local_stats,
+                                             error_buffer, error_capacity);
     }
 
     if (write_ok && fflush(package) != 0)
@@ -1548,4 +1641,392 @@ bool asset_export(const FamilyTree *tree, const char *asset_root, const char *tr
     }
 
     return write_ok;
+}
+
+static bool asset_generate_import_directory(const char *asset_root, char *out_relative,
+                                            size_t relative_capacity, char *out_absolute,
+                                            size_t absolute_capacity)
+{
+    if (!asset_root || !out_relative || relative_capacity == 0U || !out_absolute ||
+        absolute_capacity == 0U)
+    {
+        return false;
+    }
+
+    char normalized_root[ASSET_PATH_MAX];
+    if (snprintf(normalized_root, sizeof(normalized_root), "%s", asset_root) >=
+        (int)sizeof(normalized_root))
+    {
+        return false;
+    }
+    asset_normalise_path(normalized_root);
+
+    if (!asset_ensure_directories(normalized_root))
+    {
+        return false;
+    }
+
+    char imports_base[ASSET_PATH_MAX];
+    if (!asset_join_path(imports_base, sizeof(imports_base), normalized_root, "imports"))
+    {
+        return false;
+    }
+    asset_normalise_path(imports_base);
+    if (!asset_ensure_directories(imports_base))
+    {
+        return false;
+    }
+
+    time_t now = time(NULL);
+    if (now == (time_t)-1)
+    {
+        now = 0;
+    }
+    unsigned long long stamp  = (unsigned long long)now;
+    unsigned long long unique = stamp * 1000ULL + (unsigned long long)(rand() % 997);
+
+    char relative_folder[ASSET_PATH_MAX];
+    if (snprintf(relative_folder, sizeof(relative_folder), "imports/import_%llu", unique) >=
+        (int)sizeof(relative_folder))
+    {
+        return false;
+    }
+    asset_normalise_path(relative_folder);
+
+    char absolute_folder[ASSET_PATH_MAX];
+    if (!asset_join_path(absolute_folder, sizeof(absolute_folder), normalized_root,
+                         relative_folder))
+    {
+        return false;
+    }
+    asset_normalise_path(absolute_folder);
+
+    if (!asset_ensure_directories(absolute_folder))
+    {
+        return false;
+    }
+
+    if (snprintf(out_relative, relative_capacity, "%s", relative_folder) >= (int)relative_capacity)
+    {
+        return false;
+    }
+    if (snprintf(out_absolute, absolute_capacity, "%s", absolute_folder) >= (int)absolute_capacity)
+    {
+        return false;
+    }
+    return true;
+}
+
+bool asset_import_package(const char *package_path, const char *asset_root,
+                          char *out_tree_json_path, size_t tree_json_capacity,
+                          char *out_asset_prefix, size_t asset_prefix_capacity,
+                          AssetImportStats *stats, char *error_buffer, size_t error_capacity)
+{
+    AssetImportStats local_stats;
+    local_stats.extracted_files = 0U;
+    local_stats.extracted_bytes = 0U;
+
+    if (stats)
+    {
+        *stats = local_stats;
+    }
+
+    if (!package_path || !asset_root || asset_root[0] == '\0' || !out_tree_json_path ||
+        tree_json_capacity == 0U || !out_asset_prefix || asset_prefix_capacity == 0U)
+    {
+        asset_set_error(error_buffer, error_capacity, "Invalid parameters for asset import");
+        return false;
+    }
+
+    out_tree_json_path[0] = '\0';
+    out_asset_prefix[0]   = '\0';
+    asset_set_error(error_buffer, error_capacity, "");
+
+    FILE *package = NULL;
+#if defined(_WIN32)
+    if (fopen_s(&package, package_path, "rb") != 0)
+    {
+        package = NULL;
+    }
+#else
+    package = fopen(package_path, "rb");
+#endif
+    if (!package)
+    {
+        asset_set_error(error_buffer, error_capacity, "Failed to open package for import");
+        return false;
+    }
+
+    bool success = true;
+    unsigned char magic[5];
+    size_t magic_read = fread(magic, 1U, sizeof(magic), package);
+    if (magic_read != sizeof(magic) || memcmp(magic, "ATPKG", sizeof(magic)) != 0)
+    {
+        asset_set_error(error_buffer, error_capacity, "Invalid package signature");
+        success = false;
+    }
+
+    uint32_t version = 0U;
+    if (success && !asset_read_u32(package, &version))
+    {
+        asset_set_error(error_buffer, error_capacity, "Failed to read package version");
+        success = false;
+    }
+    if (success && version != 1U)
+    {
+        asset_set_error(error_buffer, error_capacity, "Unsupported package version");
+        success = false;
+    }
+
+    uint32_t entry_count = 0U;
+    if (success && !asset_read_u32(package, &entry_count))
+    {
+        asset_set_error(error_buffer, error_capacity, "Failed to read package manifest");
+        success = false;
+    }
+
+    char normalized_root[ASSET_PATH_MAX];
+    if (success)
+    {
+        if (snprintf(normalized_root, sizeof(normalized_root), "%s", asset_root) >=
+            (int)sizeof(normalized_root))
+        {
+            asset_set_error(error_buffer, error_capacity, "Asset root path too long");
+            success = false;
+        }
+        else
+        {
+            asset_normalise_path(normalized_root);
+        }
+    }
+
+    char import_relative[ASSET_PATH_MAX];
+    char import_absolute[ASSET_PATH_MAX];
+    if (success &&
+        !asset_generate_import_directory(normalized_root, import_relative, sizeof(import_relative),
+                                         import_absolute, sizeof(import_absolute)))
+    {
+        asset_set_error(error_buffer, error_capacity,
+                        "Failed to prepare import destination directory");
+        success = false;
+    }
+
+    char tree_absolute_path[ASSET_PATH_MAX];
+    tree_absolute_path[0] = '\0';
+    bool tree_written     = false;
+
+    for (uint32_t entry_index = 0U; success && entry_index < entry_count; ++entry_index)
+    {
+        uint16_t path_length = 0U;
+        if (!asset_read_u16(package, &path_length))
+        {
+            asset_set_error(error_buffer, error_capacity,
+                            "Failed to read entry path length during import");
+            success = false;
+            break;
+        }
+        if (path_length == 0U || path_length >= ASSET_PATH_MAX)
+        {
+            asset_set_error(error_buffer, error_capacity, "Package entry path too long");
+            success = false;
+            break;
+        }
+
+        char raw_path[ASSET_PATH_MAX];
+        size_t read_path = fread(raw_path, 1U, path_length, package);
+        if (read_path != path_length)
+        {
+            asset_set_error(error_buffer, error_capacity, "Failed to read package entry path");
+            success = false;
+            break;
+        }
+        raw_path[path_length] = '\0';
+
+        char normalized_entry[ASSET_PATH_MAX];
+        if (!asset_prepare_relative_path(raw_path, normalized_entry, sizeof(normalized_entry)))
+        {
+            asset_set_error(error_buffer, error_capacity, "Package entry path invalid");
+            success = false;
+            break;
+        }
+
+        const char *tail       = NULL;
+        bool entry_is_tree     = false;
+        const char asset_tag[] = "assets/";
+        size_t asset_tag_len   = strlen(asset_tag);
+        if (strcmp(normalized_entry, "tree.json") == 0)
+        {
+            tail          = "tree.json";
+            entry_is_tree = true;
+        }
+        else if (strncmp(normalized_entry, asset_tag, asset_tag_len) == 0)
+        {
+            tail = normalized_entry + asset_tag_len;
+            if (tail[0] == '\0')
+            {
+                asset_set_error(error_buffer, error_capacity, "Package entry missing asset path");
+                success = false;
+                break;
+            }
+        }
+        else
+        {
+            asset_set_error(error_buffer, error_capacity, "Unexpected entry in package manifest");
+            success = false;
+            break;
+        }
+
+        char relative_destination[ASSET_PATH_MAX];
+        if (!asset_build_relative_path(relative_destination, sizeof(relative_destination),
+                                       import_relative, tail))
+        {
+            asset_set_error(error_buffer, error_capacity,
+                            "Failed to build import destination path");
+            success = false;
+            break;
+        }
+
+        char absolute_destination[ASSET_PATH_MAX];
+        if (!asset_join_path(absolute_destination, sizeof(absolute_destination), normalized_root,
+                             relative_destination))
+        {
+            asset_set_error(error_buffer, error_capacity, "Import destination path too long");
+            success = false;
+            break;
+        }
+        asset_normalise_path(absolute_destination);
+
+        uint64_t file_size = 0U;
+        if (!asset_read_u64(package, &file_size))
+        {
+            asset_set_error(error_buffer, error_capacity, "Failed to read package entry size");
+            success = false;
+            break;
+        }
+
+        if (!asset_ensure_parent_directories(absolute_destination))
+        {
+            asset_set_error(error_buffer, error_capacity,
+                            "Failed to prepare directories for import");
+            success = false;
+            break;
+        }
+
+        FILE *output = NULL;
+#if defined(_WIN32)
+        if (fopen_s(&output, absolute_destination, "wb") != 0)
+        {
+            output = NULL;
+        }
+#else
+        output = fopen(absolute_destination, "wb");
+#endif
+        if (!output)
+        {
+            asset_set_error(error_buffer, error_capacity, "Failed to create imported file");
+            success = false;
+            break;
+        }
+
+        bool write_ok      = true;
+        uint64_t remaining = file_size;
+        unsigned char buffer[4096];
+        while (write_ok && remaining > 0U)
+        {
+            size_t chunk =
+                (remaining > (uint64_t)sizeof(buffer)) ? sizeof(buffer) : (size_t)remaining;
+            size_t read_bytes = fread(buffer, 1U, chunk, package);
+            if (read_bytes != chunk)
+            {
+                write_ok = false;
+                asset_set_error(error_buffer, error_capacity, "Failed to read package payload");
+                break;
+            }
+            if (fwrite(buffer, 1U, read_bytes, output) != read_bytes)
+            {
+                write_ok = false;
+                asset_set_error(error_buffer, error_capacity, "Failed to write imported file");
+                break;
+            }
+            remaining -= read_bytes;
+        }
+
+        if (fflush(output) != 0)
+        {
+            write_ok = false;
+            asset_set_error(error_buffer, error_capacity, "Failed to flush imported file");
+        }
+        if (fclose(output) != 0)
+        {
+            write_ok = false;
+            asset_set_error(error_buffer, error_capacity, "Failed to close imported file");
+        }
+
+        if (!write_ok)
+        {
+            success = false;
+            break;
+        }
+
+        if (entry_is_tree)
+        {
+            (void)snprintf(tree_absolute_path, sizeof(tree_absolute_path), "%s",
+                           absolute_destination);
+            tree_written = true;
+        }
+
+        if (remaining > 0U)
+        {
+            success = false;
+            asset_set_error(error_buffer, error_capacity, "Package entry truncated during import");
+            break;
+        }
+
+        local_stats.extracted_files += 1U;
+        if (file_size <= (uint64_t)SIZE_MAX)
+        {
+            local_stats.extracted_bytes += (size_t)file_size;
+        }
+        else
+        {
+            local_stats.extracted_bytes = SIZE_MAX;
+        }
+    }
+
+    if (success && !tree_written)
+    {
+        asset_set_error(error_buffer, error_capacity, "Package is missing tree.json entry");
+        success = false;
+    }
+
+    if (success)
+    {
+        if (snprintf(out_tree_json_path, tree_json_capacity, "%s", tree_absolute_path) >=
+            (int)tree_json_capacity)
+        {
+            asset_set_error(error_buffer, error_capacity, "Tree path buffer too small for import");
+            success = false;
+        }
+        else if (snprintf(out_asset_prefix, asset_prefix_capacity, "%s", import_relative) >=
+                 (int)asset_prefix_capacity)
+        {
+            asset_set_error(error_buffer, error_capacity,
+                            "Asset prefix buffer too small for import");
+            success = false;
+        }
+    }
+
+    if (!success)
+    {
+        out_tree_json_path[0] = '\0';
+        out_asset_prefix[0]   = '\0';
+    }
+
+    if (stats)
+    {
+        *stats = local_stats;
+    }
+
+    fclose(package);
+    return success;
 }

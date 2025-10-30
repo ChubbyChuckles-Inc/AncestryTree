@@ -747,6 +747,9 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
 ================================================================================
 
 11.1 Import/Export
+    [x] Implement `.atpkg` import/export workflow
+            [x] Wire File menu import/export actions with progress instrumentation
+            [x] Extract packages into scoped asset prefixes and rewrite tree asset references with tests
   [ ] Implement GEDCOM import
       [ ] Parse GEDCOM format
       [ ] Map to internal data structures

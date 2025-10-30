@@ -1005,3 +1005,18 @@ Saved query stored.
 Saved query applied.
 Screen reader narration enabled.
 Onboarding paused. Re-enable it from Settings when ready.
+Screen reader narration enabled.
+Export request queued.
+Exporting holographic package...
+Exporting holographic package...: 40% complete.
+Exporting holographic package...: 95% complete.
+Exported package to C:\Users\Chuck\Downloads\rickert_tree.atpkg (6 files, 985618 bytes)
+Screen reader narration enabled.
+New tree request queued.
+New placeholder tree created.
+Import request queued.
+Importing holographic package...
+Importing holographic package...: 45% complete.
+Importing holographic package...: 70% complete.
+Importing holographic package...: 95% complete.
+Imported package C:\Users\Chuck\Downloads\rickert_tree.atpkg (6 files, 985618 bytes)

@@ -3,6 +3,7 @@
 #include "app_cli.h"
 #include "assets.h"
 #include "at_log.h"
+#include "at_memory.h"
 #include "camera_controller.h"
 #include "detail_content_builder.h"
 #include "detail_view.h"
@@ -41,6 +42,7 @@
 #define APP_SAVED_QUERIES_PATH "assets/saved_queries.cfg"
 #define APP_LOG_PATH "ancestrytree.log"
 #define APP_ICON_RELATIVE_PATH "assets/app_icon.png"
+#define APP_ASSET_ROOT "assets"
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 
@@ -268,6 +270,144 @@ static bool app_path_relativize_if_under_assets(const char *path, char *output, 
     }
 
     return false;
+}
+
+static bool app_path_is_absolute(const char *path)
+{
+    if (!path || path[0] == '\0')
+    {
+        return false;
+    }
+    if (path[0] == '/' || path[0] == '\\')
+    {
+        return true;
+    }
+    if ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'))
+    {
+        if (path[1] == ':')
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool app_prefix_path(char **field, const char *prefix)
+{
+    if (!field || !prefix || prefix[0] == '\0')
+    {
+        return true;
+    }
+    char *current = *field;
+    if (!current || current[0] == '\0')
+    {
+        return true;
+    }
+    if (app_path_is_absolute(current))
+    {
+        return true;
+    }
+    if (app_path_has_prefix_ci(current, prefix))
+    {
+        return true;
+    }
+
+    size_t prefix_len = strlen(prefix);
+    size_t path_len   = strlen(current);
+    bool prefix_has_sep =
+        prefix_len > 0U && (prefix[prefix_len - 1U] == '/' || prefix[prefix_len - 1U] == '\\');
+    size_t total   = prefix_len + (prefix_has_sep ? 0U : 1U) + path_len + 1U;
+    char *combined = (char *)AT_MALLOC(total);
+    if (!combined)
+    {
+        return false;
+    }
+    size_t offset = 0U;
+    memcpy(combined + offset, prefix, prefix_len);
+    offset += prefix_len;
+    if (!prefix_has_sep)
+    {
+        combined[offset++] = '/';
+    }
+    memcpy(combined + offset, current, path_len);
+    offset += path_len;
+    combined[offset] = '\0';
+    for (size_t index = 0U; index < offset; ++index)
+    {
+        if (combined[index] == '\\')
+        {
+            combined[index] = '/';
+        }
+    }
+    AT_FREE(current);
+    *field = combined;
+    return true;
+}
+
+static bool app_apply_import_asset_prefix(FamilyTree *tree, const char *prefix, char *error_buffer,
+                                          size_t error_capacity)
+{
+    if (!tree || !prefix || prefix[0] == '\0')
+    {
+        return true;
+    }
+    for (size_t person_index = 0U; person_index < tree->person_count; ++person_index)
+    {
+        Person *person = tree->persons[person_index];
+        if (!person)
+        {
+            continue;
+        }
+        if (!app_prefix_path(&person->profile_image_path, prefix))
+        {
+            if (error_buffer && error_capacity > 0U)
+            {
+                (void)snprintf(error_buffer, error_capacity,
+                               "Unable to update profile image path for person %u", person->id);
+            }
+            return false;
+        }
+        if (person->certificate_paths)
+        {
+            for (size_t cert = 0U; cert < person->certificate_count; ++cert)
+            {
+                if (!app_prefix_path(&person->certificate_paths[cert], prefix))
+                {
+                    if (error_buffer && error_capacity > 0U)
+                    {
+                        (void)snprintf(error_buffer, error_capacity,
+                                       "Unable to update certificate path for person %u",
+                                       person->id);
+                    }
+                    return false;
+                }
+            }
+        }
+        if (person->timeline_entries)
+        {
+            for (size_t entry_index = 0U; entry_index < person->timeline_count; ++entry_index)
+            {
+                TimelineEntry *entry = &person->timeline_entries[entry_index];
+                if (!entry || !entry->media_paths)
+                {
+                    continue;
+                }
+                for (size_t media_index = 0U; media_index < entry->media_count; ++media_index)
+                {
+                    if (!app_prefix_path(&entry->media_paths[media_index], prefix))
+                    {
+                        if (error_buffer && error_capacity > 0U)
+                        {
+                            (void)snprintf(error_buffer, error_capacity,
+                                           "Unable to update media path for person %u", person->id);
+                        }
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
 }
 
 typedef enum AppTitlebarButton
@@ -1692,6 +1832,284 @@ static void app_process_ui_event(const UIEvent *event, UIContext *ui, AppFileSta
             app_report_status(ui, logger, message);
         }
         break;
+    case UI_EVENT_IMPORT_PACKAGE:
+    {
+        char dialog_error[256];
+        dialog_error[0] = '\0';
+        char package_path[512];
+        FileDialogFilter filters[] = {{.label = "AncestryTree Packages", .pattern = "*.atpkg"},
+                                      {.label = "All Files", .pattern = "*.*"}};
+        FileDialogOptions options  = {.title        = "Import Package",
+                                      .default_path = APP_ASSET_ROOT,
+                                      .filters      = filters,
+                                      .filter_count = sizeof(filters) / sizeof(filters[0])};
+        if (!file_dialog_open(&options, package_path, sizeof(package_path), dialog_error,
+                              sizeof(dialog_error)))
+        {
+            if (dialog_error[0] != '\0')
+            {
+                char message[320];
+                (void)snprintf(message, sizeof(message), "Import dialog failed: %s", dialog_error);
+                app_report_error(ui, logger, message);
+            }
+            else
+            {
+                app_report_status(ui, logger, "Import request canceled.");
+            }
+            return;
+        }
+
+        bool progress_started = false;
+        if (ui)
+        {
+            ui_progress_begin(ui, "Importing holographic package...");
+            progress_started = true;
+            ui_progress_update(ui, 0.2f);
+        }
+
+        char imported_tree_path[512];
+        char asset_prefix[256];
+        AssetImportStats import_stats;
+        imported_tree_path[0] = '\0';
+        asset_prefix[0]       = '\0';
+
+        if (!asset_import_package(package_path, APP_ASSET_ROOT, imported_tree_path,
+                                  sizeof(imported_tree_path), asset_prefix, sizeof(asset_prefix),
+                                  &import_stats, error_buffer, sizeof(error_buffer)))
+        {
+            char message[320];
+            (void)snprintf(message, sizeof(message), "Import failed: %s", error_buffer);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false, message);
+            }
+            app_report_error(ui, logger, message);
+            return;
+        }
+
+        if (progress_started)
+        {
+            ui_progress_update(ui, 0.45f);
+        }
+
+        FamilyTree *imported_tree =
+            persistence_tree_load(imported_tree_path, error_buffer, sizeof(error_buffer));
+        if (!imported_tree)
+        {
+            char message[320];
+            (void)snprintf(message, sizeof(message), "Failed to load imported tree: %s",
+                           error_buffer);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false, message);
+            }
+            app_report_error(ui, logger, message);
+            return;
+        }
+
+        char prefix_error[256];
+        prefix_error[0] = '\0';
+        if (!app_apply_import_asset_prefix(imported_tree, asset_prefix, prefix_error,
+                                           sizeof(prefix_error)))
+        {
+            const char *detail = (prefix_error[0] != '\0')
+                                     ? prefix_error
+                                     : "Unable to update asset references after import.";
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false, detail);
+            }
+            family_tree_destroy(imported_tree);
+            app_report_error(ui, logger, detail);
+            return;
+        }
+
+        if (!persistence_tree_save(imported_tree, imported_tree_path, error_buffer,
+                                   sizeof(error_buffer)))
+        {
+            char message[320];
+            (void)snprintf(message, sizeof(message), "Failed to finalise imported tree: %s",
+                           error_buffer);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false, message);
+            }
+            family_tree_destroy(imported_tree);
+            app_report_error(ui, logger, message);
+            return;
+        }
+
+        if (progress_started)
+        {
+            ui_progress_update(ui, 0.7f);
+        }
+
+        LayoutAlgorithm algorithm = app_select_layout_algorithm(app_state, settings);
+        if (!app_swap_tree(tree, layout, imported_tree, algorithm))
+        {
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false,
+                                     "Unable to replace current tree with imported data.");
+            }
+            family_tree_destroy(imported_tree);
+            app_report_error(ui, logger, "Unable to replace current tree with imported data.");
+            return;
+        }
+
+        if (app_state)
+        {
+            app_state_on_tree_replaced(app_state);
+            app_state->active_layout_algorithm = algorithm;
+            app_state_reset_history(app_state);
+            app_state_clear_tree_dirty(app_state);
+        }
+
+        app_file_state_set(file_state, imported_tree_path);
+        app_on_tree_changed(layout, interaction_state, render_state, camera, auto_save);
+
+        if (settings)
+        {
+            app_settings_set_last_tree(settings, imported_tree_path);
+        }
+
+        if (progress_started)
+        {
+            ui_progress_update(ui, 0.95f);
+        }
+
+        char status[384];
+        (void)snprintf(status, sizeof(status), "Imported package %s (%zu files, %zu bytes)",
+                       package_path, import_stats.extracted_files, import_stats.extracted_bytes);
+        if (progress_started)
+        {
+            ui_progress_complete(ui, true, status);
+        }
+        app_report_status(ui, logger, status);
+    }
+    break;
+    case UI_EVENT_EXPORT_PACKAGE:
+    {
+        if (!*tree)
+        {
+            app_report_error(ui, logger, "No tree available to export.");
+            return;
+        }
+
+        if (!app_handle_save(*tree, file_state, error_buffer, sizeof(error_buffer)))
+        {
+            char message[320];
+            (void)snprintf(message, sizeof(message), "Export aborted; save failed: %s",
+                           error_buffer);
+            app_report_error(ui, logger, message);
+            return;
+        }
+        if (settings)
+        {
+            app_settings_set_last_tree(settings, file_state->current_path);
+        }
+        if (app_state)
+        {
+            app_state_clear_tree_dirty(app_state);
+        }
+
+        const char *tree_json_path = file_state->current_path;
+        if (!tree_json_path || tree_json_path[0] == '\0')
+        {
+            tree_json_path = APP_DEFAULT_SAVE_PATH;
+        }
+
+        char default_package_path[512];
+        default_package_path[0] = '\0';
+        if (tree_json_path && tree_json_path[0] != '\0')
+        {
+            (void)snprintf(default_package_path, sizeof(default_package_path), "%s",
+                           tree_json_path);
+            char *dot = strrchr(default_package_path, '.');
+            if (dot && dot != default_package_path)
+            {
+                size_t base_len                = (size_t)(dot - default_package_path);
+                default_package_path[base_len] = '\0';
+                (void)snprintf(default_package_path + base_len,
+                               sizeof(default_package_path) - base_len, ".atpkg");
+            }
+            else if (strlen(default_package_path) + 6U < sizeof(default_package_path))
+            {
+                (void)snprintf(default_package_path + strlen(default_package_path),
+                               sizeof(default_package_path) - strlen(default_package_path),
+                               ".atpkg");
+            }
+        }
+        else
+        {
+            (void)snprintf(default_package_path, sizeof(default_package_path), "%s/export.atpkg",
+                           APP_ASSET_ROOT);
+        }
+
+        char dialog_error[256];
+        dialog_error[0] = '\0';
+        char package_path[512];
+        FileDialogFilter filters[] = {{.label = "AncestryTree Packages", .pattern = "*.atpkg"},
+                                      {.label = "All Files", .pattern = "*.*"}};
+        FileDialogOptions options  = {.title        = "Export Package",
+                                      .default_path = default_package_path,
+                                      .filters      = filters,
+                                      .filter_count = sizeof(filters) / sizeof(filters[0])};
+        if (!file_dialog_save(&options, package_path, sizeof(package_path), dialog_error,
+                              sizeof(dialog_error)))
+        {
+            if (dialog_error[0] != '\0')
+            {
+                char message[320];
+                (void)snprintf(message, sizeof(message), "Export dialog failed: %s", dialog_error);
+                app_report_error(ui, logger, message);
+            }
+            else
+            {
+                app_report_status(ui, logger, "Export request canceled.");
+            }
+            return;
+        }
+        if (!file_dialog_ensure_extension(package_path, sizeof(package_path), ".atpkg"))
+        {
+            app_report_error(ui, logger,
+                             "Unable to append .atpkg extension to export destination.");
+            return;
+        }
+
+        bool progress_started = false;
+        if (ui)
+        {
+            ui_progress_begin(ui, "Exporting holographic package...");
+            progress_started = true;
+            ui_progress_update(ui, 0.4f);
+        }
+
+        AssetExportStats export_stats;
+        if (!asset_export(*tree, APP_ASSET_ROOT, tree_json_path, package_path, &export_stats,
+                          error_buffer, sizeof(error_buffer)))
+        {
+            char message[320];
+            (void)snprintf(message, sizeof(message), "Export failed: %s", error_buffer);
+            if (progress_started)
+            {
+                ui_progress_complete(ui, false, message);
+            }
+            app_report_error(ui, logger, message);
+            return;
+        }
+
+        char status[384];
+        (void)snprintf(status, sizeof(status), "Exported package to %s (%zu files, %zu bytes)",
+                       package_path, export_stats.exported_files, export_stats.exported_bytes);
+        if (progress_started)
+        {
+            ui_progress_update(ui, 0.95f);
+            ui_progress_complete(ui, true, status);
+        }
+        app_report_status(ui, logger, status);
+    }
+    break;
     case UI_EVENT_DELETE_PERSON:
     {
         uint32_t person_id = event->param_u32;

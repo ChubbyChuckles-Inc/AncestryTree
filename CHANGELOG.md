@@ -140,5 +140,8 @@ All notable changes to this project will be documented in this file. The format 
   media, enabling portable sharing with automated regression coverage.
 - Debug builds now activate a central allocation tracker with leak diagnostics, runtime stats queries, and new unit
   tests verifying realloc safety and outstanding allocation reporting.
+- Package import/export workflow adds File menu actions for `.atpkg` archives, unpacks assets into scoped import
+  prefixes, rewrites tree references post-import, updates persistence on the fly, and introduces unit tests covering
+  package extraction success and malformed archive rejection.
 - Centralised `event_process` orchestration ties together window resize handling, pointer interactions, and shortcut
   routing while powering new unit tests that exercise shortcut and UI queue dispatch without raylib dependencies.

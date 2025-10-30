@@ -1,19 +1,20 @@
 #include "test_framework.h"
 
 #include "assets.h"
+#include "at_string.h"
 #include "person.h"
 #include "timeline.h"
 #include "tree.h"
-#include "at_string.h"
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 
 #if defined(_WIN32)
 #include <direct.h>
+#include <sys/stat.h>
 #else
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -57,14 +58,72 @@ static bool testfs_remove_file(const char *path)
     return remove(path) == 0 || errno == ENOENT;
 }
 
+static bool testfs_directory_exists(const char *path)
+{
+    if (!path)
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    struct _stat info;
+    if (_stat(path, &info) != 0)
+    {
+        return false;
+    }
+    return (info.st_mode & _S_IFDIR) != 0;
+#else
+    struct stat info;
+    if (stat(path, &info) != 0)
+    {
+        return false;
+    }
+    return S_ISDIR(info.st_mode);
+#endif
+}
+
 static bool testfs_write_sample(const char *path, const unsigned char *data, size_t size)
 {
     if (!path || !data || size == 0U)
     {
+        printf("[testfs] invalid arguments path=%p data=%p size=%zu\n", (void *)path, (void *)data,
+               size);
         return false;
     }
+
+    size_t path_len = strlen(path);
+    if (path_len == 0U || path_len >= 512U)
+    {
+        printf("[testfs] invalid path length for %s (len=%zu)\n", path ? path : "<null>", path_len);
+        return false;
+    }
+
+    char path_buffer[512];
+    memcpy(path_buffer, path, path_len + 1U);
+    for (size_t index = 0U; index < path_len; ++index)
+    {
+        if (path_buffer[index] == '/' || path_buffer[index] == '\\')
+        {
+            char saved         = path_buffer[index];
+            path_buffer[index] = '\0';
+            size_t prefix_len  = strlen(path_buffer);
+            bool is_drive_root = prefix_len == 2U && path_buffer[1] == ':';
+            if (prefix_len > 0U && !is_drive_root)
+            {
+                if (!testfs_create_directory(path_buffer))
+                {
+                    printf("[testfs] failed to create directory %s (errno=%d)\n", path_buffer,
+                           errno);
+                    path_buffer[index] = saved;
+                    return false;
+                }
+            }
+            path_buffer[index] = saved;
+        }
+    }
+
     FILE *file = NULL;
 #if defined(_WIN32)
+    errno = 0;
     if (fopen_s(&file, path, "wb") != 0)
     {
         file = NULL;
@@ -74,9 +133,15 @@ static bool testfs_write_sample(const char *path, const unsigned char *data, siz
 #endif
     if (!file)
     {
+        printf("[testfs] failed to open %s: errno=%d\n", path, errno);
         return false;
     }
     size_t written = fwrite(data, 1U, size, file);
+    if (written != size)
+    {
+        printf("[testfs] write error for %s (written=%zu, expected=%zu, ferror=%d, errno=%d)\n",
+               path, written, size, ferror(file), errno);
+    }
     fclose(file);
     return written == size;
 }
@@ -172,7 +237,8 @@ static FamilyTree *test_create_tree_with_person(uint32_t id)
         return NULL;
     }
     if (!person_set_name(person, "Test", NULL, "Person") ||
-        !person_set_birth(person, "1990-01-01", "Testville") || !family_tree_add_person(tree, person))
+        !person_set_birth(person, "1990-01-01", "Testville") ||
+        !family_tree_add_person(tree, person))
     {
         person_destroy(person);
         family_tree_destroy(tree);
@@ -198,7 +264,7 @@ static bool test_assign_profile(Person *person, const char *relative_path)
 
 static void test_asset_copy_creates_destination(void)
 {
-    const char *root_dir = "Testing/Temporary/asset_copy_root";
+    const char *root_dir    = "Testing/Temporary/asset_copy_root";
     const char *imports_dir = "Testing/Temporary/asset_copy_root/imports";
     const char *source_path = "Testing/Temporary/asset_copy_source.bin";
     unsigned char payload[] = {0x42, 0x19, 0x7E, 0xAA, 0x00, 0xFF};
@@ -212,10 +278,10 @@ static void test_asset_copy_creates_destination(void)
     ASSERT_TRUE(testfs_write_sample(source_path, payload, sizeof(payload)));
 
     AssetCopyRequest request;
-    request.source_path = source_path;
-    request.asset_root = root_dir;
+    request.source_path  = source_path;
+    request.asset_root   = root_dir;
     request.subdirectory = "imports";
-    request.name_prefix = "profile";
+    request.name_prefix  = "profile";
 
     char relative[256];
     char error[128];
@@ -247,7 +313,7 @@ static void test_asset_copy_creates_destination(void)
 
 static void test_asset_copy_generates_unique_names(void)
 {
-    const char *root_dir = "Testing/Temporary/asset_copy_unique";
+    const char *root_dir    = "Testing/Temporary/asset_copy_unique";
     const char *source_path = "Testing/Temporary/asset_copy_unique.bin";
     unsigned char payload[] = {0x11, 0x22, 0x33, 0x44};
 
@@ -258,10 +324,10 @@ static void test_asset_copy_generates_unique_names(void)
     ASSERT_TRUE(testfs_write_sample(source_path, payload, sizeof(payload)));
 
     AssetCopyRequest request;
-    request.source_path = source_path;
-    request.asset_root = root_dir;
+    request.source_path  = source_path;
+    request.asset_root   = root_dir;
     request.subdirectory = NULL;
-    request.name_prefix = "asset";
+    request.name_prefix  = "asset";
 
     char relative_a[128];
     char relative_b[128];
@@ -275,10 +341,10 @@ static void test_asset_copy_generates_unique_names(void)
 static void test_asset_copy_missing_source_reports_error(void)
 {
     AssetCopyRequest request;
-    request.source_path = "Testing/Temporary/does_not_exist.bin";
-    request.asset_root = "Testing/Temporary/asset_error";
+    request.source_path  = "Testing/Temporary/does_not_exist.bin";
+    request.asset_root   = "Testing/Temporary/asset_error";
     request.subdirectory = "imports";
-    request.name_prefix = NULL;
+    request.name_prefix  = NULL;
 
     char error[128];
     char relative[32];
@@ -289,12 +355,12 @@ static void test_asset_copy_missing_source_reports_error(void)
 
 static void test_asset_cleanup_removes_unreferenced_files(void)
 {
-    const char *root_dir = "Testing/Temporary/asset_cleanup_case1";
-    const char *imports_dir = "Testing/Temporary/asset_cleanup_case1/imports";
-    const char *profile_rel = "imports/profile.png";
+    const char *root_dir        = "Testing/Temporary/asset_cleanup_case1";
+    const char *imports_dir     = "Testing/Temporary/asset_cleanup_case1/imports";
+    const char *profile_rel     = "imports/profile.png";
     const char *certificate_rel = "imports/certificate.pdf";
-    const char *media_rel = "imports/event.png";
-    const char *orphan_rel = "imports/orphan.bin";
+    const char *media_rel       = "imports/event.png";
+    const char *orphan_rel      = "imports/orphan.bin";
 
     ASSERT_TRUE(testfs_create_directory("Testing"));
     ASSERT_TRUE(testfs_create_directory("Testing/Temporary"));
@@ -308,7 +374,8 @@ static void test_asset_cleanup_removes_unreferenced_files(void)
 
     int written = snprintf(profile_abs, sizeof(profile_abs), "%s/%s", root_dir, profile_rel);
     ASSERT_TRUE(written > 0 && (size_t)written < sizeof(profile_abs));
-    written = snprintf(certificate_abs, sizeof(certificate_abs), "%s/%s", root_dir, certificate_rel);
+    written =
+        snprintf(certificate_abs, sizeof(certificate_abs), "%s/%s", root_dir, certificate_rel);
     ASSERT_TRUE(written > 0 && (size_t)written < sizeof(certificate_abs));
     written = snprintf(media_abs, sizeof(media_abs), "%s/%s", root_dir, media_rel);
     ASSERT_TRUE(written > 0 && (size_t)written < sizeof(media_abs));
@@ -361,10 +428,10 @@ static void test_asset_cleanup_removes_unreferenced_files(void)
 
 static void test_asset_cleanup_detects_missing_files(void)
 {
-    const char *root_dir = "Testing/Temporary/asset_cleanup_case2";
+    const char *root_dir    = "Testing/Temporary/asset_cleanup_case2";
     const char *imports_dir = "Testing/Temporary/asset_cleanup_case2/imports";
     const char *profile_rel = "imports/missing.png";
-    const char *orphan_rel = "imports/remains.bin";
+    const char *orphan_rel  = "imports/remains.bin";
 
     ASSERT_TRUE(testfs_create_directory("Testing"));
     ASSERT_TRUE(testfs_create_directory("Testing/Temporary"));
@@ -401,11 +468,11 @@ static void test_asset_cleanup_detects_missing_files(void)
 
 static void test_asset_export_builds_package(void)
 {
-    const char *base_dir = "Testing/Temporary/asset_export_case1";
-    const char *root_dir = "Testing/Temporary/asset_export_case1/assets";
-    const char *imports_dir = "Testing/Temporary/asset_export_case1/assets/imports";
+    const char *base_dir       = "Testing/Temporary/asset_export_case1";
+    const char *root_dir       = "Testing/Temporary/asset_export_case1/assets";
+    const char *imports_dir    = "Testing/Temporary/asset_export_case1/assets/imports";
     const char *tree_json_path = "Testing/Temporary/asset_export_case1/tree.json";
-    const char *package_path = "Testing/Temporary/asset_export_case1/export.atpkg";
+    const char *package_path   = "Testing/Temporary/asset_export_case1/export.atpkg";
 
     ASSERT_TRUE(testfs_create_directory("Testing"));
     ASSERT_TRUE(testfs_create_directory("Testing/Temporary"));
@@ -419,7 +486,8 @@ static void test_asset_export_builds_package(void)
 
     int written = snprintf(profile_abs, sizeof(profile_abs), "%s/imports/profile.png", root_dir);
     ASSERT_TRUE(written > 0 && (size_t)written < sizeof(profile_abs));
-    written = snprintf(certificate_abs, sizeof(certificate_abs), "%s/imports/certificate.pdf", root_dir);
+    written =
+        snprintf(certificate_abs, sizeof(certificate_abs), "%s/imports/certificate.pdf", root_dir);
     ASSERT_TRUE(written > 0 && (size_t)written < sizeof(certificate_abs));
     written = snprintf(media_abs, sizeof(media_abs), "%s/imports/event.png", root_dir);
     ASSERT_TRUE(written > 0 && (size_t)written < sizeof(media_abs));
@@ -428,12 +496,13 @@ static void test_asset_export_builds_package(void)
     (void)testfs_remove_file(certificate_abs);
     (void)testfs_remove_file(media_abs);
 
-    const unsigned char profile_payload[] = {0x10, 0x20, 0x30, 0x40};
+    const unsigned char profile_payload[]     = {0x10, 0x20, 0x30, 0x40};
     const unsigned char certificate_payload[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE};
-    const unsigned char media_payload[] = {0x55, 0x66, 0x77};
+    const unsigned char media_payload[]       = {0x55, 0x66, 0x77};
 
     ASSERT_TRUE(testfs_write_sample(profile_abs, profile_payload, sizeof(profile_payload)));
-    ASSERT_TRUE(testfs_write_sample(certificate_abs, certificate_payload, sizeof(certificate_payload)));
+    ASSERT_TRUE(
+        testfs_write_sample(certificate_abs, certificate_payload, sizeof(certificate_payload)));
     ASSERT_TRUE(testfs_write_sample(media_abs, media_payload, sizeof(media_payload)));
 
     FamilyTree *tree = test_create_tree_with_person(303U);
@@ -450,17 +519,19 @@ static void test_asset_export_builds_package(void)
     timeline_entry_reset(&entry);
 
     const char tree_json[] = "{\"name\":\"Export Test\"}";
-    ASSERT_TRUE(testfs_write_sample(tree_json_path, (const unsigned char *)tree_json, strlen(tree_json)));
+    ASSERT_TRUE(
+        testfs_write_sample(tree_json_path, (const unsigned char *)tree_json, strlen(tree_json)));
     (void)testfs_remove_file(package_path);
 
     AssetExportStats stats;
     char error[128];
-    ASSERT_TRUE(asset_export(tree, root_dir, tree_json_path, package_path, &stats, error, sizeof(error)));
+    ASSERT_TRUE(
+        asset_export(tree, root_dir, tree_json_path, package_path, &stats, error, sizeof(error)));
     ASSERT_STREQ(error, "");
     ASSERT_EQ(stats.referenced_files, 3U);
     ASSERT_EQ(stats.exported_files, 4U);
-    ASSERT_TRUE(stats.exported_bytes >= sizeof(profile_payload) + sizeof(certificate_payload) +
-                                            sizeof(media_payload));
+    ASSERT_TRUE(stats.exported_bytes >=
+                sizeof(profile_payload) + sizeof(certificate_payload) + sizeof(media_payload));
 
     FILE *package = NULL;
 #if defined(_WIN32)
@@ -478,7 +549,7 @@ static void test_asset_export_builds_package(void)
     ASSERT_EQ(magic_read, sizeof(magic));
     ASSERT_TRUE(memcmp(magic, "ATPKG", sizeof(magic)) == 0);
 
-    uint32_t version = 0U;
+    uint32_t version    = 0U;
     uint32_t file_total = 0U;
     ASSERT_TRUE(testpkg_read_u32(package, &version));
     ASSERT_TRUE(testpkg_read_u32(package, &file_total));
@@ -486,7 +557,7 @@ static void test_asset_export_builds_package(void)
     ASSERT_EQ(file_total, 4U);
 
     uint16_t path_length = 0U;
-    uint64_t entry_size = 0U;
+    uint64_t entry_size  = 0U;
 
     ASSERT_TRUE(testpkg_read_u16(package, &path_length));
     ASSERT_TRUE(path_length < 128U);
@@ -520,7 +591,8 @@ static void test_asset_export_builds_package(void)
         if (strcmp(path_buffer, "assets/imports/certificate.pdf") == 0)
         {
             ASSERT_EQ(entry_size, sizeof(certificate_payload));
-            ASSERT_TRUE(memcmp(payload_buffer, certificate_payload, sizeof(certificate_payload)) == 0);
+            ASSERT_TRUE(memcmp(payload_buffer, certificate_payload, sizeof(certificate_payload)) ==
+                        0);
         }
         else if (strcmp(path_buffer, "assets/imports/event.png") == 0)
         {
@@ -550,11 +622,11 @@ static void test_asset_export_builds_package(void)
 
 static void test_asset_export_fails_when_asset_missing(void)
 {
-    const char *base_dir = "Testing/Temporary/asset_export_case2";
-    const char *root_dir = "Testing/Temporary/asset_export_case2/assets";
-    const char *imports_dir = "Testing/Temporary/asset_export_case2/assets/imports";
+    const char *base_dir       = "Testing/Temporary/asset_export_case2";
+    const char *root_dir       = "Testing/Temporary/asset_export_case2/assets";
+    const char *imports_dir    = "Testing/Temporary/asset_export_case2/assets/imports";
     const char *tree_json_path = "Testing/Temporary/asset_export_case2/tree.json";
-    const char *package_path = "Testing/Temporary/asset_export_case2/export.atpkg";
+    const char *package_path   = "Testing/Temporary/asset_export_case2/export.atpkg";
 
     ASSERT_TRUE(testfs_create_directory("Testing"));
     ASSERT_TRUE(testfs_create_directory("Testing/Temporary"));
@@ -566,7 +638,8 @@ static void test_asset_export_fails_when_asset_missing(void)
     (void)testfs_remove_file(missing_asset);
 
     const char tree_json[] = "{\"name\":\"Missing Asset\"}";
-    ASSERT_TRUE(testfs_write_sample(tree_json_path, (const unsigned char *)tree_json, strlen(tree_json)));
+    ASSERT_TRUE(
+        testfs_write_sample(tree_json_path, (const unsigned char *)tree_json, strlen(tree_json)));
 
     FamilyTree *tree = test_create_tree_with_person(404U);
     ASSERT_NOT_NULL(tree);
@@ -576,7 +649,8 @@ static void test_asset_export_fails_when_asset_missing(void)
 
     AssetExportStats stats;
     char error[128];
-    bool result = asset_export(tree, root_dir, tree_json_path, package_path, &stats, error, sizeof(error));
+    bool result =
+        asset_export(tree, root_dir, tree_json_path, package_path, &stats, error, sizeof(error));
     ASSERT_FALSE(result);
     ASSERT_TRUE(strlen(error) > 0U);
     ASSERT_EQ(stats.exported_files, 0U);
@@ -584,6 +658,151 @@ static void test_asset_export_fails_when_asset_missing(void)
 
     family_tree_destroy(tree);
     (void)testfs_remove_file(tree_json_path);
+}
+
+static void test_asset_import_extracts_package(void)
+{
+    const char *base_dir_export = "Testing/Temporary/asset_import_case/export";
+    const char *base_dir_import = "Testing/Temporary/asset_import_case/import";
+    const char *export_root     = "Testing/Temporary/asset_import_case/export/assets";
+    const char *import_root     = "Testing/Temporary/asset_import_case/import/assets";
+    const char *tree_json_path  = "Testing/Temporary/asset_import_case/export/tree.json";
+    const char *package_path    = "Testing/Temporary/asset_import_case/export/export.atpkg";
+
+    ASSERT_TRUE(testfs_create_directory("Testing"));
+    ASSERT_TRUE(testfs_create_directory("Testing/Temporary"));
+    ASSERT_TRUE(testfs_create_directory("Testing/Temporary/asset_import_case"));
+    ASSERT_TRUE(testfs_create_directory(base_dir_export));
+    ASSERT_TRUE(testfs_create_directory(export_root));
+    ASSERT_TRUE(testfs_create_directory(base_dir_import));
+    ASSERT_TRUE(testfs_create_directory(import_root));
+
+    int written = 0;
+    char export_profiles_dir[256];
+    char export_imports_dir[256];
+    written = snprintf(export_profiles_dir, sizeof(export_profiles_dir), "%s/%s", export_root,
+                       "profiles");
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(export_profiles_dir));
+    written =
+        snprintf(export_imports_dir, sizeof(export_imports_dir), "%s/%s", export_root, "imports");
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(export_imports_dir));
+
+    ASSERT_TRUE(testfs_create_directory(export_profiles_dir));
+    ASSERT_TRUE(testfs_create_directory(export_imports_dir));
+    ASSERT_TRUE(testfs_directory_exists(export_profiles_dir));
+    ASSERT_TRUE(testfs_directory_exists(export_imports_dir));
+
+    const char *profile_rel     = "profiles/sample_profile.png";
+    const char *certificate_rel = "imports/sample_certificate.pdf";
+
+    char profile_abs[256];
+    char certificate_abs[256];
+
+    written = snprintf(profile_abs, sizeof(profile_abs), "%s/%s", export_root, profile_rel);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(profile_abs));
+    written =
+        snprintf(certificate_abs, sizeof(certificate_abs), "%s/%s", export_root, certificate_rel);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(certificate_abs));
+
+    (void)testfs_remove_file(profile_abs);
+    (void)testfs_remove_file(certificate_abs);
+    (void)testfs_remove_file(tree_json_path);
+    (void)testfs_remove_file(package_path);
+
+    const unsigned char profile_payload[]     = {0x11, 0x22, 0x33, 0x44};
+    const unsigned char certificate_payload[] = {0xAB, 0xCD, 0xEF};
+
+    ASSERT_TRUE(testfs_write_sample(profile_abs, profile_payload, sizeof(profile_payload)));
+    ASSERT_TRUE(
+        testfs_write_sample(certificate_abs, certificate_payload, sizeof(certificate_payload)));
+
+    FamilyTree *tree = test_create_tree_with_person(505U);
+    ASSERT_NOT_NULL(tree);
+    ASSERT_EQ(tree->person_count, 1U);
+    Person *person = tree->persons[0];
+    ASSERT_TRUE(test_assign_profile(person, profile_rel));
+    ASSERT_TRUE(person_add_certificate(person, certificate_rel));
+
+    const char tree_json[] = "{\"metadata\":{\"name\":\"Import Test\"}}";
+    ASSERT_TRUE(
+        testfs_write_sample(tree_json_path, (const unsigned char *)tree_json, strlen(tree_json)));
+
+    AssetExportStats export_stats;
+    char error[128];
+    ASSERT_TRUE(asset_export(tree, export_root, tree_json_path, package_path, &export_stats, error,
+                             sizeof(error)));
+    ASSERT_STREQ(error, "");
+    family_tree_destroy(tree);
+
+    char imported_tree_path[256];
+    char asset_prefix[128];
+    AssetImportStats import_stats;
+    imported_tree_path[0] = '\0';
+    asset_prefix[0]       = '\0';
+
+    ASSERT_TRUE(asset_import_package(package_path, import_root, imported_tree_path,
+                                     sizeof(imported_tree_path), asset_prefix, sizeof(asset_prefix),
+                                     &import_stats, error, sizeof(error)));
+    ASSERT_STREQ(error, "");
+    ASSERT_TRUE(import_stats.extracted_files >= 2U);
+    ASSERT_TRUE(strlen(imported_tree_path) > 0U);
+    ASSERT_TRUE(strlen(asset_prefix) > 0U);
+
+    ASSERT_TRUE(testfs_file_exists(imported_tree_path));
+    size_t import_root_len = strlen(import_root);
+    ASSERT_TRUE(strncmp(imported_tree_path, import_root, import_root_len) == 0);
+
+    char imported_profile[256];
+    char imported_certificate[256];
+    written = snprintf(imported_profile, sizeof(imported_profile), "%s/%s/%s", import_root,
+                       asset_prefix, profile_rel);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(imported_profile));
+    written = snprintf(imported_certificate, sizeof(imported_certificate), "%s/%s/%s", import_root,
+                       asset_prefix, certificate_rel);
+    ASSERT_TRUE(written > 0 && (size_t)written < sizeof(imported_certificate));
+
+    ASSERT_TRUE(testfs_file_exists(imported_profile));
+    ASSERT_TRUE(testfs_file_exists(imported_certificate));
+
+    FILE *profile_file = NULL;
+#if defined(_WIN32)
+    if (fopen_s(&profile_file, imported_profile, "rb") != 0)
+    {
+        profile_file = NULL;
+    }
+#else
+    profile_file = fopen(imported_profile, "rb");
+#endif
+    ASSERT_NOT_NULL(profile_file);
+    unsigned char buffer[8];
+    size_t read = fread(buffer, 1U, sizeof(profile_payload), profile_file);
+    fclose(profile_file);
+    ASSERT_EQ(read, sizeof(profile_payload));
+    ASSERT_TRUE(memcmp(buffer, profile_payload, sizeof(profile_payload)) == 0);
+}
+
+static void test_asset_import_rejects_invalid_package(void)
+{
+    const char *package_path = "Testing/Temporary/asset_import_invalid/export.atpkg";
+    const char *asset_root   = "Testing/Temporary/asset_import_invalid/assets";
+
+    ASSERT_TRUE(testfs_create_directory("Testing"));
+    ASSERT_TRUE(testfs_create_directory("Testing/Temporary"));
+    ASSERT_TRUE(testfs_create_directory("Testing/Temporary/asset_import_invalid"));
+    ASSERT_TRUE(testfs_create_directory(asset_root));
+
+    const unsigned char bogus[] = {'B', 'A', 'D'};
+    ASSERT_TRUE(testfs_write_sample(package_path, bogus, sizeof(bogus)));
+
+    char tree_path[64];
+    char prefix[64];
+    AssetImportStats import_stats;
+    char error[128];
+
+    bool result = asset_import_package(package_path, asset_root, tree_path, sizeof(tree_path),
+                                       prefix, sizeof(prefix), &import_stats, error, sizeof(error));
+    ASSERT_FALSE(result);
+    ASSERT_TRUE(strlen(error) > 0U);
 }
 
 void register_assets_tests(TestRegistry *registry)
@@ -595,4 +814,6 @@ void register_assets_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_asset_cleanup_detects_missing_files);
     REGISTER_TEST(registry, test_asset_export_builds_package);
     REGISTER_TEST(registry, test_asset_export_fails_when_asset_missing);
+    REGISTER_TEST(registry, test_asset_import_extracts_package);
+    REGISTER_TEST(registry, test_asset_import_rejects_invalid_package);
 }

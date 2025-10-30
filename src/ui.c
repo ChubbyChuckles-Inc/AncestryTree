@@ -4371,6 +4371,17 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                     ui_internal_set_status(internal, "Event queue full; open aborted.");
                 }
             }
+            if (ui_nav_menu_item_label(internal, ctx, "Import Package...", NK_TEXT_LEFT))
+            {
+                if (ui_event_enqueue(ui, UI_EVENT_IMPORT_PACKAGE))
+                {
+                    ui_internal_set_status(internal, "Import request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; import aborted.");
+                }
+            }
             if (ui_nav_menu_item_label(internal, ctx, "Save", NK_TEXT_LEFT))
             {
                 if (ui_event_enqueue(ui, UI_EVENT_SAVE_TREE))
@@ -4391,6 +4402,17 @@ static void ui_draw_menu_bar(UIInternal *internal, UIContext *ui, const FamilyTr
                 else
                 {
                     ui_internal_set_status(internal, "Event queue full; Save As aborted.");
+                }
+            }
+            if (ui_nav_menu_item_label(internal, ctx, "Export Package...", NK_TEXT_LEFT))
+            {
+                if (ui_event_enqueue(ui, UI_EVENT_EXPORT_PACKAGE))
+                {
+                    ui_internal_set_status(internal, "Export request queued.");
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Event queue full; export aborted.");
                 }
             }
             if (ui_nav_menu_item_label(internal, ctx, "Exit", NK_TEXT_LEFT))

@@ -235,7 +235,7 @@
         }
       ],
       "certificates": [],
-      "profile_image": "imports/import_1761863378041/profiles/profile_1761656151000.png",
+      "profile_image": "profiles/profile_1761656151000.png",
       "timeline": [
       ],
       "metadata": {
@@ -315,7 +315,7 @@
       "spouses": [
       ],
       "certificates": [],
-      "profile_image": "imports/import_1761863378041/profiles/profile_1761615267000.png",
+      "profile_image": "profiles/profile_1761615267000.png",
       "timeline": [
       ],
       "metadata": {
@@ -374,7 +374,7 @@
           "marriage_location": ""
         }
       ],
-      "certificates": ["imports/import_1761863378041/certificates/certificate_1761729269000.jpeg"],
+      "certificates": ["certificates/certificate_1761729269000.jpeg"],
       "profile_image": "",
       "timeline": [
         {
@@ -488,7 +488,7 @@
       "spouses": [
       ],
       "certificates": [],
-      "profile_image": "imports/import_1761863378041/profiles/profile_1761656227000.png",
+      "profile_image": "profiles/profile_1761656227000.png",
       "timeline": [
       ],
       "metadata": {
@@ -568,7 +568,7 @@
       "spouses": [
       ],
       "certificates": [],
-      "profile_image": "imports/import_1761863378041/profiles/profile_1761691388000.png",
+      "profile_image": "profiles/profile_1761691388000.png",
       "timeline": [
       ],
       "metadata": {
