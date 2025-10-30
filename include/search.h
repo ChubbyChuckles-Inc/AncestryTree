@@ -37,6 +37,9 @@ extern "C"
     size_t search_execute(const FamilyTree *tree, const SearchFilter *filter,
                           const Person **out_results, size_t capacity);
 
+    bool search_validate_expression(SearchQueryMode mode, const char *expression,
+                                    char *error_message, size_t error_capacity);
+
 #ifdef __cplusplus
 }
 #endif

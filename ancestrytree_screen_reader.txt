@@ -1003,3 +1003,5 @@ Onboarding paused. Re-enable it from Settings when ready.
 Saved query name required.
 Saved query stored.
 Saved query applied.
+Screen reader narration enabled.
+Onboarding paused. Re-enable it from Settings when ready.

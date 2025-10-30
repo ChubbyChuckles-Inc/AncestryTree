@@ -253,10 +253,37 @@ static bool search_match_substring(const Person *person, const SearchEvaluationC
     return strstr(lowered, context->substring) != NULL;
 }
 
-static bool search_boolean_tokenize(const char *expression, SearchToken *tokens, size_t *out_count)
+static void search_set_error(char *buffer, size_t capacity, const char *message)
+{
+    if (!buffer || capacity == 0U)
+    {
+        return;
+    }
+#if defined(_MSC_VER)
+    if (message)
+    {
+        (void)strncpy_s(buffer, capacity, message, _TRUNCATE);
+    }
+    else
+    {
+        buffer[0] = '\0';
+    }
+#else
+    if (!message)
+    {
+        buffer[0] = '\0';
+        return;
+    }
+    (void)snprintf(buffer, capacity, "%s", message);
+#endif
+}
+
+static bool search_boolean_tokenize(const char *expression, SearchToken *tokens, size_t *out_count,
+                                    char *error_message, size_t error_capacity)
 {
     if (!expression || !tokens || !out_count)
     {
+        search_set_error(error_message, error_capacity, "Boolean parser received null input.");
         return false;
     }
     size_t count  = 0U;
@@ -274,6 +301,8 @@ static bool search_boolean_tokenize(const char *expression, SearchToken *tokens,
         }
         if (count >= SEARCH_BOOLEAN_MAX_TOKENS)
         {
+            search_set_error(error_message, error_capacity,
+                             "Expression contains too many terms or operators.");
             return false;
         }
         if (ch == '(')
@@ -311,6 +340,8 @@ static bool search_boolean_tokenize(const char *expression, SearchToken *tokens,
             }
             if (write + 1U >= sizeof(buffer))
             {
+                search_set_error(error_message, error_capacity,
+                                 "A search term exceeds the 64 character limit.");
                 return false;
             }
             buffer[write++] = (char)tolower((unsigned char)ch);
@@ -318,6 +349,8 @@ static bool search_boolean_tokenize(const char *expression, SearchToken *tokens,
         }
         if (in_quotes)
         {
+            search_set_error(error_message, error_capacity,
+                             "Mismatched quotes detected in expression.");
             return false;
         }
         buffer[write] = '\0';
@@ -348,6 +381,7 @@ static bool search_boolean_tokenize(const char *expression, SearchToken *tokens,
         count++;
     }
     *out_count = count;
+    search_set_error(error_message, error_capacity, NULL);
     return true;
 }
 
@@ -371,22 +405,122 @@ static bool search_boolean_is_right_associative(SearchTokenType type)
     return type == SEARCH_TOKEN_NOT;
 }
 
-static bool search_boolean_compile(const char *expression, SearchBooleanProgram *program)
+static bool search_boolean_validate_sequence(const SearchToken *tokens, size_t count,
+                                             char *error_message, size_t error_capacity)
+{
+    if (!tokens && count > 0U)
+    {
+        search_set_error(error_message, error_capacity, "Boolean parser received null input.");
+        return false;
+    }
+    int paren_balance   = 0;
+    bool expect_operand = true;
+    bool last_was_not   = false;
+    for (size_t index = 0U; index < count; ++index)
+    {
+        SearchTokenType type = tokens[index].type;
+        switch (type)
+        {
+        case SEARCH_TOKEN_TERM:
+            if (!expect_operand && !last_was_not)
+            {
+                search_set_error(error_message, error_capacity,
+                                 "Missing operator between search terms.");
+                return false;
+            }
+            expect_operand = false;
+            last_was_not   = false;
+            break;
+        case SEARCH_TOKEN_NOT:
+            if (!expect_operand)
+            {
+                search_set_error(error_message, error_capacity,
+                                 "NOT must precede a term or group.");
+                return false;
+            }
+            expect_operand = true;
+            last_was_not   = true;
+            break;
+        case SEARCH_TOKEN_AND:
+        case SEARCH_TOKEN_OR:
+            if (expect_operand)
+            {
+                search_set_error(error_message, error_capacity,
+                                 "Operator requires a term before it.");
+                return false;
+            }
+            expect_operand = true;
+            last_was_not   = false;
+            break;
+        case SEARCH_TOKEN_LPAREN:
+            if (!expect_operand && !last_was_not)
+            {
+                search_set_error(error_message, error_capacity,
+                                 "Missing operator before parenthesis.");
+                return false;
+            }
+            paren_balance++;
+            expect_operand = true;
+            last_was_not   = false;
+            break;
+        case SEARCH_TOKEN_RPAREN:
+            if (expect_operand)
+            {
+                search_set_error(error_message, error_capacity,
+                                 "Closing parenthesis cannot follow an operator.");
+                return false;
+            }
+            paren_balance--;
+            if (paren_balance < 0)
+            {
+                search_set_error(error_message, error_capacity, "Mismatched parentheses.");
+                return false;
+            }
+            expect_operand = false;
+            last_was_not   = false;
+            break;
+        default:
+            break;
+        }
+    }
+    if (paren_balance != 0)
+    {
+        search_set_error(error_message, error_capacity, "Mismatched parentheses.");
+        return false;
+    }
+    if (expect_operand && count > 0U)
+    {
+        search_set_error(error_message, error_capacity, "Expression cannot end with an operator.");
+        return false;
+    }
+    search_set_error(error_message, error_capacity, NULL);
+    return true;
+}
+
+static bool search_boolean_compile(const char *expression, SearchBooleanProgram *program,
+                                   char *error_message, size_t error_capacity)
 {
     if (!expression || !program)
     {
+        search_set_error(error_message, error_capacity, "Boolean parser received null input.");
         return false;
     }
     SearchToken tokens[SEARCH_BOOLEAN_MAX_TOKENS];
     size_t token_count = 0U;
-    if (!search_boolean_tokenize(expression, tokens, &token_count))
+    if (!search_boolean_tokenize(expression, tokens, &token_count, error_message, error_capacity))
     {
         return false;
     }
     if (token_count == 0U)
     {
         program->count = 0U;
+        search_set_error(error_message, error_capacity, NULL);
         return true;
+    }
+
+    if (!search_boolean_validate_sequence(tokens, token_count, error_message, error_capacity))
+    {
+        return false;
     }
 
     SearchToken stack[SEARCH_BOOLEAN_MAX_TOKENS];
@@ -399,6 +533,8 @@ static bool search_boolean_compile(const char *expression, SearchBooleanProgram 
         {
             if (output_count >= SEARCH_BOOLEAN_MAX_TOKENS)
             {
+                search_set_error(error_message, error_capacity,
+                                 "Expression exceeds complexity limit (too many terms).");
                 return false;
             }
             program->items[output_count++] = token;
@@ -423,6 +559,8 @@ static bool search_boolean_compile(const char *expression, SearchBooleanProgram 
                 {
                     if (output_count >= SEARCH_BOOLEAN_MAX_TOKENS)
                     {
+                        search_set_error(error_message, error_capacity,
+                                         "Expression exceeds complexity limit (too many terms).");
                         return false;
                     }
                     program->items[output_count++] = stack[stack_count - 1U];
@@ -454,12 +592,15 @@ static bool search_boolean_compile(const char *expression, SearchBooleanProgram 
                 }
                 if (output_count >= SEARCH_BOOLEAN_MAX_TOKENS)
                 {
+                    search_set_error(error_message, error_capacity,
+                                     "Expression exceeds complexity limit (too many terms).");
                     return false;
                 }
                 program->items[output_count++] = top;
             }
             if (!matched)
             {
+                search_set_error(error_message, error_capacity, "Mismatched parentheses.");
                 return false;
             }
         }
@@ -469,15 +610,19 @@ static bool search_boolean_compile(const char *expression, SearchBooleanProgram 
         SearchToken top = stack[--stack_count];
         if (top.type == SEARCH_TOKEN_LPAREN || top.type == SEARCH_TOKEN_RPAREN)
         {
+            search_set_error(error_message, error_capacity, "Mismatched parentheses.");
             return false;
         }
         if (output_count >= SEARCH_BOOLEAN_MAX_TOKENS)
         {
+            search_set_error(error_message, error_capacity,
+                             "Expression exceeds complexity limit (too many terms).");
             return false;
         }
         program->items[output_count++] = top;
     }
     program->count = output_count;
+    search_set_error(error_message, error_capacity, NULL);
     return true;
 }
 
@@ -698,7 +843,7 @@ static bool search_prepare_context(SearchEvaluationContext *context, const Searc
         lowercase_copy(context->substring, sizeof(context->substring), expression);
         break;
     case SEARCH_QUERY_MODE_BOOLEAN:
-        if (!search_boolean_compile(expression, &context->boolean_program))
+        if (!search_boolean_compile(expression, &context->boolean_program, NULL, 0U))
         {
             return false;
         }
@@ -879,4 +1024,31 @@ size_t search_execute(const FamilyTree *tree, const SearchFilter *filter,
         qsort(out_results, count_to_sort, sizeof(out_results[0]), search_compare_persons);
     }
     return count_to_sort;
+}
+
+bool search_validate_expression(SearchQueryMode mode, const char *expression, char *error_message,
+                                size_t error_capacity)
+{
+    if (!expression || expression[0] == '\0')
+    {
+        search_set_error(error_message, error_capacity, NULL);
+        return true;
+    }
+    switch (mode)
+    {
+    case SEARCH_QUERY_MODE_BOOLEAN:
+    {
+        SearchBooleanProgram program;
+        return search_boolean_compile(expression, &program, error_message, error_capacity);
+    }
+    case SEARCH_QUERY_MODE_REGEX:
+        /* Current lightweight regex engine treats all patterns as literals except '.','*','^','$'.
+         * No structural validation needed beyond length checks performed by callers. */
+        search_set_error(error_message, error_capacity, NULL);
+        return true;
+    case SEARCH_QUERY_MODE_SUBSTRING:
+    default:
+        search_set_error(error_message, error_capacity, NULL);
+        return true;
+    }
 }

@@ -226,6 +226,19 @@ DECLARE_TEST(test_search_regex_matches_name_prefix)
     family_tree_destroy(tree);
 }
 
+DECLARE_TEST(test_search_boolean_validation_reports_errors)
+{
+    char error[128];
+    ASSERT_FALSE(
+        search_validate_expression(SEARCH_QUERY_MODE_BOOLEAN, "alive AND", error, sizeof(error)));
+    ASSERT_TRUE(error[0] != '\0');
+    ASSERT_TRUE(strstr(error, "operator") != NULL);
+
+    ASSERT_TRUE(search_validate_expression(SEARCH_QUERY_MODE_BOOLEAN,
+                                           "alive AND NOT metadata:pilot", error, sizeof(error)));
+    ASSERT_TRUE(error[0] == '\0');
+}
+
 DECLARE_TEST(test_search_saved_rejects_duplicate_names)
 {
     SearchSavedQueryList list;
@@ -284,6 +297,7 @@ void register_search_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_search_boolean_combines_terms);
     REGISTER_TEST(registry, test_search_boolean_metadata_clause);
     REGISTER_TEST(registry, test_search_regex_matches_name_prefix);
+    REGISTER_TEST(registry, test_search_boolean_validation_reports_errors);
     REGISTER_TEST(registry, test_search_saved_rejects_duplicate_names);
     REGISTER_TEST(registry, test_search_saved_persistence_round_trip);
 }

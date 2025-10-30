@@ -759,10 +759,10 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
       [ ] Person details pages
 
 11.2 Search & Analytics
-  [ ] Advanced search features
-      [ ] Boolean queries
-      [ ] Regular expressions
-      [ ] Saved searches
+  [x] Advanced search features
+      [x] Boolean queries
+      [x] Regular expressions
+      [x] Saved searches
   [x] Tree statistics
       [x] Number of generations
       [x] Average lifespan

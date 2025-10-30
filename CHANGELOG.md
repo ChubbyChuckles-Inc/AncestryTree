@@ -118,6 +118,8 @@ All notable changes to this project will be documented in this file. The format 
   disk persistence, runtime application, and dedicated unit coverage for settings runtime helpers.
 - Search and filter panel providing live name queries, alive/deceased toggles, birth-year constraints, and one-click
   camera focus for selected results, supported by a direct-selection interaction helper.
+- Advanced search overhaul with substring, boolean, and regex modes, saved query persistence, inline validation
+  feedback, usage guidance, and expanded unit tests covering boolean evaluation and query diagnostics.
 - Search execution module with targeted unit tests plus an integration workflow test that exercises create/save/load
   round-tripping via the persistence layer.
 - Centralised `AppState` layer managing UI mode flags, selection state, undo/redo stacks, and tree dirty tracking with

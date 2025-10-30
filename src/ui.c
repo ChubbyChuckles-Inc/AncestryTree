@@ -130,6 +130,8 @@ typedef struct UIInternal
     UIScreenReaderState screen_reader;
     SearchQueryMode search_query_mode;
     char search_expression[SEARCH_QUERY_MAX_EXPRESSION_LENGTH];
+    bool search_expression_valid;
+    char search_expression_error[128];
     bool search_include_alive;
     bool search_include_deceased;
     bool search_use_birth_year_range;
@@ -2418,14 +2420,6 @@ static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
     {
         return;
     }
-    if (!tree)
-    {
-        ui_search_clear_results(internal);
-        internal->search_last_tree = NULL;
-        internal->search_dirty     = false;
-        return;
-    }
-
     const Person *matches[UI_SEARCH_MAX_RESULTS];
     SearchFilter filter;
     memset(&filter, 0, sizeof(filter));
@@ -2439,6 +2433,27 @@ static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
     const char *expression =
         (internal->search_expression[0] != '\0') ? internal->search_expression : NULL;
 
+    char validation_error[sizeof(internal->search_expression_error)];
+    bool expression_valid = search_validate_expression(internal->search_query_mode, expression,
+                                                       validation_error, sizeof(validation_error));
+    if (!expression_valid)
+    {
+#if defined(_MSC_VER)
+        (void)strncpy_s(internal->search_expression_error,
+                        sizeof(internal->search_expression_error), validation_error, _TRUNCATE);
+#else
+        (void)snprintf(internal->search_expression_error, sizeof(internal->search_expression_error),
+                       "%s", validation_error);
+#endif
+        internal->search_expression_valid = false;
+        ui_search_clear_results(internal);
+        internal->search_last_tree = tree;
+        internal->search_dirty     = false;
+        return;
+    }
+    internal->search_expression_valid    = true;
+    internal->search_expression_error[0] = '\0';
+
     if (internal->search_query_mode == SEARCH_QUERY_MODE_SUBSTRING)
     {
         filter.name_substring   = expression;
@@ -2448,6 +2463,14 @@ static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
     {
         filter.name_substring   = NULL;
         filter.query_expression = expression;
+    }
+
+    if (!tree)
+    {
+        ui_search_clear_results(internal);
+        internal->search_last_tree = NULL;
+        internal->search_dirty     = false;
+        return;
     }
 
     size_t count = search_execute(tree, &filter, matches, UI_SEARCH_MAX_RESULTS);
@@ -2538,7 +2561,9 @@ static void ui_search_apply_saved_query(UIInternal *internal, const SearchSavedQ
     (void)snprintf(internal->search_expression, sizeof(internal->search_expression), "%s",
                    entry->expression);
 #endif
-    internal->search_dirty = true;
+    internal->search_expression_valid    = true;
+    internal->search_expression_error[0] = '\0';
+    internal->search_dirty               = true;
 }
 #endif
 
@@ -2817,6 +2842,27 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         {
             request_refresh                       = true;
             internal->search_saved_selected_index = -1;
+        }
+
+        if (!internal->search_expression_valid && internal->search_expression_error[0] != '\0')
+        {
+            nk_layout_row_dynamic(ctx, 18.0f, 1);
+            struct nk_color warning = internal->theme.warning_color;
+            nk_label_colored(ctx, internal->search_expression_error, NK_TEXT_LEFT, warning);
+        }
+
+        if (internal->search_query_mode == SEARCH_QUERY_MODE_BOOLEAN)
+        {
+            nk_layout_row_dynamic(ctx, 36.0f, 1);
+            nk_label_wrap(ctx, "Use AND / OR / NOT with fields such as name:, birth:, death:, "
+                               "location:, timeline:, metadata:, id:, alive, deceased.");
+        }
+        else if (internal->search_query_mode == SEARCH_QUERY_MODE_REGEX)
+        {
+            nk_layout_row_dynamic(ctx, 36.0f, 1);
+            nk_label_wrap(ctx,
+                          "Supports ^, $, ., and * wildcards. Matching runs across the person's "
+                          "full text record (name, dates, metadata, timeline).");
         }
 
         if (internal->search_saved_available)
@@ -3104,6 +3150,8 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         {
             internal->search_query_mode           = SEARCH_QUERY_MODE_SUBSTRING;
             internal->search_expression[0]        = '\0';
+            internal->search_expression_valid     = true;
+            internal->search_expression_error[0]  = '\0';
             internal->search_include_alive        = true;
             internal->search_include_deceased     = true;
             internal->search_use_birth_year_range = false;
@@ -4874,6 +4922,8 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->show_analytics_panel        = false;
     internal->search_query_mode           = SEARCH_QUERY_MODE_SUBSTRING;
     internal->search_expression[0]        = '\0';
+    internal->search_expression_valid     = true;
+    internal->search_expression_error[0]  = '\0';
     internal->search_include_alive        = true;
     internal->search_include_deceased     = true;
     internal->search_use_birth_year_range = false;
