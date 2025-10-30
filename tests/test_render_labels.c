@@ -4,6 +4,7 @@
 #include "test_framework.h"
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+#include <math.h>
 #include <raylib.h>
 #endif
 
@@ -37,6 +38,7 @@ TEST(test_render_labels_cache_reuses_texture)
     ASSERT_TRUE(render_labels_acquire(&system, person, false, 26.0f, &info_first));
     ASSERT_TRUE(info_first.valid);
     unsigned int first_texture_id = info_first.texture.id;
+    Rectangle first_region        = info_first.region;
     render_labels_end_frame(&system);
 
     render_labels_begin_frame(&system);
@@ -44,6 +46,10 @@ TEST(test_render_labels_cache_reuses_texture)
     ASSERT_TRUE(render_labels_acquire(&system, person, false, 26.0f, &info_second));
     ASSERT_TRUE(info_second.valid);
     ASSERT_EQ(first_texture_id, info_second.texture.id);
+    ASSERT_FLOAT_NEAR(first_region.x, info_second.region.x, 0.01f);
+    ASSERT_FLOAT_NEAR(first_region.y, info_second.region.y, 0.01f);
+    ASSERT_FLOAT_NEAR(first_region.width, info_second.region.width, 0.01f);
+    ASSERT_FLOAT_NEAR(first_region.height, info_second.region.height, 0.01f);
     render_labels_end_frame(&system);
 
     render_labels_shutdown(&system);
@@ -84,9 +90,12 @@ TEST(test_render_labels_distinct_font_sizes_generate_unique_textures)
     RenderLabelInfo info_large;
     ASSERT_TRUE(render_labels_acquire(&system, person, false, 36.0f, &info_large));
     ASSERT_TRUE(info_large.valid);
-    ASSERT_NE(info_small.texture.id, info_large.texture.id);
+    ASSERT_TRUE(info_large.width_pixels > info_small.width_pixels);
+    ASSERT_TRUE(info_large.region.width >= info_large.width_pixels - 0.5f);
     ASSERT_FLOAT_NEAR(info_small.font_size, 24.0f, 1.0f);
     ASSERT_FLOAT_NEAR(info_large.font_size, 36.0f, 1.0f);
+    ASSERT_FALSE(fabsf(info_small.region.x - info_large.region.x) < 0.5f &&
+                 fabsf(info_small.region.y - info_large.region.y) < 0.5f);
     render_labels_end_frame(&system);
 
     render_labels_shutdown(&system);

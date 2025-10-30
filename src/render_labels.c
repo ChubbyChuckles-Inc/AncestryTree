@@ -13,7 +13,245 @@
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 #include <raymath.h>
-#endif
+
+#define RENDER_LABEL_ATLAS_INITIAL_DIMENSION 2048
+#define RENDER_LABEL_ATLAS_MAX_DIMENSION 4096
+#define RENDER_LABEL_ATLAS_PADDING 4
+#define RENDER_LABEL_CANVAS_POOL_SIZE 8
+
+static void render_labels_destroy_canvas_slot(RenderLabelCanvasSlot *slot)
+{
+    if (!slot)
+    {
+        return;
+    }
+    if (slot->image.data)
+    {
+        UnloadImage(slot->image);
+        slot->image.data = NULL;
+    }
+    slot->image.width   = 0;
+    slot->image.height  = 0;
+    slot->image.mipmaps = 1;
+    slot->image.format  = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+    slot->in_use        = false;
+}
+
+static bool render_labels_canvas_prepare(RenderLabelCanvasSlot *slot, int width, int height,
+                                         RenderLabelSystem *system)
+{
+    if (!slot || width <= 0 || height <= 0)
+    {
+        return false;
+    }
+    if (!slot->image.data)
+    {
+        slot->image = GenImageColor(width, height, (Color){0, 0, 0, 0});
+        if (!slot->image.data)
+        {
+            return false;
+        }
+        if (system)
+        {
+            system->stats.canvas_creations++;
+        }
+        return true;
+    }
+    if (slot->image.width == width && slot->image.height == height)
+    {
+        return true;
+    }
+    ImageResizeCanvas(&slot->image, width, height, 0, 0, (Color){0, 0, 0, 0});
+    if (slot->image.width != width || slot->image.height != height)
+    {
+        UnloadImage(slot->image);
+        slot->image = GenImageColor(width, height, (Color){0, 0, 0, 0});
+        if (!slot->image.data)
+        {
+            return false;
+        }
+        if (system)
+        {
+            system->stats.canvas_creations++;
+        }
+    }
+    return true;
+}
+
+static RenderLabelCanvasSlot *render_labels_canvas_acquire(RenderLabelSystem *system, int width,
+                                                           int height)
+{
+    if (!system || width <= 0 || height <= 0)
+    {
+        return NULL;
+    }
+    RenderLabelCanvasSlot *best_slot  = NULL;
+    RenderLabelCanvasSlot *empty_slot = NULL;
+    for (size_t index = 0U; index < RENDER_LABEL_CANVAS_POOL_SIZE; ++index)
+    {
+        RenderLabelCanvasSlot *slot = &system->canvas_pool[index];
+        if (slot->in_use)
+        {
+            continue;
+        }
+        if (!slot->image.data)
+        {
+            if (!empty_slot)
+            {
+                empty_slot = slot;
+            }
+            continue;
+        }
+        if (slot->image.width >= width && slot->image.height >= height)
+        {
+            best_slot = slot;
+            break;
+        }
+        if (!best_slot)
+        {
+            best_slot = slot;
+        }
+    }
+
+    RenderLabelCanvasSlot *chosen = best_slot ? best_slot : empty_slot;
+    if (!chosen)
+    {
+        return NULL;
+    }
+    if (!render_labels_canvas_prepare(chosen, width, height, system))
+    {
+        return NULL;
+    }
+    ImageClearBackground(&chosen->image, (Color){0, 0, 0, 0});
+    chosen->in_use = true;
+    return chosen;
+}
+
+static void render_labels_canvas_release(RenderLabelCanvasSlot *slot)
+{
+    if (!slot)
+    {
+        return;
+    }
+    slot->in_use = false;
+}
+
+static bool render_labels_atlas_reinitialize(RenderLabelSystem *system, int dimension,
+                                             bool count_as_reset)
+{
+    if (!system)
+    {
+        return false;
+    }
+    texture_atlas_shutdown(&system->atlas);
+    if (!texture_atlas_init(&system->atlas, dimension, dimension, RENDER_LABEL_ATLAS_PADDING))
+    {
+        system->atlas_initialized = false;
+        return false;
+    }
+    system->atlas_initialized = true;
+    system->atlas_dirty       = false;
+    system->atlas_compressed  = false;
+    system->atlas_dimension   = dimension;
+    system->count             = 0U;
+    for (size_t index = 0U; index < system->capacity; ++index)
+    {
+        system->entries[index].person_id     = 0U;
+        system->entries[index].signature[0]  = '\0';
+        system->entries[index].region.x      = 0;
+        system->entries[index].region.y      = 0;
+        system->entries[index].region.width  = 0;
+        system->entries[index].region.height = 0;
+        system->entries[index].width_pixels  = 0.0f;
+        system->entries[index].height_pixels = 0.0f;
+        system->entries[index].font_size     = 0.0f;
+        system->entries[index].in_use        = false;
+    }
+    if (count_as_reset)
+    {
+        system->stats.atlas_resets++;
+    }
+    return true;
+}
+
+static bool render_labels_finalize_atlas(RenderLabelSystem *system)
+{
+    if (!system || !system->atlas_initialized)
+    {
+        return false;
+    }
+    if (system->atlas_dirty)
+    {
+        if (!texture_atlas_finalize(&system->atlas))
+        {
+            return false;
+        }
+        system->atlas_dirty      = false;
+        system->atlas_compressed = false;
+    }
+    return texture_atlas_ready(&system->atlas);
+}
+
+static bool render_labels_grow_atlas(RenderLabelSystem *system)
+{
+    if (!system)
+    {
+        return false;
+    }
+    int current = system->atlas_dimension;
+    if (current <= 0)
+    {
+        current = RENDER_LABEL_ATLAS_INITIAL_DIMENSION;
+    }
+    int next_dimension = current * 2;
+    if (next_dimension > RENDER_LABEL_ATLAS_MAX_DIMENSION)
+    {
+        return false;
+    }
+    if (!render_labels_atlas_reinitialize(system, next_dimension, true))
+    {
+        return false;
+    }
+    system->stats.atlas_grows++;
+    return true;
+}
+
+static bool render_labels_pack_canvas(RenderLabelSystem *system, RenderLabelEntry *entry,
+                                      const Image *canvas)
+{
+    if (!system || !entry || !canvas)
+    {
+        return false;
+    }
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        if (!system->atlas_initialized)
+        {
+            if (!render_labels_atlas_reinitialize(system, RENDER_LABEL_ATLAS_INITIAL_DIMENSION,
+                                                  false))
+            {
+                return false;
+            }
+        }
+        TextureAtlasRegion region;
+        if (texture_atlas_pack_image(&system->atlas, canvas, &region))
+        {
+            entry->region            = region;
+            entry->width_pixels      = (float)region.width;
+            entry->height_pixels     = (float)region.height;
+            system->atlas_dirty      = true;
+            system->atlas_compressed = false;
+            return true;
+        }
+        if (!render_labels_grow_atlas(system))
+        {
+            break;
+        }
+    }
+    return false;
+}
+
+#endif /* ANCESTRYTREE_HAVE_RAYLIB */
 
 static bool render_labels_reset(RenderLabelSystem *system)
 {
@@ -22,19 +260,15 @@ static bool render_labels_reset(RenderLabelSystem *system)
         return false;
     }
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    for (size_t index = 0U; index < system->count; ++index)
+    for (size_t index = 0U; index < RENDER_LABEL_CANVAS_POOL_SIZE; ++index)
     {
-        RenderLabelEntry *entry = &system->entries[index];
-        if (entry->texture.id != 0)
-        {
-            UnloadTexture(entry->texture);
-            entry->texture.id = 0;
-        }
-        entry->in_use        = false;
-        entry->signature[0]  = '\0';
-        entry->width_pixels  = 0.0f;
-        entry->height_pixels = 0.0f;
-        entry->font_size     = 0.0f;
+        system->canvas_pool[index].in_use = false;
+    }
+    int dimension = system->atlas_dimension > 0 ? system->atlas_dimension
+                                                : RENDER_LABEL_ATLAS_INITIAL_DIMENSION;
+    if (!render_labels_atlas_reinitialize(system, dimension, true))
+    {
+        return false;
     }
 #endif
     return true;
@@ -56,6 +290,19 @@ bool render_labels_init(RenderLabelSystem *system)
     system->entries                 = NULL;
     system->count                   = 0U;
     system->capacity                = 0U;
+    system->atlas_initialized       = false;
+    system->atlas_dirty             = false;
+    system->atlas_compressed        = false;
+    system->atlas_dimension         = RENDER_LABEL_ATLAS_INITIAL_DIMENSION;
+    for (size_t index = 0U; index < RENDER_LABEL_CANVAS_POOL_SIZE; ++index)
+    {
+        system->canvas_pool[index].image.data = NULL;
+        system->canvas_pool[index].in_use     = false;
+    }
+    if (!render_labels_atlas_reinitialize(system, system->atlas_dimension, false))
+    {
+        return false;
+    }
 #endif
     return true;
 }
@@ -79,15 +326,16 @@ static bool render_labels_ensure_capacity(RenderLabelSystem *system)
     }
     for (size_t index = system->capacity; index < new_capacity; ++index)
     {
-        entries[index].person_id      = 0U;
-        entries[index].signature[0]   = '\0';
-        entries[index].texture.id     = 0;
-        entries[index].texture.width  = 0;
-        entries[index].texture.height = 0;
-        entries[index].width_pixels   = 0.0f;
-        entries[index].height_pixels  = 0.0f;
-        entries[index].font_size      = 0.0f;
-        entries[index].in_use         = false;
+        entries[index].person_id     = 0U;
+        entries[index].signature[0]  = '\0';
+        entries[index].region.x      = 0;
+        entries[index].region.y      = 0;
+        entries[index].region.width  = 0;
+        entries[index].region.height = 0;
+        entries[index].width_pixels  = 0.0f;
+        entries[index].height_pixels = 0.0f;
+        entries[index].font_size     = 0.0f;
+        entries[index].in_use        = false;
     }
     system->entries  = entries;
     system->capacity = new_capacity;
@@ -102,7 +350,15 @@ void render_labels_shutdown(RenderLabelSystem *system)
         return;
     }
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    render_labels_reset(system);
+    for (size_t index = 0U; index < RENDER_LABEL_CANVAS_POOL_SIZE; ++index)
+    {
+        render_labels_destroy_canvas_slot(&system->canvas_pool[index]);
+    }
+    texture_atlas_shutdown(&system->atlas);
+    system->atlas_initialized = false;
+    system->atlas_dirty       = false;
+    system->atlas_compressed  = false;
+    system->atlas_dimension   = 0;
     AT_FREE(system->entries);
     system->entries        = NULL;
     system->count          = 0U;
@@ -131,22 +387,34 @@ void render_labels_end_frame(RenderLabelSystem *system)
     {
         return;
     }
-#if defined(ANCESTRYTREE_HAVE_RAYLIB)
-    for (size_t index = 0U; index < system->count; ++index)
-    {
-        RenderLabelEntry *entry = &system->entries[index];
-        if (!entry->in_use && entry->texture.id != 0)
-        {
-            UnloadTexture(entry->texture);
-            entry->texture.id    = 0;
-            entry->width_pixels  = 0.0f;
-            entry->height_pixels = 0.0f;
-            entry->signature[0]  = '\0';
-            entry->person_id     = 0U;
-        }
-    }
-#endif
+    (void)system;
 }
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+void render_labels_get_stats(const RenderLabelSystem *system, RenderLabelStats *out_stats)
+{
+    if (!out_stats)
+    {
+        return;
+    }
+    if (!system)
+    {
+        memset(out_stats, 0, sizeof(*out_stats));
+        return;
+    }
+    *out_stats = system->stats;
+}
+#else
+void render_labels_get_stats(const RenderLabelSystem *system, RenderLabelStats *out_stats)
+{
+    (void)system;
+    if (!out_stats)
+    {
+        return;
+    }
+    memset(out_stats, 0, sizeof(*out_stats));
+}
+#endif
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
 static float render_labels_clamp_font_size(float value)
@@ -346,7 +614,7 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
     Vector2 text_size   = MeasureTextEx(font, name_buffer, font_size, spacing);
     int padding         = (int)(font_size * 0.6f);
     int portrait_pixels = 0;
-    Image profile_image = {0};
+    Image profile_image = (Image){0};
     bool profile_loaded = false;
 
     if (include_profile && person && person->profile_image_path &&
@@ -387,10 +655,19 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
         height = 32;
     }
 
-    Image canvas = GenImageColor(width, height, (Color){0, 0, 0, 0});
-    render_labels_draw_gradient(&canvas, width, height, system->background_color_top,
+    RenderLabelCanvasSlot *slot = render_labels_canvas_acquire(system, width, height);
+    if (!slot)
+    {
+        if (profile_loaded)
+        {
+            UnloadImage(profile_image);
+        }
+        return false;
+    }
+    Image *canvas = &slot->image;
+    render_labels_draw_gradient(canvas, width, height, system->background_color_top,
                                 system->background_color_bottom);
-    ImageDrawRectangleLines(&canvas,
+    ImageDrawRectangleLines(canvas,
                             (Rectangle){1.0f, 1.0f, (float)(width - 2), (float)(height - 2)}, 2,
                             system->frame_color);
 
@@ -400,31 +677,24 @@ static bool render_labels_build_texture(RenderLabelSystem *system, RenderLabelEn
         Rectangle dst_rect = {(float)padding,
                               (float)(padding + (content_height - portrait_pixels) / 2),
                               (float)portrait_pixels, (float)portrait_pixels};
-        ImageDraw(&canvas, profile_image, src_rect, dst_rect, WHITE);
+        ImageDraw(canvas, profile_image, src_rect, dst_rect, WHITE);
         UnloadImage(profile_image);
     }
 
     Vector2 text_position = {
         (float)(padding + portrait_pixels + (portrait_pixels > 0 ? padding / 2 : 0)),
         (float)(padding + (content_height - text_height) / 2)};
-    ImageDrawTextEx(&canvas, font, name_buffer, text_position, font_size, spacing,
+    ImageDrawTextEx(canvas, font, name_buffer, text_position, font_size, spacing,
                     system->text_color);
 
-    Texture2D texture = LoadTextureFromImage(canvas);
-    UnloadImage(canvas);
-    if (texture.id == 0)
+    bool packed = render_labels_pack_canvas(system, entry, canvas);
+    render_labels_canvas_release(slot);
+    if (!packed)
     {
         return false;
     }
-    if (IsTextureReady(texture))
-    {
-        GenTextureMipmaps(&texture);
-        SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
-    }
-    entry->texture       = texture;
-    entry->width_pixels  = (float)texture.width;
-    entry->height_pixels = (float)texture.height;
-    entry->font_size     = font_size;
+
+    entry->font_size = font_size;
     return true;
 }
 #endif
@@ -460,18 +730,33 @@ bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool
     for (size_t index = 0U; index < system->count; ++index)
     {
         RenderLabelEntry *entry = &system->entries[index];
-        if (entry->person_id == person->id && entry->texture.id != 0 &&
-            strcmp(entry->signature, signature) == 0 && fabsf(entry->font_size - font_size) < 0.05f)
+        bool signature_matches  = (entry->person_id == person->id) &&
+                                 (entry->region.width > 0 && entry->region.height > 0) &&
+                                 (strcmp(entry->signature, signature) == 0) &&
+                                 (fabsf(entry->font_size - font_size) < 0.05f);
+        if (signature_matches)
         {
-            entry->in_use           = true;
-            out_info->texture       = entry->texture;
+            entry->in_use = true;
+            if (!render_labels_finalize_atlas(system))
+            {
+                return false;
+            }
+            size_t entry_index = (size_t)(entry - system->entries);
+            if (system->count <= entry_index)
+            {
+                system->count = entry_index + 1U;
+            }
+            Texture2D atlas_texture = texture_atlas_texture(&system->atlas);
+            out_info->texture       = atlas_texture;
+            out_info->region        = (Rectangle){(float)entry->region.x, (float)entry->region.y,
+                                                  (float)entry->region.width, (float)entry->region.height};
             out_info->width_pixels  = entry->width_pixels;
             out_info->height_pixels = entry->height_pixels;
             out_info->font_size     = entry->font_size;
             out_info->valid         = true;
             return true;
         }
-        if (!available_entry && entry->texture.id == 0)
+        if (!available_entry && entry->person_id == 0U)
         {
             available_entry = entry;
         }
@@ -490,7 +775,10 @@ bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool
     {
         available_entry->person_id     = 0U;
         available_entry->signature[0]  = '\0';
-        available_entry->texture.id    = 0;
+        available_entry->region.x      = 0;
+        available_entry->region.y      = 0;
+        available_entry->region.width  = 0;
+        available_entry->region.height = 0;
         available_entry->width_pixels  = 0.0f;
         available_entry->height_pixels = 0.0f;
         available_entry->font_size     = 0.0f;
@@ -502,7 +790,32 @@ bool render_labels_acquire(RenderLabelSystem *system, const Person *person, bool
     (void)snprintf(available_entry->signature, sizeof(available_entry->signature), "%s", signature);
     available_entry->in_use = true;
 
-    out_info->texture       = available_entry->texture;
+    if (!render_labels_finalize_atlas(system))
+    {
+        available_entry->person_id     = 0U;
+        available_entry->signature[0]  = '\0';
+        available_entry->region.x      = 0;
+        available_entry->region.y      = 0;
+        available_entry->region.width  = 0;
+        available_entry->region.height = 0;
+        available_entry->width_pixels  = 0.0f;
+        available_entry->height_pixels = 0.0f;
+        available_entry->font_size     = 0.0f;
+        available_entry->in_use        = false;
+        return false;
+    }
+
+    size_t entry_index = (size_t)(available_entry - system->entries);
+    if (system->count <= entry_index)
+    {
+        system->count = entry_index + 1U;
+    }
+
+    Texture2D atlas_texture = texture_atlas_texture(&system->atlas);
+    out_info->texture       = atlas_texture;
+    out_info->region =
+        (Rectangle){(float)available_entry->region.x, (float)available_entry->region.y,
+                    (float)available_entry->region.width, (float)available_entry->region.height};
     out_info->width_pixels  = available_entry->width_pixels;
     out_info->height_pixels = available_entry->height_pixels;
     out_info->font_size     = available_entry->font_size;

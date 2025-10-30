@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
+#include "texture_atlas.h"
 #include <raylib.h>
 #endif
 
@@ -14,6 +15,7 @@ typedef struct RenderLabelInfo
 {
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     Texture2D texture;
+    Rectangle region;
     float width_pixels;
     float height_pixels;
     float font_size;
@@ -31,7 +33,7 @@ typedef struct RenderLabelEntry
 #if defined(ANCESTRYTREE_HAVE_RAYLIB)
     unsigned int person_id;
     char signature[256];
-    Texture2D texture;
+    TextureAtlasRegion region;
     float width_pixels;
     float height_pixels;
     float font_size;
@@ -42,6 +44,21 @@ typedef struct RenderLabelEntry
     bool in_use;
 #endif
 } RenderLabelEntry;
+
+typedef struct RenderLabelStats
+{
+    size_t canvas_creations;
+    size_t atlas_resets;
+    size_t atlas_grows;
+} RenderLabelStats;
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+typedef struct RenderLabelCanvasSlot
+{
+    Image image;
+    bool in_use;
+} RenderLabelCanvasSlot;
+#endif
 
 typedef struct RenderLabelSystem
 {
@@ -54,6 +71,13 @@ typedef struct RenderLabelSystem
     Color background_color_top;
     Color background_color_bottom;
     Color frame_color;
+    TextureAtlas atlas;
+    bool atlas_initialized;
+    bool atlas_dirty;
+    bool atlas_compressed;
+    int atlas_dimension;
+    RenderLabelCanvasSlot canvas_pool[8];
+    RenderLabelStats stats;
 #else
     RenderLabelEntry *entries;
     size_t count;
@@ -67,7 +91,8 @@ void render_labels_shutdown(RenderLabelSystem *system);
 void render_labels_begin_frame(RenderLabelSystem *system);
 void render_labels_end_frame(RenderLabelSystem *system);
 void render_labels_set_base_font_size(RenderLabelSystem *system, float font_size);
-bool render_labels_acquire(RenderLabelSystem *system, const struct Person *person, bool include_profile,
-                           float font_size, RenderLabelInfo *out_info);
+bool render_labels_acquire(RenderLabelSystem *system, const struct Person *person,
+                           bool include_profile, float font_size, RenderLabelInfo *out_info);
+void render_labels_get_stats(const RenderLabelSystem *system, RenderLabelStats *out_stats);
 
 #endif /* RENDER_LABELS_H */

@@ -2148,7 +2148,7 @@ static void render_draw_label(RenderState *state, const LayoutResult *layout,
         return;
     }
 
-    Rectangle source       = {0.0f, 0.0f, (float)info.texture.width, (float)info.texture.height};
+    Rectangle source       = info.region;
     Vector3 base_position  = {node->position[0], node->position[1], node->position[2]};
     float vertical_offset  = fmaxf(state->config.sphere_radius * 1.6f, 0.5f);
     Vector3 offset         = {state->config.name_panel_offset_x, state->config.name_panel_offset_y,

@@ -1020,3 +1020,5 @@ Importing holographic package...: 45% complete.
 Importing holographic package...: 70% complete.
 Importing holographic package...: 95% complete.
 Imported package C:\Users\Chuck\Downloads\rickert_tree.atpkg (6 files, 985618 bytes)
+Screen reader narration enabled.
+Irmgard Rickert selected, deceased with 1 timeline events.
