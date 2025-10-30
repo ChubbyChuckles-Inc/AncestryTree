@@ -776,9 +776,6 @@ PHASE 11: ADVANCED FEATURES (FUTURE)
       [ ] Attach audio recordings
       [ ] Attach video clips
       [ ] Playback in detail view
-  [ ] OCR for certificates
-      [ ] Extract text from images
-      [ ] Search within documents
 
 11.4 Localization
   [ ] Internationalization framework

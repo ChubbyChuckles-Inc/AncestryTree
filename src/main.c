@@ -38,6 +38,7 @@
 #define APP_DEFAULT_SAVE_PATH "assets/manual_save.json"
 #define APP_SETTINGS_PATH "assets/settings.cfg"
 #define APP_AUTO_SAVE_PATH "assets/auto_save.json"
+#define APP_SAVED_QUERIES_PATH "assets/saved_queries.cfg"
 #define APP_LOG_PATH "ancestrytree.log"
 #define APP_ICON_RELATIVE_PATH "assets/app_icon.png"
 
@@ -3397,6 +3398,21 @@ static int app_run(AtLogger *logger, const AppLaunchOptions *options)
 
     if (ui_ready)
     {
+        const char *search_storage_path = APP_SAVED_QUERIES_PATH;
+#if defined(ANCESTRYTREE_HAVE_RAYLIB)
+        char resolved_search_path[512];
+        if (app_try_find_asset(APP_SAVED_QUERIES_PATH, resolved_search_path,
+                               sizeof(resolved_search_path)))
+        {
+            search_storage_path = resolved_search_path;
+        }
+#endif
+        if (!ui_configure_search_storage(&ui, search_storage_path))
+        {
+            AT_LOG(logger, AT_LOG_WARN,
+                   "Saved query storage unavailable; advanced search persistence disabled.");
+        }
+
         if (initial_status[0] != '\0')
         {
             (void)ui_notify_status(&ui, initial_status);

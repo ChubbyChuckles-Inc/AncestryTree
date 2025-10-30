@@ -125,6 +125,7 @@ typedef struct UIEditPersonRequest
 
 bool ui_init(UIContext *ui, int width, int height);
 void ui_resize(UIContext *ui, int width, int height);
+bool ui_configure_search_storage(UIContext *ui, const char *path);
 void ui_cleanup(UIContext *ui);
 void ui_shutdown(UIContext *ui);
 

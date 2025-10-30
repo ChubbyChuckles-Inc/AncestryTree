@@ -3,6 +3,7 @@
 #include "at_memory.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -47,6 +48,104 @@ static int search_saved_casecmp(const char *lhs, const char *rhs)
         index++;
     }
     return search_saved_casefold_char(lhs[index]) - search_saved_casefold_char(rhs[index]);
+}
+
+static void search_saved_trim(char *text)
+{
+    if (!text)
+    {
+        return;
+    }
+    size_t length = strlen(text);
+    while (length > 0U)
+    {
+        char c = text[length - 1U];
+        if (c == '\n' || c == '\r' || c == '\t' || c == ' ')
+        {
+            text[length - 1U] = '\0';
+            --length;
+        }
+        else
+        {
+            break;
+        }
+    }
+    const char *cursor = text;
+    while (*cursor == ' ' || *cursor == '\t')
+    {
+        ++cursor;
+    }
+    if (cursor != text)
+    {
+        memmove(text, cursor, strlen(cursor) + 1U);
+    }
+}
+
+static bool search_saved_contains_forbidden(const char *value)
+{
+    if (!value)
+    {
+        return false;
+    }
+    for (const char *cursor = value; *cursor != '\0'; ++cursor)
+    {
+        if (*cursor == '|' || *cursor == '\n' || *cursor == '\r')
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static const char *search_saved_mode_label(SearchQueryMode mode)
+{
+    switch (mode)
+    {
+    case SEARCH_QUERY_MODE_SUBSTRING:
+        return "substring";
+    case SEARCH_QUERY_MODE_BOOLEAN:
+        return "boolean";
+    case SEARCH_QUERY_MODE_REGEX:
+        return "regex";
+    default:
+        return "substring";
+    }
+}
+
+static bool search_saved_parse_mode(const char *text, SearchQueryMode *out_mode)
+{
+    if (!text || !out_mode)
+    {
+        return false;
+    }
+
+    char lowered[32];
+    size_t index = 0U;
+    for (; text[index] != '\0' && index + 1U < sizeof(lowered); ++index)
+    {
+        lowered[index] = (char)tolower((unsigned char)text[index]);
+    }
+    lowered[index] = '\0';
+
+    if (strcmp(lowered, "substring") == 0 || strcmp(lowered, "sub") == 0 ||
+        strcmp(lowered, "0") == 0)
+    {
+        *out_mode = SEARCH_QUERY_MODE_SUBSTRING;
+        return true;
+    }
+    if (strcmp(lowered, "boolean") == 0 || strcmp(lowered, "bool") == 0 ||
+        strcmp(lowered, "1") == 0)
+    {
+        *out_mode = SEARCH_QUERY_MODE_BOOLEAN;
+        return true;
+    }
+    if (strcmp(lowered, "regex") == 0 || strcmp(lowered, "regexp") == 0 ||
+        strcmp(lowered, "regular") == 0 || strcmp(lowered, "2") == 0)
+    {
+        *out_mode = SEARCH_QUERY_MODE_REGEX;
+        return true;
+    }
+    return false;
 }
 
 void search_saved_list_init(SearchSavedQueryList *list)
@@ -129,6 +228,19 @@ bool search_saved_list_add(SearchSavedQueryList *list, const char *name, SearchQ
     {
         search_saved_set_error(error_buffer, error_buffer_size,
                                "Expression exceeds supported length.");
+        return false;
+    }
+
+    if (search_saved_contains_forbidden(name))
+    {
+        search_saved_set_error(error_buffer, error_buffer_size,
+                               "Saved query name contains invalid characters.");
+        return false;
+    }
+    if (search_saved_contains_forbidden(expression))
+    {
+        search_saved_set_error(error_buffer, error_buffer_size,
+                               "Saved query expression contains invalid characters.");
         return false;
     }
 
@@ -221,4 +333,153 @@ bool search_saved_list_find_by_name(const SearchSavedQueryList *list, const char
         }
     }
     return false;
+}
+
+bool search_saved_list_load(SearchSavedQueryList *list, const char *path, char *error_buffer,
+                            size_t error_buffer_size)
+{
+    if (!list || !path || path[0] == '\0')
+    {
+        search_saved_set_error(error_buffer, error_buffer_size, "Invalid parameters.");
+        return false;
+    }
+
+    search_saved_list_reset(list);
+
+#if defined(_MSC_VER)
+    errno        = 0;
+    FILE *stream = NULL;
+    if (fopen_s(&stream, path, "rb") != 0)
+    {
+        if (errno == ENOENT)
+        {
+            search_saved_set_error(error_buffer, error_buffer_size, NULL);
+            return true;
+        }
+        search_saved_set_error(error_buffer, error_buffer_size, "Unable to open saved query file.");
+        return false;
+    }
+#else
+    FILE *stream = fopen(path, "rb");
+    if (!stream)
+    {
+        if (errno == ENOENT)
+        {
+            search_saved_set_error(error_buffer, error_buffer_size, NULL);
+            return true;
+        }
+        search_saved_set_error(error_buffer, error_buffer_size, "Unable to open saved query file.");
+        return false;
+    }
+#endif
+
+    char line[512];
+    unsigned int line_number = 0U;
+    bool success             = true;
+
+    while (fgets(line, sizeof(line), stream))
+    {
+        line_number += 1U;
+        search_saved_trim(line);
+        if (line[0] == '\0' || line[0] == '#')
+        {
+            continue;
+        }
+
+        char *mode_token = strtok(line, "|");
+        char *name_token = strtok(NULL, "|");
+        char *expr_token = strtok(NULL, "");
+        if (!mode_token || !name_token || !expr_token)
+        {
+            char message[128];
+            (void)snprintf(message, sizeof(message), "Malformed entry on line %u.", line_number);
+            search_saved_set_error(error_buffer, error_buffer_size, message);
+            success = false;
+            break;
+        }
+
+        search_saved_trim(mode_token);
+        search_saved_trim(name_token);
+        search_saved_trim(expr_token);
+
+        SearchQueryMode mode = SEARCH_QUERY_MODE_SUBSTRING;
+        if (!search_saved_parse_mode(mode_token, &mode))
+        {
+            char message[128];
+            (void)snprintf(message, sizeof(message), "Unknown mode '%s' on line %u.", mode_token,
+                           line_number);
+            search_saved_set_error(error_buffer, error_buffer_size, message);
+            success = false;
+            break;
+        }
+
+        char add_error[128];
+        if (!search_saved_list_add(list, name_token, mode, expr_token, add_error,
+                                   sizeof(add_error)))
+        {
+            char message[192];
+            if (add_error[0] != '\0')
+            {
+                (void)snprintf(message, sizeof(message), "Line %u: %s", line_number, add_error);
+            }
+            else
+            {
+                (void)snprintf(message, sizeof(message), "Failed to import line %u.", line_number);
+            }
+            search_saved_set_error(error_buffer, error_buffer_size, message);
+            success = false;
+            break;
+        }
+    }
+
+    fclose(stream);
+    if (success)
+    {
+        search_saved_set_error(error_buffer, error_buffer_size, NULL);
+    }
+    return success;
+}
+
+bool search_saved_list_save(const SearchSavedQueryList *list, const char *path, char *error_buffer,
+                            size_t error_buffer_size)
+{
+    if (!list || !path || path[0] == '\0')
+    {
+        search_saved_set_error(error_buffer, error_buffer_size, "Invalid parameters.");
+        return false;
+    }
+
+#if defined(_MSC_VER)
+    errno        = 0;
+    FILE *stream = NULL;
+    if (fopen_s(&stream, path, "wb") != 0)
+    {
+        search_saved_set_error(error_buffer, error_buffer_size, "Unable to write saved queries.");
+        return false;
+    }
+#else
+    FILE *stream = fopen(path, "wb");
+    if (!stream)
+    {
+        search_saved_set_error(error_buffer, error_buffer_size, "Unable to write saved queries.");
+        return false;
+    }
+#endif
+
+    for (size_t index = 0U; index < list->count; ++index)
+    {
+        const SearchSavedQuery *entry = &list->entries[index];
+        const char *mode_label        = search_saved_mode_label(entry->mode);
+        if (fprintf(stream, "%s|%s|%s\n", mode_label, entry->name, entry->expression) < 0)
+        {
+            fclose(stream);
+            search_saved_set_error(error_buffer, error_buffer_size,
+                                   "Failed to serialize saved queries.");
+            return false;
+        }
+    }
+
+    fclose(stream);
+    search_saved_set_error(error_buffer, error_buffer_size, NULL);
+    return true;
 }

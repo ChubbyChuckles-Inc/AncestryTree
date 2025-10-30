@@ -41,6 +41,12 @@ extern "C"
     bool search_saved_list_find_by_name(const SearchSavedQueryList *list, const char *name,
                                         size_t *out_index);
 
+    bool search_saved_list_load(SearchSavedQueryList *list, const char *path, char *error_buffer,
+                                size_t error_buffer_size);
+
+    bool search_saved_list_save(const SearchSavedQueryList *list, const char *path,
+                                char *error_buffer, size_t error_buffer_size);
+
 #ifdef __cplusplus
 }
 #endif

@@ -51,8 +51,8 @@ void register_status_message_tests(TestRegistry *registry);
 int main(void)
 {
     TestRegistry registry;
-    TestCase cases[216];
-    test_registry_init(&registry, cases, 216);
+    TestCase cases[224];
+    test_registry_init(&registry, cases, 224);
 
 #if AT_MEMORY_ENABLE_TRACKING
     at_memory_reset_tracking();

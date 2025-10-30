@@ -13,6 +13,7 @@
 #include "render.h"
 #include "screen_reader.h"
 #include "search.h"
+#include "search_saved.h"
 #include "settings.h"
 #include "timeline.h"
 #include "tree.h"
@@ -127,7 +128,8 @@ typedef struct UIInternal
     int relationship_target_index;
     const FamilyTree *relationship_last_tree;
     UIScreenReaderState screen_reader;
-    char search_query[64];
+    SearchQueryMode search_query_mode;
+    char search_expression[SEARCH_QUERY_MAX_EXPRESSION_LENGTH];
     bool search_include_alive;
     bool search_include_deceased;
     bool search_use_birth_year_range;
@@ -138,6 +140,13 @@ typedef struct UIInternal
     int search_selected_index;
     bool search_dirty;
     const FamilyTree *search_last_tree;
+    SearchSavedQueryList search_saved_queries;
+    int search_saved_selected_index;
+    char search_saved_name[SEARCH_SAVED_QUERY_NAME_MAX];
+    char search_saved_error[128];
+    char search_saved_path[512];
+    bool search_saved_available;
+    bool search_saved_dirty;
     UIAddPersonRequest add_person_request;
     bool add_person_request_pending;
     struct
@@ -2420,14 +2429,26 @@ static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
     const Person *matches[UI_SEARCH_MAX_RESULTS];
     SearchFilter filter;
     memset(&filter, 0, sizeof(filter));
-    filter.name_substring   = (internal->search_query[0] != '\0') ? internal->search_query : NULL;
-    filter.include_alive    = internal->search_include_alive;
-    filter.include_deceased = internal->search_include_deceased;
+    filter.include_alive        = internal->search_include_alive;
+    filter.include_deceased     = internal->search_include_deceased;
     filter.use_birth_year_range = internal->search_use_birth_year_range;
     filter.birth_year_min       = internal->search_birth_year_min;
     filter.birth_year_max       = internal->search_birth_year_max;
-    filter.query_mode           = SEARCH_QUERY_MODE_SUBSTRING;
-    filter.query_expression     = NULL;
+    filter.query_mode           = internal->search_query_mode;
+
+    const char *expression =
+        (internal->search_expression[0] != '\0') ? internal->search_expression : NULL;
+
+    if (internal->search_query_mode == SEARCH_QUERY_MODE_SUBSTRING)
+    {
+        filter.name_substring   = expression;
+        filter.query_expression = expression;
+    }
+    else
+    {
+        filter.name_substring   = NULL;
+        filter.query_expression = expression;
+    }
 
     size_t count = search_execute(tree, &filter, matches, UI_SEARCH_MAX_RESULTS);
     if (count > UI_SEARCH_MAX_RESULTS)
@@ -2455,6 +2476,69 @@ static void ui_search_refresh(UIInternal *internal, const FamilyTree *tree)
     }
     internal->search_last_tree = tree;
     internal->search_dirty     = false;
+}
+
+static void ui_search_saved_set_error(UIInternal *internal, const char *message)
+{
+    if (!internal)
+    {
+        return;
+    }
+    if (message && message[0] != '\0')
+    {
+#if defined(_MSC_VER)
+        (void)strncpy_s(internal->search_saved_error, sizeof(internal->search_saved_error), message,
+                        _TRUNCATE);
+#else
+        (void)snprintf(internal->search_saved_error, sizeof(internal->search_saved_error), "%s",
+                       message);
+#endif
+    }
+    else
+    {
+        internal->search_saved_error[0] = '\0';
+    }
+}
+
+static bool ui_search_saved_can_persist(const UIInternal *internal)
+{
+    return internal && internal->search_saved_available && internal->search_saved_path[0] != '\0';
+}
+
+static bool ui_search_saved_persist(UIInternal *internal)
+{
+    if (!ui_search_saved_can_persist(internal))
+    {
+        return false;
+    }
+    char error[128];
+    if (!search_saved_list_save(&internal->search_saved_queries, internal->search_saved_path, error,
+                                sizeof(error)))
+    {
+        ui_search_saved_set_error(internal, error);
+        ui_internal_set_status(internal, "Failed to persist saved queries.");
+        return false;
+    }
+    ui_search_saved_set_error(internal, NULL);
+    internal->search_saved_dirty = false;
+    return true;
+}
+
+static void ui_search_apply_saved_query(UIInternal *internal, const SearchSavedQuery *entry)
+{
+    if (!internal || !entry)
+    {
+        return;
+    }
+    internal->search_query_mode = entry->mode;
+#if defined(_MSC_VER)
+    (void)strncpy_s(internal->search_expression, sizeof(internal->search_expression),
+                    entry->expression, _TRUNCATE);
+#else
+    (void)snprintf(internal->search_expression, sizeof(internal->search_expression), "%s",
+                   entry->expression);
+#endif
+    internal->search_dirty = true;
 }
 #endif
 
@@ -2679,14 +2763,282 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         nk_label(ctx, "Locate persons in the holographic tree", NK_TEXT_LEFT);
 
         nk_layout_row_dynamic(ctx, 20.0f, 1);
-        nk_label(ctx, "Name contains", NK_TEXT_LEFT);
-        char previous_query[sizeof(internal->search_query)];
-        memcpy(previous_query, internal->search_query, sizeof(previous_query));
-        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, internal->search_query,
-                                 (int)sizeof(internal->search_query), nk_filter_default);
-        if (strncmp(previous_query, internal->search_query, sizeof(previous_query)) != 0)
+        nk_label(ctx, "Query mode", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 22.0f, 3);
+        SearchQueryMode previous_mode = internal->search_query_mode;
+        if (nk_option_label(
+                ctx, "Substring",
+                (internal->search_query_mode == SEARCH_QUERY_MODE_SUBSTRING) ? nk_true : nk_false))
         {
-            request_refresh = true;
+            internal->search_query_mode = SEARCH_QUERY_MODE_SUBSTRING;
+        }
+        if (nk_option_label(ctx, "Boolean",
+                            (internal->search_query_mode == SEARCH_QUERY_MODE_BOOLEAN) ? nk_true
+                                                                                       : nk_false))
+        {
+            internal->search_query_mode = SEARCH_QUERY_MODE_BOOLEAN;
+        }
+        if (nk_option_label(ctx, "Regex",
+                            (internal->search_query_mode == SEARCH_QUERY_MODE_REGEX) ? nk_true
+                                                                                     : nk_false))
+        {
+            internal->search_query_mode = SEARCH_QUERY_MODE_REGEX;
+        }
+        if (internal->search_query_mode != previous_mode)
+        {
+            request_refresh                       = true;
+            internal->search_saved_selected_index = -1;
+        }
+
+        const char *expression_label = "Expression";
+        switch (internal->search_query_mode)
+        {
+        case SEARCH_QUERY_MODE_SUBSTRING:
+            expression_label = "Name contains";
+            break;
+        case SEARCH_QUERY_MODE_BOOLEAN:
+            expression_label = "Boolean expression (e.g., alive AND metadata:pilot)";
+            break;
+        case SEARCH_QUERY_MODE_REGEX:
+            expression_label = "Regex pattern (e.g., ^avery.*1988)";
+            break;
+        default:
+            break;
+        }
+
+        nk_layout_row_dynamic(ctx, 20.0f, 1);
+        nk_label(ctx, expression_label, NK_TEXT_LEFT);
+        char previous_expression[sizeof(internal->search_expression)];
+        memcpy(previous_expression, internal->search_expression, sizeof(previous_expression));
+        (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, internal->search_expression,
+                                 (int)sizeof(internal->search_expression), nk_filter_default);
+        if (strncmp(previous_expression, internal->search_expression,
+                    sizeof(previous_expression)) != 0)
+        {
+            request_refresh                       = true;
+            internal->search_saved_selected_index = -1;
+        }
+
+        if (internal->search_saved_available)
+        {
+            nk_layout_row_dynamic(ctx, 20.0f, 1);
+            nk_label(ctx, "Saved queries", NK_TEXT_LEFT);
+
+            int previous_selection              = internal->search_saved_selected_index;
+            const SearchSavedQuery *combo_entry = NULL;
+            if (internal->search_saved_selected_index >= 0)
+            {
+                combo_entry = search_saved_list_get(&internal->search_saved_queries,
+                                                    (size_t)internal->search_saved_selected_index);
+            }
+            const char *combo_label = combo_entry ? combo_entry->name : "Select saved query";
+
+            if (nk_combo_begin_label(ctx, combo_label, nk_vec2(width - 80.0f, 200.0f)))
+            {
+                nk_layout_row_dynamic(ctx, 24.0f, 1);
+                size_t saved_count = search_saved_list_count(&internal->search_saved_queries);
+                for (size_t saved_index = 0U; saved_index < saved_count; ++saved_index)
+                {
+                    const SearchSavedQuery *entry =
+                        search_saved_list_get(&internal->search_saved_queries, saved_index);
+                    if (!entry)
+                    {
+                        continue;
+                    }
+                    nk_bool selected = (internal->search_saved_selected_index == (int)saved_index)
+                                           ? nk_true
+                                           : nk_false;
+                    if (nk_selectable_label(ctx, entry->name, NK_TEXT_LEFT, &selected))
+                    {
+                        internal->search_saved_selected_index = (int)saved_index;
+                    }
+                }
+                nk_combo_end(ctx);
+            }
+
+            if (internal->search_saved_selected_index != previous_selection &&
+                internal->search_saved_selected_index >= 0)
+            {
+                const SearchSavedQuery *selected_entry = search_saved_list_get(
+                    &internal->search_saved_queries, (size_t)internal->search_saved_selected_index);
+                if (selected_entry)
+                {
+#if defined(_MSC_VER)
+                    (void)strncpy_s(internal->search_saved_name,
+                                    sizeof(internal->search_saved_name), selected_entry->name,
+                                    _TRUNCATE);
+#else
+                    (void)snprintf(internal->search_saved_name, sizeof(internal->search_saved_name),
+                                   "%s", selected_entry->name);
+#endif
+                }
+            }
+
+            nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 2);
+            nk_layout_row_push(ctx, width - 160.0f);
+            (void)ui_nav_edit_string(internal, ctx, NK_EDIT_FIELD, internal->search_saved_name,
+                                     (int)sizeof(internal->search_saved_name), nk_filter_default);
+            nk_layout_row_push(ctx, 140.0f);
+            if (ui_nav_button_label(internal, ctx, "Save / Update"))
+            {
+                if (internal->search_saved_name[0] == '\0')
+                {
+                    ui_search_saved_set_error(internal, "Enter a name before saving.");
+                    ui_internal_set_status(internal, "Saved query name required.");
+                }
+                else if (internal->search_expression[0] == '\0')
+                {
+                    ui_search_saved_set_error(internal, "Expression cannot be empty for saving.");
+                    ui_internal_set_status(internal, "Provide an expression before saving.");
+                }
+                else
+                {
+                    size_t existing_index            = 0U;
+                    bool had_existing                = false;
+                    SearchSavedQuery existing_backup = {0};
+                    if (internal->search_saved_name[0] != '\0' &&
+                        search_saved_list_find_by_name(&internal->search_saved_queries,
+                                                       internal->search_saved_name,
+                                                       &existing_index))
+                    {
+                        const SearchSavedQuery *existing_entry =
+                            search_saved_list_get(&internal->search_saved_queries, existing_index);
+                        if (existing_entry)
+                        {
+                            had_existing    = true;
+                            existing_backup = *existing_entry;
+                        }
+                    }
+                    if (had_existing)
+                    {
+                        search_saved_list_remove(&internal->search_saved_queries, existing_index);
+                        if (internal->search_saved_selected_index == (int)existing_index)
+                        {
+                            internal->search_saved_selected_index = -1;
+                        }
+                        else if (internal->search_saved_selected_index > (int)existing_index)
+                        {
+                            internal->search_saved_selected_index -= 1;
+                        }
+                    }
+
+                    char save_error[128];
+                    if (search_saved_list_add(
+                            &internal->search_saved_queries, internal->search_saved_name,
+                            internal->search_query_mode, internal->search_expression, save_error,
+                            sizeof(save_error)))
+                    {
+                        ui_search_saved_set_error(internal, NULL);
+                        internal->search_saved_selected_index =
+                            (int)(search_saved_list_count(&internal->search_saved_queries) - 1U);
+                        internal->search_saved_dirty = true;
+                        ui_internal_set_status(internal, "Saved query stored.");
+                        (void)ui_search_saved_persist(internal);
+                    }
+                    else
+                    {
+                        if (had_existing)
+                        {
+                            char restore_error[128];
+                            if (!search_saved_list_add(&internal->search_saved_queries,
+                                                       existing_backup.name, existing_backup.mode,
+                                                       existing_backup.expression, restore_error,
+                                                       sizeof(restore_error)))
+                            {
+                                ui_internal_set_status(internal, "Failed to restore previous saved "
+                                                                 "query after validation error.");
+                            }
+                            else
+                            {
+                                size_t restored_index = 0U;
+                                if (search_saved_list_find_by_name(&internal->search_saved_queries,
+                                                                   existing_backup.name,
+                                                                   &restored_index))
+                                {
+                                    internal->search_saved_selected_index = (int)restored_index;
+                                }
+                            }
+                        }
+                        ui_search_saved_set_error(internal, save_error);
+                        ui_internal_set_status(internal, "Unable to store saved query.");
+                    }
+                }
+            }
+            nk_layout_row_end(ctx);
+
+            nk_layout_row_dynamic(ctx, 24.0f, 3);
+            if (ui_nav_button_label(internal, ctx, "Load"))
+            {
+                if (internal->search_saved_selected_index >= 0)
+                {
+                    const SearchSavedQuery *entry =
+                        search_saved_list_get(&internal->search_saved_queries,
+                                              (size_t)internal->search_saved_selected_index);
+                    if (entry)
+                    {
+                        ui_search_apply_saved_query(internal, entry);
+                        request_refresh = true;
+                        ui_internal_set_status(internal, "Saved query applied.");
+                    }
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "Select a saved query before loading.");
+                }
+            }
+            if (ui_nav_button_label(internal, ctx, "Delete"))
+            {
+                if (internal->search_saved_selected_index >= 0)
+                {
+                    size_t to_remove = (size_t)internal->search_saved_selected_index;
+                    if (search_saved_list_remove(&internal->search_saved_queries, to_remove))
+                    {
+                        internal->search_saved_selected_index = -1;
+                        internal->search_saved_name[0]        = '\0';
+                        internal->search_saved_dirty          = true;
+                        (void)ui_search_saved_persist(internal);
+                        ui_internal_set_status(internal, "Saved query removed.");
+                    }
+                }
+                else
+                {
+                    ui_internal_set_status(internal, "No saved query selected for deletion.");
+                }
+            }
+            if (ui_nav_button_label(internal, ctx, "Clear Selection"))
+            {
+                internal->search_saved_selected_index = -1;
+                internal->search_saved_name[0]        = '\0';
+                ui_search_saved_set_error(internal, NULL);
+            }
+
+            size_t conflict_index = 0U;
+            if (internal->search_saved_name[0] != '\0' &&
+                search_saved_list_find_by_name(&internal->search_saved_queries,
+                                               internal->search_saved_name, &conflict_index))
+            {
+                const SearchSavedQuery *existing =
+                    search_saved_list_get(&internal->search_saved_queries, conflict_index);
+                if (existing)
+                {
+                    char overwrite_message[160];
+                    (void)snprintf(overwrite_message, sizeof(overwrite_message),
+                                   "Saving will overwrite \"%s\".", existing->name);
+                    nk_layout_row_dynamic(ctx, 18.0f, 1);
+                    struct nk_color warn_color = internal->theme.warning_color;
+                    nk_label_colored(ctx, overwrite_message, NK_TEXT_LEFT, warn_color);
+                }
+            }
+
+            if (internal->search_saved_error[0] != '\0')
+            {
+                nk_layout_row_dynamic(ctx, 18.0f, 1);
+                struct nk_color warning = internal->theme.warning_color;
+                nk_label_colored(ctx, internal->search_saved_error, NK_TEXT_LEFT, warning);
+            }
+
+            nk_layout_row_dynamic(ctx, 6.0f, 1);
+            nk_spacing(ctx, 1);
         }
 
         nk_layout_row_dynamic(ctx, 24.0f, 2);
@@ -2750,13 +3102,17 @@ static void ui_draw_search_panel(UIInternal *internal, UIContext *ui, const Fami
         }
         if (ui_nav_button_label(internal, ctx, "Clear Filters"))
         {
-            internal->search_query[0]             = '\0';
+            internal->search_query_mode           = SEARCH_QUERY_MODE_SUBSTRING;
+            internal->search_expression[0]        = '\0';
             internal->search_include_alive        = true;
             internal->search_include_deceased     = true;
             internal->search_use_birth_year_range = false;
             internal->search_birth_year_min       = 1900;
             internal->search_birth_year_max       = 2100;
             internal->search_selected_index       = -1;
+            internal->search_saved_selected_index = -1;
+            internal->search_saved_name[0]        = '\0';
+            ui_search_saved_set_error(internal, NULL);
             ui_search_clear_results(internal);
             request_refresh = true;
         }
@@ -4516,7 +4872,8 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->panels_initialized          = false;
     internal->show_search_panel           = false;
     internal->show_analytics_panel        = false;
-    internal->search_query[0]             = '\0';
+    internal->search_query_mode           = SEARCH_QUERY_MODE_SUBSTRING;
+    internal->search_expression[0]        = '\0';
     internal->search_include_alive        = true;
     internal->search_include_deceased     = true;
     internal->search_use_birth_year_range = false;
@@ -4526,6 +4883,13 @@ bool ui_init(UIContext *ui, int width, int height)
     internal->search_selected_index       = -1;
     internal->search_dirty                = true;
     internal->search_last_tree            = NULL;
+    search_saved_list_init(&internal->search_saved_queries);
+    internal->search_saved_selected_index = -1;
+    internal->search_saved_name[0]        = '\0';
+    internal->search_saved_error[0]       = '\0';
+    internal->search_saved_path[0]        = '\0';
+    internal->search_saved_available      = false;
+    internal->search_saved_dirty          = false;
     internal->show_add_person_panel       = false;
     internal->add_person_request_pending  = false;
     memset(&internal->add_person_request, 0, sizeof(UIAddPersonRequest));
@@ -4596,6 +4960,60 @@ void ui_resize(UIContext *ui, int width, int height)
 #endif
 }
 
+bool ui_configure_search_storage(UIContext *ui, const char *path)
+{
+    if (!ui)
+    {
+        return false;
+    }
+
+#if defined(ANCESTRYTREE_HAVE_RAYLIB) && defined(ANCESTRYTREE_HAVE_NUKLEAR)
+    UIInternal *internal = ui_internal_cast(ui);
+    if (!internal)
+    {
+        return false;
+    }
+
+    search_saved_list_reset(&internal->search_saved_queries);
+    internal->search_saved_selected_index = -1;
+    internal->search_saved_name[0]        = '\0';
+    internal->search_saved_dirty          = false;
+    internal->search_saved_available      = false;
+    ui_search_saved_set_error(internal, NULL);
+
+    if (!path || path[0] == '\0')
+    {
+        internal->search_saved_path[0] = '\0';
+        return true;
+    }
+
+#if defined(_MSC_VER)
+    (void)strncpy_s(internal->search_saved_path, sizeof(internal->search_saved_path), path,
+                    _TRUNCATE);
+#else
+    (void)snprintf(internal->search_saved_path, sizeof(internal->search_saved_path), "%s", path);
+#endif
+
+    char error[128];
+    if (!search_saved_list_load(&internal->search_saved_queries, internal->search_saved_path, error,
+                                sizeof(error)))
+    {
+        ui_search_saved_set_error(internal, error);
+        internal->search_saved_available = false;
+        return false;
+    }
+
+    internal->search_saved_available      = true;
+    internal->search_saved_selected_index = -1;
+    internal->search_saved_dirty          = false;
+    ui_search_saved_set_error(internal, NULL);
+    return true;
+#else
+    (void)path;
+    return false;
+#endif
+}
+
 void ui_cleanup(UIContext *ui)
 {
     if (!ui)
@@ -4616,6 +5034,11 @@ void ui_cleanup(UIContext *ui)
         {
             UnloadFont(internal->rl_font);
         }
+        if (internal->search_saved_dirty)
+        {
+            (void)ui_search_saved_persist(internal);
+        }
+        search_saved_list_reset(&internal->search_saved_queries);
         AT_FREE(internal);
     }
 #endif

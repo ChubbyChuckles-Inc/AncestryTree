@@ -1,7 +1,9 @@
 #include "search.h"
+#include "search_saved.h"
 
 #include "person.h"
 #include "test_framework.h"
+#include "test_persistence_helpers.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -224,6 +226,56 @@ DECLARE_TEST(test_search_regex_matches_name_prefix)
     family_tree_destroy(tree);
 }
 
+DECLARE_TEST(test_search_saved_rejects_duplicate_names)
+{
+    SearchSavedQueryList list;
+    search_saved_list_init(&list);
+
+    char error[128];
+    ASSERT_TRUE(search_saved_list_add(&list, "AliveOnly", SEARCH_QUERY_MODE_BOOLEAN, "alive", error,
+                                      sizeof(error)));
+    ASSERT_FALSE(search_saved_list_add(&list, "AliveOnly", SEARCH_QUERY_MODE_REGEX, "^a", error,
+                                       sizeof(error)));
+    ASSERT_NE(error[0], '\0');
+
+    search_saved_list_reset(&list);
+}
+
+DECLARE_TEST(test_search_saved_persistence_round_trip)
+{
+    SearchSavedQueryList list;
+    search_saved_list_init(&list);
+
+    char error[128];
+    ASSERT_TRUE(search_saved_list_add(&list, "Alive wildcard", SEARCH_QUERY_MODE_BOOLEAN,
+                                      "alive AND NOT metadata:retired", error, sizeof(error)));
+    ASSERT_TRUE(search_saved_list_add(&list, "Test regex", SEARCH_QUERY_MODE_REGEX, "^char", error,
+                                      sizeof(error)));
+
+    char path[128];
+    test_temp_file_path(path, sizeof(path), "saved_queries.cfg");
+    test_delete_file(path);
+
+    ASSERT_TRUE(search_saved_list_save(&list, path, error, sizeof(error)));
+    search_saved_list_reset(&list);
+
+    ASSERT_TRUE(search_saved_list_load(&list, path, error, sizeof(error)));
+    ASSERT_EQ(search_saved_list_count(&list), 2U);
+
+    const SearchSavedQuery *first = search_saved_list_get(&list, 0U);
+    ASSERT_NOT_NULL(first);
+    ASSERT_EQ(first->mode, SEARCH_QUERY_MODE_BOOLEAN);
+    ASSERT_STREQ(first->name, "Alive wildcard");
+
+    const SearchSavedQuery *second = search_saved_list_get(&list, 1U);
+    ASSERT_NOT_NULL(second);
+    ASSERT_EQ(second->mode, SEARCH_QUERY_MODE_REGEX);
+    ASSERT_STREQ(second->expression, "^char");
+
+    search_saved_list_reset(&list);
+    test_delete_file(path);
+}
+
 void register_search_tests(TestRegistry *registry)
 {
     REGISTER_TEST(registry, test_search_name_substring_matches_case_insensitive);
@@ -232,4 +284,6 @@ void register_search_tests(TestRegistry *registry)
     REGISTER_TEST(registry, test_search_boolean_combines_terms);
     REGISTER_TEST(registry, test_search_boolean_metadata_clause);
     REGISTER_TEST(registry, test_search_regex_matches_name_prefix);
+    REGISTER_TEST(registry, test_search_saved_rejects_duplicate_names);
+    REGISTER_TEST(registry, test_search_saved_persistence_round_trip);
 }
